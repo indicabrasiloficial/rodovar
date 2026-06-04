@@ -167,104 +167,90 @@ const SEED_MESSAGES: any[] = [
   }
 ];
 
-// Setup real-time listeners upon auth state change
-auth.onAuthStateChanged((user) => {
-  if (user) {
-    const uid = user.uid;
+// Setup real-time listeners upon auth state change (Optimized to always run for unauthenticated workspace)
+const uid = 'system_operator';
 
-    // Listen to entregas
-    const entregasQuery = query(collection(db, ENTREGAS_COLLECTION), where('userId', '==', uid));
-    onSnapshot(entregasQuery, async (snapshot) => {
-      // If collection is empty, seed it on firestore if the user hasn't initialized yet
-      if (snapshot.empty) {
-        const seedKey = `rodovar_seeded_${uid}`;
-        if (localStorage.getItem(seedKey) === 'true') {
-          cachedEntregas = [];
-          window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-          return;
-        }
+// Listen to entregas (entire collection for shared multi-user workspace)
+const entregasQuery = collection(db, ENTREGAS_COLLECTION);
+onSnapshot(entregasQuery, async (snapshot) => {
+  // If collection is empty, check system seeding flag to avoid auto-redefaulting when they are deleted on purpose
+  if (snapshot.empty) {
+    const seedLocalKey = 'rodovar_seeded_system';
+    if (localStorage.getItem(seedLocalKey) === 'true') {
+      cachedEntregas = [];
+      window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+      return;
+    }
 
-        try {
-          const settingsRef = doc(db, 'user_settings', uid);
-          const settingsSnap = await getDoc(settingsRef);
-          if (settingsSnap.exists() && settingsSnap.data()?.seeded) {
-            localStorage.setItem(seedKey, 'true');
-            cachedEntregas = [];
-            window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-            return;
-          }
-
-          console.log('Seeding initial dataset to Firestore for UID:', uid);
-          localStorage.setItem(seedKey, 'true');
-          await setDoc(settingsRef, { seeded: true, userId: uid });
-
-          const batch = writeBatch(db);
-          SEED_ENTREGAS.forEach(ent => {
-            const uniqueId = `${ent.id}_${uid}`;
-            const docRef = doc(db, ENTREGAS_COLLECTION, uniqueId);
-            batch.set(docRef, { ...ent, id: uniqueId, userId: uid });
-          });
-          SEED_MESSAGES.forEach(msg => {
-            const uniqueId = `${msg.id}_${uid}`;
-            const uniqueDeliveryId = `${msg.deliveryId}_${uid}`;
-            const docRef = doc(db, MESSAGES_COLLECTION, uniqueId);
-            batch.set(docRef, { ...msg, id: uniqueId, deliveryId: uniqueDeliveryId, userId: uid });
-          });
-          await batch.commit();
-        } catch (e) {
-          console.error('Error seeding initial data to Firestore:', e);
-        }
+    try {
+      const settingsRef = doc(db, 'user_settings', 'global_config');
+      const settingsSnap = await getDoc(settingsRef);
+      if (settingsSnap.exists() && settingsSnap.data()?.seeded) {
+        localStorage.setItem(seedLocalKey, 'true');
+        cachedEntregas = [];
+        window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
         return;
       }
 
-      cachedEntregas = [];
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        const kmVal = data.km !== undefined && data.km > 0 
-          ? Number(data.km) 
-          : calculateRealisticDistanceKm(data.origem || '', data.destino || '');
-        cachedEntregas.push({
-          id: docSnap.id,
-          ...data,
-          km: kmVal
-        } as Entrega);
+      console.log('Seeding initial system dataset to Firestore...');
+      localStorage.setItem(seedLocalKey, 'true');
+      await setDoc(settingsRef, { seeded: true, userId: 'global_config' });
+
+      const batch = writeBatch(db);
+      SEED_ENTREGAS.forEach(ent => {
+        const docRef = doc(db, ENTREGAS_COLLECTION, ent.id);
+        batch.set(docRef, { ...ent, id: ent.id, userId: uid });
       });
-
-      // Sort by updated_at or created_at descending
-      cachedEntregas.sort((a, b) => new Date(b.created_at || b.updated_at).getTime() - new Date(a.created_at || a.updated_at).getTime());
-
-      // Trigger standard local Custom Event so React re-renders synchronously
-      window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, ENTREGAS_COLLECTION);
-    });
-
-    // Listen to scheduled messages
-    const messagesQuery = query(collection(db, MESSAGES_COLLECTION), where('userId', '==', uid));
-    onSnapshot(messagesQuery, (snapshot) => {
-      cachedScheduledMessages = [];
-      snapshot.forEach(docSnap => {
-        cachedScheduledMessages.push({
-          id: docSnap.id,
-          ...docSnap.data()
-        });
+      SEED_MESSAGES.forEach(msg => {
+        const docRef = doc(db, MESSAGES_COLLECTION, msg.id);
+        batch.set(docRef, { ...msg, id: msg.id, deliveryId: msg.deliveryId, userId: uid });
       });
-
-      cachedScheduledMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      // Trigger standard local Custom Event
-      window.dispatchEvent(new CustomEvent(SCHEDULED_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, MESSAGES_COLLECTION);
-    });
-
-  } else {
-    // Logged out
-    cachedEntregas = [];
-    cachedScheduledMessages = [];
-    window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-    window.dispatchEvent(new CustomEvent(SCHEDULED_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+      await batch.commit();
+    } catch (e) {
+      console.error('Error seeding initial data to Firestore:', e);
+    }
+    return;
   }
+
+  cachedEntregas = [];
+  snapshot.forEach(docSnap => {
+    const data = docSnap.data();
+    const kmVal = data.km !== undefined && data.km > 0 
+      ? Number(data.km) 
+      : calculateRealisticDistanceKm(data.origem || '', data.destino || '');
+    cachedEntregas.push({
+      id: docSnap.id,
+      ...data,
+      km: kmVal
+    } as Entrega);
+  });
+
+  // Sort by updated_at or created_at descending
+  cachedEntregas.sort((a, b) => new Date(b.created_at || b.updated_at).getTime() - new Date(a.created_at || a.updated_at).getTime());
+
+  // Trigger standard local Custom Event so React re-renders synchronously
+  window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+}, (error) => {
+  handleFirestoreError(error, OperationType.GET, ENTREGAS_COLLECTION);
+});
+
+// Listen to scheduled messages (entire collection for shared multi-user workspace)
+const messagesQuery = collection(db, MESSAGES_COLLECTION);
+onSnapshot(messagesQuery, (snapshot) => {
+  cachedScheduledMessages = [];
+  snapshot.forEach(docSnap => {
+    cachedScheduledMessages.push({
+      id: docSnap.id,
+      ...docSnap.data()
+    });
+  });
+
+  cachedScheduledMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Trigger standard local Custom Event
+  window.dispatchEvent(new CustomEvent(SCHEDULED_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+}, (error) => {
+  handleFirestoreError(error, OperationType.GET, MESSAGES_COLLECTION);
 });
 
 // Sync data retrievers
@@ -310,10 +296,7 @@ function getSimilarity(s1: string, s2: string): number {
 
 // Write/Delete functions - Return Synchronously with Optimistic caching, syncing asynchronously in background
 export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entrega {
-  const uid = auth.currentUser?.uid;
-  if (!uid) {
-    throw new Error('Usuário precisa estar autenticado para realizar salvamentos.');
-  }
+  const uid = auth.currentUser?.uid || 'system_operator';
 
   // Geolocation helper coordination
   if (entrega.link_localizacao) {
@@ -486,10 +469,7 @@ export function getScheduledMessages(): any[] {
 }
 
 export function saveScheduledMessage(msg: any): any {
-  const uid = auth.currentUser?.uid;
-  if (!uid) {
-    throw new Error('Usuário precisa estar autenticado para salvar mensagens agendadas.');
-  }
+  const uid = auth.currentUser?.uid || 'system_operator';
 
   const cleanId = msg.id || 'sch-' + Math.random().toString(36).substring(2, 11);
   const existingMsg = cachedScheduledMessages.find(m => m.id === cleanId);

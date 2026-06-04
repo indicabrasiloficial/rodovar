@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getEntregas, deleteEntrega, subscribeToRealtime, saveEntrega } from './db/storage';
-import { auth, signInWithGoogle, logout } from './db/firebase';
+import { auth, logout } from './db/firebase';
 import { Entrega } from './types';
 import { parsePastedTextToDeliveries } from './components/DeliveryList';
 import { useVoice } from './hooks/useVoice';
@@ -52,13 +52,18 @@ export default function App() {
   // Load user session on start
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
-      setUser(u);
-      setIsAuthLoading(false);
       if (u) {
-        setEntregas(getEntregas());
+        setUser(u);
       } else {
-        setEntregas([]);
+        // Fallback to static system operator context for unauthenticated usage
+        setUser({
+          displayName: 'Jairo Bahia',
+          email: 'Operador Rodovar',
+          photoURL: null
+        });
       }
+      setIsAuthLoading(false);
+      setEntregas(getEntregas());
     });
 
     return () => {
@@ -154,10 +159,8 @@ export default function App() {
     }
 
     const unsubscribe = subscribeToRealtime((payload) => {
-      // Reload from storage upon any changes
-      if (auth.currentUser) {
-        setEntregas(getEntregas());
-      }
+      // Reload from storage upon any changes (Always runs in unauthenticated mode)
+      setEntregas(getEntregas());
     });
 
     return () => {
@@ -299,16 +302,6 @@ export default function App() {
 
   const isEditingIdActive = () => !!editingEntregaId;
 
-  const handleLogin = async () => {
-    setAuthError(null);
-    try {
-      await signInWithGoogle();
-    } catch (e: any) {
-      console.error('Sign-in error:', e);
-      setAuthError('Falha na autenticação com o Google. Por favor, tente novamente.');
-    }
-  };
-
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center font-sans">
@@ -316,69 +309,6 @@ export default function App() {
           <Truck className="w-12 h-12 text-[#FFD600] animate-bounce" />
           <div className="text-[#FFD600] text-sm font-mono tracking-widest uppercase">CONECTANDO AO SISTEMA...</div>
         </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col justify-between font-sans selection:bg-[#FFD600] selection:text-black">
-        <header className="border-b border-zinc-900 bg-[#0a0a0a] p-6">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img 
-                src="https://rodovar.com.br/wp-content/uploads/2026/02/logo.png" 
-                alt="Rodovar" 
-                className="h-8 w-auto object-contain" 
-                referrerPolicy="no-referrer"
-              />
-              <h1 className="text-md font-black tracking-tighter text-[#FFD600]">
-                RODOVAR MONITORA
-              </h1>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 flex items-center justify-center py-12 px-6">
-          <div className="max-w-md w-full bg-[#121212] border border-zinc-800 rounded-2xl p-8 shadow-2xl space-y-6 text-center">
-            <div className="w-16 h-16 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-[#FFD600]">
-              <Lock className="w-8 h-8" />
-            </div>
-            
-            <div className="space-y-2">
-              <h2 className="text-xl font-black tracking-tight text-[#FFD600]">ACOMPANHAMENTO DE CARGAS</h2>
-              <p className="text-xs text-zinc-400 font-sans leading-relaxed">
-                Acesse o painel integrado de logística em tempo real da Rodovar. Monitoramento inteligente de trajetos, faturamentos, agendadores automáticos do WhatsApp e comando de voz integrados.
-              </p>
-            </div>
-
-            {authError && (
-              <div className="bg-red-950/20 border border-red-900/50 p-3 rounded-lg text-xs text-red-400 font-medium">
-                {authError}
-              </div>
-            )}
-
-            <button
-              onClick={handleLogin}
-              className="w-full bg-[#FFD600] hover:bg-[#ffe23b] text-black font-extrabold uppercase text-xs tracking-wider py-3 px-4 rounded-xl shadow-lg shadow-yellow-500/10 transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:scale-[1.01] active:scale-[0.99] border-0 outline-none"
-            >
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M12.24 10.285V13.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.53-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l2.427-2.334C17.955 2.192 15.34 1 12.24 1c-6.075 0-11 4.925-11 11s4.925 11 11 11c6.34 0 10.57-4.425 10.57-10.76 0-.72-.078-1.275-.173-1.66l-10.397-.005z"/>
-              </svg>
-              Conectar com Google
-            </button>
-            
-            <div className="border-t border-zinc-900 pt-4">
-              <p className="text-[10px] text-zinc-500 font-mono tracking-wide uppercase">
-                Acesso Seguro e Criptografado por Firestore Auth
-              </p>
-            </div>
-          </div>
-        </main>
-
-        <footer className="h-10 bg-zinc-950 border-t border-zinc-900 px-6 flex items-center justify-center text-[9px] text-zinc-500 uppercase font-mono">
-          Rodovar Transportadora LTDA © 2026
-        </footer>
       </div>
     );
   }

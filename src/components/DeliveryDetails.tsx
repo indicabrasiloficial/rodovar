@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
 import { saveEntrega, getEntregaById } from '../db/storage';
 import { getDeliveryKm } from '../utils/distance';
@@ -22,7 +22,8 @@ import {
   Save,
   CheckCircle2,
   Trash2,
-  Lock
+  Lock,
+  Check
 } from 'lucide-react';
 import DeliveryMap from './DeliveryMap';
 
@@ -53,6 +54,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   const [locLinkInput, setLocLinkInput] = useState('');
   const [isSavingLink, setIsSavingLink] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const [clickedScripts, setClickedScripts] = useState<string[]>([]);
 
   // Load latest values
   useEffect(() => {
@@ -61,7 +63,36 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
       setEntrega(details);
       setLocLinkInput(details.link_localizacao || '');
     }
+
+    // Load clicked scripts for this delivery
+    const stored = localStorage.getItem(`clicked_scripts_${entregaId}`);
+    if (stored) {
+      try {
+        setClickedScripts(JSON.parse(stored));
+      } catch (e) {
+        setClickedScripts([]);
+      }
+    } else {
+      setClickedScripts([]);
+    }
   }, [entregaId]);
+
+  const markScriptAsClicked = (scriptKey: string) => {
+    const stored = localStorage.getItem(`clicked_scripts_${entregaId}`);
+    let list: string[] = [];
+    if (stored) {
+      try {
+        list = JSON.parse(stored);
+      } catch (e) {
+        list = [];
+      }
+    }
+    if (!list.includes(scriptKey)) {
+      list.push(scriptKey);
+      setClickedScripts(list);
+      localStorage.setItem(`clicked_scripts_${entregaId}`, JSON.stringify(list));
+    }
+  };
 
   if (!entrega) {
     return (
@@ -110,7 +141,9 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     solicitarLoc: `Olá ${entrega.motorista}! Tudo bem? Poderia me enviar sua localização em tempo real agora? Preciso informar ao cliente o status da carga. Grato!`,
     informarCliente: `Olá! Aqui é o Jairo Bahia da Rodovar Transportadora. Sua carga está a caminho! O motorista ${entrega.motorista} está em deslocamento e chegará até ${entrega.prazo}. Qualquer dúvida estou à disposição.`,
     solicitarCanhoto: `Olá ${entrega.motorista}! Após a entrega, por favor solicite o canhoto assinado e nos envie uma foto. Obrigado pela parceria!`,
-    confirmarEntrega: `Olá! Confirmamos a entrega da sua carga realizada pelo motorista ${entrega.motorista}. Foi um prazer atendê-lo! Rodovar Transportadora.`
+    confirmarEntrega: `Olá! Confirmamos a entrega da sua carga realizada pelo motorista ${entrega.motorista}. Foi um prazer atendê-lo! Rodovar Transportadora.`,
+    prazoMotorista: `Olá ${entrega.motorista}! Como está a viagem para ${entrega.destino}? Gostaríamos de alinhar sobre o tempo de percurso: o prazo limite de recebimento da carga é ${entrega.prazo}. Está tudo correndo de forma segura dentro deste planejado? Qualquer contratempo nos comunique de imediato. Obrigado! Rodovar.`,
+    prazoCliente: `Olá! Aqui é o Jairo Bahia da Rodovar. Tudo bem? Referente à carga com destino a vocês, gostaríamos de confirmar que o prazo estimado/limite para a entrega é ${entrega.prazo}. O motorista ${entrega.motorista} está sob monitoramento e qualquer alteração de rota avisamos no mesmo instante!`
   };
 
   const handleSolicitarCanhotoClick = () => {
@@ -123,6 +156,88 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     
     // 2. Fire WhatsApp template
     clickWhatsApp(entrega.tel_motorista, waTemplates.solicitarCanhoto);
+  };
+
+  const renderScriptButton = (
+    key: string,
+    title: string,
+    phone: string,
+    templateText: string,
+    previewText: string,
+    isCanhoto = false
+  ) => {
+    const isClicked = clickedScripts.includes(key) || (isCanhoto && entrega.canhoto_solicitado);
+
+    const handleAction = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isCanhoto) {
+        handleSolicitarCanhotoClick();
+      } else {
+        clickWhatsApp(phone, templateText);
+      }
+      markScriptAsClicked(key);
+    };
+
+    const toggleMarkOnly = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isClicked) {
+        const updated = clickedScripts.filter(k => k !== key);
+        setClickedScripts(updated);
+        localStorage.setItem(`clicked_scripts_${entregaId}`, JSON.stringify(updated));
+        if (isCanhoto) {
+          const updatedEntrega = saveEntrega({
+            id: entrega.id,
+            canhoto_solicitado: false
+          });
+          setEntrega(updatedEntrega);
+        }
+      } else {
+        markScriptAsClicked(key);
+      }
+    };
+
+    return (
+      <div
+        onClick={handleAction}
+        className={`w-full text-left p-3 rounded-lg border transition group cursor-pointer flex flex-col gap-1 relative overflow-hidden select-none ${
+          isClicked
+            ? 'bg-emerald-950/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-950/25'
+            : 'bg-zinc-950/40 hover:bg-[#FFD600]/10 border-zinc-900 hover:border-[#FFD600]/40 text-white'
+        }`}
+      >
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span 
+              onClick={toggleMarkOnly}
+              className={`p-0.5 rounded cursor-pointer border transition-colors flex items-center justify-center shrink-0 w-4.5 h-4.5 ${
+                isClicked
+                  ? 'bg-emerald-500/20 border-emerald-400/80 text-emerald-400'
+                  : 'bg-zinc-900 border-zinc-800 text-transparent group-hover:border-[#FFD600]'
+              }`}
+              title={isClicked ? "Desmarcar esta etapa" : "Marcar como enviada manualmente"}
+            >
+              <Check className="w-3 h-3 stroke-[3px]" />
+            </span>
+            <span className={`font-bold text-[11px] truncate ${isClicked ? 'text-emerald-400' : 'text-[#FFD600]'}`}>
+              {title}
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-1 shrink-0">
+            {isClicked && (
+              <span className="text-[8px] font-mono px-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded uppercase font-extrabold tracking-wider">
+                Enviado
+              </span>
+            )}
+            <ExternalLink className={`w-3 h-3 transition ${isClicked ? 'text-emerald-400/60 group-hover:text-emerald-400' : 'text-zinc-650 group-hover:text-[#FFD600]'}`} />
+          </div>
+        </div>
+
+        <p className={`text-[10px] line-clamp-2 leading-relaxed transition ${isClicked ? 'text-emerald-300/70' : 'text-gray-400'}`}>
+          "{previewText}"
+        </p>
+      </div>
+    );
   };
 
   return (
@@ -335,98 +450,41 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
           {/* Action block - Jairo's Quick Messages panel */}
           <div className="bg-[#121212] border border-zinc-800 rounded-xl p-5 space-y-4 shadow-sm">
-            <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] font-bold block border-b border-zinc-950 pb-2">
-              MENSARENS DO JAIRO (WHATSAPP ESPELHADAS)
-            </span>
+            <div className="flex justify-between items-center border-b border-zinc-950 pb-2">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] font-bold">
+                MENSAGENS DO JAIRO (SCRIPTS WHATSAPP)
+              </span>
+              {clickedScripts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClickedScripts([]);
+                    localStorage.removeItem(`clicked_scripts_${entregaId}`);
+                  }}
+                  className="text-[9px] font-mono text-zinc-500 hover:text-red-400 transition cursor-pointer"
+                  title="Limpar todos os marcadores de script desta carga"
+                >
+                  LIMPAR MARCADORES
+                </button>
+              )}
+            </div>
             
-            <p className="text-[11px] text-gray-500 font-sans">
-              Envie mensagens rápidas de status direto para o WhatsApp dos contatos envolvidos na rota:
+            <p className="text-[11px] text-gray-400 font-sans">
+              Envie mensagens rápidas clicando nas etapas abaixo. Os scripts enviados mudarão de cor, mas você também pode marcar ou desmarcar clicando no quadrado ao lado do número:
             </p>
 
-            <div className="space-y-2 text-xs">
+            <div className="space-y-2 text-xs animate-fade-in">
+              {renderScriptButton('apresentar', '1. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Olá ${entrega.motorista}! Aqui é o Jairo...`)}
+              {renderScriptButton('solicitarLoc', '2. Solicitar Localização', entrega.tel_motorista, waTemplates.solicitarLoc, 'Poderia me enviar sua localização ao vivo?')}
+              {renderScriptButton('informarCliente', '3. Informar Cliente', entrega.tel_cliente, waTemplates.informarCliente, `Sua carga está a caminho...`)}
+              {renderScriptButton('solicitarCanhoto', '4. Solicitar Canhoto', entrega.tel_motorista, waTemplates.solicitarCanhoto, 'Após a entrega solicite o canhoto assinado...', true)}
+              {renderScriptButton('confirmarEntrega', '5. Entrega Confirmada', entrega.tel_cliente, waTemplates.confirmarEntrega, `Confirmamos a entrega pelo motorista ${entrega.motorista}.`)}
               
-              {/* Botão 1 */}
-              <button
-                onClick={() => clickWhatsApp(entrega.tel_motorista, waTemplates.apresentar)}
-                className="w-full text-left p-3 rounded-lg bg-zinc-950/40 hover:bg-[#FFD600]/10 border border-zinc-900 hover:border-[#FFD600]/40 transition group cursor-pointer"
-                id="details-wa-btn-1"
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-bold text-[#FFD600] text-[11px]">1. Apresentar ao Motorista</span>
-                  <ExternalLink className="w-3 h-3 text-zinc-600 group-hover:text-[#FFD600]" />
-                </div>
-                <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
-                  "Olá {entrega.motorista}! Aqui é o Jairo..."
-                </p>
-              </button>
+              {/* New deadline alignment scripts */}
+              {renderScriptButton('prazoMotorista', '6. Alinhar Prazo (Motorista)', entrega.tel_motorista, waTemplates.prazoMotorista, `Prazo limite de recebimento: ${entrega.prazo}.`)}
+              {renderScriptButton('prazoCliente', '7. Alinhar Prazo (Cliente)', entrega.tel_cliente, waTemplates.prazoCliente, `Confirmando prazo estimado de entrega: ${entrega.prazo}.`)}
 
-              {/* Botão 2 */}
-              <button
-                onClick={() => clickWhatsApp(entrega.tel_motorista, waTemplates.solicitarLoc)}
-                className="w-full text-left p-3 rounded-lg bg-zinc-950/40 hover:bg-[#FFD600]/10 border border-zinc-900 hover:border-[#FFD600]/40 transition group cursor-pointer"
-                id="details-wa-btn-2"
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-bold text-[#FFD600] text-[11px]">2. Solicitar Localização</span>
-                  <ExternalLink className="w-3 h-3 text-zinc-600 group-hover:text-[#FFD600]" />
-                </div>
-                <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
-                  "Poderia me enviar sua localização ao vivo?"
-                </p>
-              </button>
-
-              {/* Botão 3 */}
-              <button
-                onClick={() => clickWhatsApp(entrega.tel_cliente, waTemplates.informarCliente)}
-                className="w-full text-left p-3 rounded-lg bg-zinc-950/40 hover:bg-[#FFD600]/10 border border-zinc-900 hover:border-[#FFD600]/40 transition group cursor-pointer"
-                id="details-wa-btn-3"
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-bold text-[#FFD600] text-[11px]">3. Informar Cliente</span>
-                  <ExternalLink className="w-3 h-3 text-zinc-600 group-hover:text-[#FFD600]" />
-                </div>
-                <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
-                  "Sua carga está a caminho de {entrega.destino}..."
-                </p>
-              </button>
-
-              {/* Botão 4 */}
-              <button
-                onClick={handleSolicitarCanhotoClick}
-                className={`w-full text-left p-3 rounded-lg border transition group cursor-pointer ${
-                  entrega.canhoto_solicitado 
-                  ? 'bg-zinc-900 border-emerald-950 text-emerald-400 grayscale-35' 
-                  : 'bg-zinc-950/40 hover:bg-[#FFD600]/10 border-zinc-900 hover:border-[#FFD600]/40 text-white'
-                }`}
-                id="details-wa-btn-4"
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className={`font-bold text-[11px] ${entrega.canhoto_solicitado ? 'text-emerald-400' : 'text-[#FFD600]'}`}>
-                    4. Solicitar Canhoto {entrega.canhoto_solicitado ? '✓' : ''}
-                  </span>
-                  <ExternalLink className="w-3 h-3 text-zinc-600 group-hover:text-[#FFD600]" />
-                </div>
-                <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
-                  "Após a entrega solicite o canhoto assinado..."
-                </p>
-              </button>
-
-              {/* Botão 5 */}
-              <button
-                onClick={() => clickWhatsApp(entrega.tel_cliente, waTemplates.confirmarEntrega)}
-                className="w-full text-left p-3 rounded-lg bg-zinc-950/40 hover:bg-[#FFD600]/10 border border-zinc-900 hover:border-[#FFD600]/40 transition group cursor-pointer"
-                id="details-wa-btn-5"
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-bold text-[#FFD600] text-[11px]">5. Entrega Confirmada</span>
-                  <ExternalLink className="w-3 h-3 text-zinc-600 group-hover:text-[#FFD600]" />
-                </div>
-                <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
-                  "Confirmamos a entrega pelo motorista {entrega.motorista}."
-                </p>
-              </button>
-
-              {/* Botão 6 / Suporte Gerencial Genivaldo */}
+              {/* Botão / Suporte Gerencial Genivaldo */}
               {onNavigateToManager && (
                 <button
                   type="button"
@@ -435,12 +493,12 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                   id="details-report-manager-btn"
                 >
                   <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold text-red-400 text-[11px] uppercase tracking-wider flex items-center gap-1">
+                    <span className="font-bold text-red-400 text-[11px] uppercase tracking-wider flex items-center gap-1 font-sans">
                       🚨 Relatar ao Gerente Genivaldo
                     </span>
                     <ChevronRight className="w-3.5 h-3.5 text-red-500 group-hover:translate-x-0.5 transition-transform" />
                   </div>
-                  <p className="text-[10px] text-zinc-400 leading-relaxed">
+                  <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
                     Comunique quebras, atrasos na fiscalização, recusas de carga e peça suporte imediato.
                   </p>
                 </button>

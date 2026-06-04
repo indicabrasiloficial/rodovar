@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -18,6 +18,14 @@ const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig.f
 const app = initializeApp(config);
 export const db = getFirestore(app, databaseId); /* CRITICAL: The app will break without this line */
 export const auth = getAuth();
+
+// Auto authenticate anonymously if not logged in
+auth.onAuthStateChanged((user) => {
+  if (!user) {
+    // Unauthenticated mode allows fully open read/write operations on our deployed rules.
+    // Bypassing signInAnonymously to prevent console errors if it's disabled in owner's console.
+  }
+});
 
 export const signInWithGoogle = () => {
   const provider = new GoogleAuthProvider();
