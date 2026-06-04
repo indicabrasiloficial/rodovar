@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Base custom definitions */
+body {
+  background-color: #0a0a0a;
+  color: #ffffff;
+}
+
+/* High Density Design Rules */
+.accent-border {
+  border: 1px solid #FFD600;
+}
+
+.accent-bg {
+  background-color: #FFD600;
+}
+
+.accent-text {
+  color: #FFD600;
+}
+
+.map-mock {
+  background-image: radial-gradient(#222 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-color: #111;
+  position: relative;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FFD600;
+}
+
+/* Map Dark Theme CSS Filter */
+.dark-map .leaflet-tile {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+.dark-map .leaflet-container {
+  background: #0f0f0f;
+}
+
+.dark-map .leaflet-bar a {
+  background: #121212;
+  color: #ffffff;
+  border-bottom: 1px solid #27272a;
+}
+
+.dark-map .leaflet-bar a:hover {
+  background: #FFD600;
+  color: #000000;
+}
+
+/* Pulse animation for voice recognition indicator */
+@keyframes voice-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 214, 0, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(255, 214, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 214, 0, 0);
+  }
+}
+
+.voice-recorder-active {
+  animation: voice-pulse 1.5s infinite;
+}
+

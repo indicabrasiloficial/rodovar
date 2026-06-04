@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "Entrega": {
+      "title": "Entrega",
+      "description": "Custom real-time Brazilian delivery and load monitoring record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "data_coleta": { "type": "string" },
+        "vendedor": { "type": "string" },
+        "cliente": { "type": "string" },
+        "tel_cliente": { "type": "string" },
+        "motorista": { "type": "string" },
+        "tel_motorista": { "type": "string" },
+        "origem": { "type": "string" },
+        "destino": { "type": "string" },
+        "frete_empresa": { "type": "number" },
+        "frete_motorista": { "type": "number" },
+        "prazo": { "type": "string" },
+        "status": { "type": "string", "enum": ["coletando", "em_transito", "parado", "entregue"] },
+        "observacoes": { "type": "string" },
+        "link_localizacao": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "canhoto_solicitado": { "type": "boolean" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": [
+        "data_coleta",
+        "vendedor",
+        "cliente",
+        "tel_cliente",
+        "motorista",
+        "tel_motorista",
+        "origem",
+        "destino",
+        "frete_empresa",
+        "frete_motorista",
+        "prazo",
+        "status",
+        "observacoes",
+        "lat",
+        "lng",
+        "canhoto_solicitado"
+      ]
+    },
+    "ScheduledMessage": {
+      "title": "ScheduledMessage",
+      "description": "WhatsApp notification schedulers linked to the delivery record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "deliveryId": { "type": "string" },
+        "deliveryDriver": { "type": "string" },
+        "deliveryDestiny": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "recipientPhone": { "type": "string" },
+        "recipientType": { "type": "string", "enum": ["motorista", "cliente"] },
+        "scheduledTime": { "type": "string" },
+        "messageText": { "type": "string" },
+        "status": { "type": "string", "enum": ["pendente", "enviado", "cancelado"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": [
+        "deliveryId",
+        "deliveryDriver",
+        "deliveryDestiny",
+        "recipientName",
+        "recipientPhone",
+        "recipientType",
+        "scheduledTime",
+        "messageText",
+        "status",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/entregas/{entregaId}": {
+      "schema": "Entrega",
+      "description": "Brazilian deliveres monitored in real-time"
+    },
+    "/scheduled_messages/{messageId}": {
+      "schema": "ScheduledMessage",
+      "description": "Scheduled WhatsApp reminders for monitored deliveries"
+    }
+  }
+}

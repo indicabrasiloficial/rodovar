@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Global Security primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(data) {
+      return isSignedIn() && data.userId == request.auth.uid;
+    }
+    
+    function isValidId(id) {
+       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    // Entities Validation Schemas
+    function isValidEntrega(data) {
+      return data.vendedor is string && data.vendedor.size() <= 200
+          && data.cliente is string && data.cliente.size() <= 200
+          && data.tel_cliente is string && data.tel_cliente.size() <= 50
+          && data.motorista is string && data.motorista.size() <= 200
+          && data.tel_motorista is string && data.tel_motorista.size() <= 50
+          && data.origem is string && data.origem.size() <= 200
+          && data.destino is string && data.destino.size() <= 200
+          && data.status in ['coletando', 'em_transito', 'parado', 'entregue']
+          && data.frete_empresa is number
+          && data.frete_motorista is number
+          && data.canhoto_solicitado is bool
+          && data.userId == request.auth.uid;
+    }
+
+    function isValidScheduledMessage(data) {
+      return data.deliveryId is string && data.deliveryId.size() <= 128
+          && data.recipientPhone is string && data.recipientPhone.size() <= 50
+          && data.recipientType in ['motorista', 'cliente']
+          && data.status in ['pendente', 'enviado', 'cancelado']
+          && data.userId == request.auth.uid;
+    }
+    
+    // Rules for entregas
+    match /entregas/{entregaId} {
+      allow get: if isSignedIn() && isOwner(resource.data) && isValidId(entregaId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(entregaId) && isValidEntrega(request.resource.data);
+      allow update: if isSignedIn() && isValidId(entregaId) && isOwner(resource.data) && isValidEntrega(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(entregaId) && isOwner(resource.data);
+    }
+    
+    // Rules for scheduled_messages
+    match /scheduled_messages/{messageId} {
+      allow get: if isSignedIn() && isOwner(resource.data) && isValidId(messageId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(messageId) && isValidScheduledMessage(request.resource.data);
+      allow update: if isSignedIn() && isValidId(messageId) && isOwner(resource.data) && isValidScheduledMessage(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(messageId) && isOwner(resource.data);
+    }
+  }
+}
