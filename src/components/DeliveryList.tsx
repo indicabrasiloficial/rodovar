@@ -698,181 +698,321 @@ export default function DeliveryList({
             <p className="text-xs text-gray-600 font-mono">Experimente ajustar sua pesquisa ou use a busca por voz.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-zinc-950/80 border-b border-zinc-800 text-gray-400 font-mono uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4 w-10 text-center">
-                    <input 
-                      type="checkbox"
-                      checked={filteredEntregas.length > 0 && filteredEntregas.every(e => selectedIds.includes(e.id))}
-                      onChange={handleToggleAll}
-                      className="rounded border-zinc-800 bg-zinc-900 text-[#FFD600] focus:ring-[#FFD600] focus:ring-offset-0 cursor-pointer w-4 h-4"
-                      id="bulk-select-all-checkbox"
-                    />
-                  </th>
-                  <th className="py-3 px-4">Rota / Vendedor</th>
-                  <th className="py-3 px-4">Coleta / Prazo</th>
-                  <th className="py-3 px-4">Cliente</th>
-                  <th className="py-3 px-4">Motorista</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                  <th className="py-3 px-4 text-center">Contatos Rápidos (WhatsApp)</th>
-                  <th className="py-3 px-4 text-right">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-900 font-sans">
-                {filteredEntregas.map(e => {
-                  const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
-                  const BadgeIcon = badge.icon;
+          <>
+            {/* Mobile Cards List View */}
+            <div className="block lg:hidden divide-y divide-zinc-900 bg-zinc-950/30">
+              {filteredEntregas.map(e => {
+                const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
+                const BadgeIcon = badge.icon;
 
-                  return (
-                    <tr 
-                      key={e.id} 
-                      className={`hover:bg-zinc-900/70 transition-all cursor-pointer border-l-4 group ${
-                        e.status === 'em_transito' ? 'border-[#FFD600]' :
-                        e.status === 'parado' ? 'border-red-500' :
-                        e.status === 'coletando' ? 'border-blue-500' : 'border-emerald-500'
-                      }`}
-                      id={`list-row-${e.id}`}
-                    >
-                      {/* Checkbox column */}
-                      <td className="py-3.5 px-4 text-center" onClick={(ev) => ev.stopPropagation()}>
-                        <input 
-                          type="checkbox"
-                          checked={selectedIds.includes(e.id)}
-                          onChange={() => handleToggleRow(e.id)}
-                          className="rounded border-zinc-800 bg-zinc-900 text-[#FFD600] focus:ring-[#FFD600] focus:ring-offset-0 cursor-pointer w-4 h-4"
-                          id={`row-select-checkbox-${e.id}`}
-                        />
-                      </td>
-
-                      {/* Route & Seller */}
-                      <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5 font-bold text-gray-100">
+                return (
+                  <div 
+                    key={e.id} 
+                    className="p-4 space-y-3 hover:bg-zinc-900/10 transition-colors"
+                  >
+                    {/* Header Row: Checkbox, Route, Status Badge */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="pt-0.5" onClick={(ev) => ev.stopPropagation()}>
+                          <input 
+                            type="checkbox"
+                            checked={selectedIds.includes(e.id)}
+                            onChange={() => handleToggleRow(e.id)}
+                            className="rounded border-zinc-800 bg-zinc-900 text-[#FFD600] focus:ring-[#FFD600] focus:ring-offset-0 cursor-pointer w-4 h-4"
+                            id={`row-select-checkbox-mobile-${e.id}`}
+                          />
+                        </div>
+                        <div className="space-y-0.5" onClick={() => onSelectDelivery(e.id)}>
+                          <div className="flex items-center gap-1.5 flex-wrap font-bold text-gray-100">
                             <span>{e.origem}</span>
                             <ArrowRight className="w-3 h-3 text-zinc-500" />
                             <span className="text-[#FFD600]">{e.destino}</span>
                           </div>
-                          <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1.5">
-                            <span>Vend: {e.vendedor || 'Sem registro'}</span>
-                            <span className="text-zinc-600">•</span>
-                            <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
-                          </div>
+                          <p className="text-[10px] text-gray-400 font-mono m-0">
+                            Vend: {e.vendedor || 'Sem registro'} • <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
+                          </p>
                         </div>
-                      </td>
+                      </div>
+                      
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold shrink-0 ${badge.bg} ${badge.text}`} onClick={() => onSelectDelivery(e.id)}>
+                        <BadgeIcon className="w-2.5 h-2.5" />
+                        {badge.label}
+                      </span>
+                    </div>
 
-                      {/* Dates */}
-                      <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
-                        <div className="flex flex-col gap-0.5">
-                          <div className="text-gray-300 font-mono font-medium">Coleta: {e.data_coleta}</div>
-                          <div className="text-[10px] text-gray-500 font-mono">Prazo: {e.prazo}</div>
-                        </div>
-                      </td>
+                    {/* Middle Row: Key Info Grid */}
+                    <div className="grid grid-cols-2 gap-3 text-xs bg-zinc-950/40 border border-zinc-900/60 p-3 rounded-lg" onClick={() => onSelectDelivery(e.id)}>
+                      <div>
+                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider">Cliente</span>
+                        <span className="font-semibold text-gray-300 block truncate max-w-full">{e.cliente}</span>
+                        <span className="text-[10px] text-gray-400 font-mono block mt-0.5">{e.tel_cliente}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider">Motorista</span>
+                        <span className="font-semibold text-gray-300 block truncate max-w-full">{e.motorista}</span>
+                        <span className="text-[10px] text-gray-400 font-mono block mt-0.5">{e.tel_motorista}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider">Coleta</span>
+                        <span className="font-mono text-gray-350 block">{e.data_coleta}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider text-[#FFD600]">Prazo</span>
+                        <span className="font-mono text-[#FFD600] block">{e.prazo}</span>
+                      </div>
+                    </div>
 
-                      {/* Customer */}
-                      <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-gray-200">{e.cliente}</span>
-                          <span className="text-[10px] text-gray-500 font-mono">{e.tel_cliente}</span>
-                        </div>
-                      </td>
-
-                      {/* Driver */}
-                      <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-gray-200">{e.motorista}</span>
-                          <span className="text-[10px] text-gray-500 font-mono">{e.tel_motorista}</span>
-                        </div>
-                      </td>
-
-                      {/* status Badge */}
-                      <td className="py-3.5 px-4 text-center" onClick={() => onSelectDelivery(e.id)}>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${badge.bg} ${badge.text}`}>
-                          <BadgeIcon className="w-3 h-3" />
-                          {badge.label}
-                        </span>
-                      </td>
-
-                      {/* Rapid actions contacts */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center justify-center gap-2" onClick={(ev) => ev.stopPropagation()}>
-                          {/* Location pin Link button */}
-                          {e.link_localizacao ? (
-                            <a 
-                              href={e.link_localizacao} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              className="p-1 px-1.5 rounded bg-zinc-800 hover:bg-[#FFD600]/10 border border-zinc-700 hover:border-[#FFD600] text-[#FFD600] flex items-center gap-1 text-[10px] font-mono font-bold transition-colors"
-                              title="Ver Link de Localização do Motorista"
-                              id={`list-action-loc-${e.id}`}
-                            >
-                              <MapPin className="w-3 h-3" />
-                              📍 Loc
-                            </a>
-                          ) : (
-                            <button
-                              disabled
-                              className="p-1 px-1.5 rounded bg-zinc-900 border border-zinc-800 text-gray-600 flex items-center gap-1 text-[10px] font-mono cursor-not-allowed opacity-40 focus:outline-none"
-                              title="Sem link de localização cadastrado"
-                              id={`list-action-loc-none-${e.id}`}
-                            >
-                              <MapPin className="w-3 h-3" />
-                              Sem Loc
-                            </button>
-                          )}
-
-                          {/* WhatsApp Motorista */}
-                          <button
-                            onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
-                            className="p-1 px-1.5 rounded bg-green-950/40 hover:bg-green-600 hover:text-black border border-green-805 text-green-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            title="Conversar com Motorista"
-                            id={`list-action-wa-motorista-${e.id}`}
+                    {/* Action Row: Rapid Actions contacts and Select details */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                      <div className="flex flex-wrap items-center gap-1.5" onClick={(ev) => ev.stopPropagation()}>
+                        {/* Pin link */}
+                        {e.link_localizacao ? (
+                          <a 
+                            href={e.link_localizacao} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="p-1 px-2 rounded bg-zinc-850 hover:bg-[#FFD600]/10 border border-zinc-800 hover:border-[#FFD600] text-[#FFD600] flex items-center gap-1 text-[10px] font-mono font-bold transition-colors"
+                            title="Ver Link de Localização do Motorista"
+                            id={`list-action-loc-mobile-${e.id}`}
                           >
-                            <Phone className="w-2.5 h-2.5" />
-                            Mot
-                          </button>
-
-                          {/* WhatsApp Cliente */}
+                            <MapPin className="w-3 h-3" />
+                            Loc
+                          </a>
+                        ) : (
                           <button
-                            onClick={() => openWhatsApp(e.tel_cliente, getWhatsappClientMsg(e))}
-                            className="p-1 px-1.5 rounded bg-amber-950/40 hover:bg-amber-655 hover:text-black border border-amber-800 text-amber-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            title="Notificar Cliente"
-                            id={`list-action-wa-cliente-${e.id}`}
+                            disabled
+                            className="p-1 px-2 rounded bg-zinc-900 border border-zinc-800 text-gray-600 flex items-center gap-0.5 text-[10px] font-mono cursor-not-allowed opacity-40 focus:outline-none"
+                            id={`list-action-loc-none-mobile-${e.id}`}
                           >
-                            <Phone className="w-2.5 h-2.5" />
-                            Cli
+                            <MapPin className="w-3 h-3" />
+                            Sem Loc
                           </button>
+                        )}
 
-                          {/* Individual Delete Button */}
-                          <button
-                            onClick={() => setIndividualDeleteTarget(e)}
-                            className="p-1 px-1.5 rounded bg-red-950/40 hover:bg-red-600 hover:text-white border border-red-900/60 text-red-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            title="Excluir Carga do Sistema"
-                            id={`list-action-delete-${e.id}`}
-                          >
-                            <Trash2 className="w-2.5 h-2.5" />
-                            Excluir
-                          </button>
-                        </div>
-                      </td>
-
-                      {/* Detail selector row button */}
-                      <td className="py-3.5 px-4 text-right">
-                        <button 
-                          onClick={() => onSelectDelivery(e.id)}
-                          className="p-1 px-2 text-gray-400 hover:text-white hover:bg-zinc-800 rounded transition cursor-pointer"
-                          id={`list-action-view-${e.id}`}
+                        {/* WhatsApp Motorista */}
+                        <button
+                          onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
+                          className="p-1 px-2 rounded bg-green-950/40 hover:bg-green-600 hover:text-black border border-green-805 text-green-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                          id={`list-action-wa-motorista-mobile-${e.id}`}
                         >
-                          <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                          <Phone className="w-2.5 h-2.5" />
+                          Mot
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+
+                        {/* WhatsApp Cliente */}
+                        <button
+                          onClick={() => openWhatsApp(e.tel_cliente, getWhatsappClientMsg(e))}
+                          className="p-1 px-2 rounded bg-amber-950/40 hover:bg-amber-655 hover:text-black border border-amber-800 text-amber-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                          id={`list-action-wa-cliente-mobile-${e.id}`}
+                        >
+                          <Phone className="w-2.5 h-2.5" />
+                          Cli
+                        </button>
+
+                        {/* Individual Delete Button */}
+                        <button
+                          onClick={() => setIndividualDeleteTarget(e)}
+                          className="p-1 px-2 rounded bg-red-950/40 hover:bg-red-600 hover:text-white border border-red-900/60 text-red-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                          id={`list-action-delete-mobile-${e.id}`}
+                        >
+                          <Trash2 className="w-2.5 h-2.5" />
+                          Excluir
+                        </button>
+                      </div>
+
+                      {/* Detail View Arrow */}
+                      <button 
+                        onClick={() => onSelectDelivery(e.id)}
+                        className="p-1 px-2 text-gray-400 hover:text-white hover:bg-zinc-800 rounded transition cursor-pointer flex items-center gap-1 text-[11px]"
+                        id={`list-action-view-mobile-${e.id}`}
+                      >
+                        Ver Detalhes
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-zinc-950/80 border-b border-zinc-800 text-gray-400 font-mono uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-4 w-10 text-center">
+                      <input 
+                        type="checkbox"
+                        checked={filteredEntregas.length > 0 && filteredEntregas.every(e => selectedIds.includes(e.id))}
+                        onChange={handleToggleAll}
+                        className="rounded border-zinc-800 bg-zinc-900 text-[#FFD600] focus:ring-[#FFD600] focus:ring-offset-0 cursor-pointer w-4 h-4"
+                        id="bulk-select-all-checkbox"
+                      />
+                    </th>
+                    <th className="py-3 px-4">Rota / Vendedor</th>
+                    <th className="py-3 px-4">Coleta / Prazo</th>
+                    <th className="py-3 px-4">Cliente</th>
+                    <th className="py-3 px-4">Motorista</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Contatos Rápidos (WhatsApp)</th>
+                    <th className="py-3 px-4 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900 font-sans">
+                  {filteredEntregas.map(e => {
+                    const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
+                    const BadgeIcon = badge.icon;
+
+                    return (
+                      <tr 
+                        key={e.id} 
+                        className={`hover:bg-zinc-900/70 transition-all cursor-pointer border-l-4 group ${
+                          e.status === 'em_transito' ? 'border-[#FFD600]' :
+                          e.status === 'parado' ? 'border-red-500' :
+                          e.status === 'coletando' ? 'border-blue-500' : 'border-emerald-500'
+                        }`}
+                        id={`list-row-${e.id}`}
+                      >
+                        {/* Checkbox column */}
+                        <td className="py-3.5 px-4 text-center" onClick={(ev) => ev.stopPropagation()}>
+                          <input 
+                            type="checkbox"
+                            checked={selectedIds.includes(e.id)}
+                            onChange={() => handleToggleRow(e.id)}
+                            className="rounded border-zinc-800 bg-zinc-900 text-[#FFD600] focus:ring-[#FFD600] focus:ring-offset-0 cursor-pointer w-4 h-4"
+                            id={`row-select-checkbox-${e.id}`}
+                          />
+                        </td>
+
+                        {/* Route & Seller */}
+                        <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5 font-bold text-gray-100">
+                              <span>{e.origem}</span>
+                              <ArrowRight className="w-3 h-3 text-zinc-500" />
+                              <span className="text-[#FFD600]">{e.destino}</span>
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1.5">
+                              <span>Vend: {e.vendedor || 'Sem registro'}</span>
+                              <span className="text-zinc-600">•</span>
+                              <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Dates */}
+                        <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="text-gray-300 font-mono font-medium">Coleta: {e.data_coleta}</div>
+                            <div className="text-[10px] text-gray-500 font-mono">Prazo: {e.prazo}</div>
+                          </div>
+                        </td>
+
+                        {/* Customer */}
+                        <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-200">{e.cliente}</span>
+                            <span className="text-[10px] text-gray-500 font-mono">{e.tel_cliente}</span>
+                          </div>
+                        </td>
+
+                        {/* Driver */}
+                        <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-200">{e.motorista}</span>
+                            <span className="text-[10px] text-gray-500 font-mono">{e.tel_motorista}</span>
+                          </div>
+                        </td>
+
+                        {/* status Badge */}
+                        <td className="py-3.5 px-4 text-center" onClick={() => onSelectDelivery(e.id)}>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${badge.bg} ${badge.text}`}>
+                            <BadgeIcon className="w-3 h-3" />
+                            {badge.label}
+                          </span>
+                        </td>
+
+                        {/* Rapid actions contacts */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center justify-center gap-2" onClick={(ev) => ev.stopPropagation()}>
+                            {/* Location pin Link button */}
+                            {e.link_localizacao ? (
+                              <a 
+                                href={e.link_localizacao} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="p-1 px-1.5 rounded bg-zinc-800 hover:bg-[#FFD600]/10 border border-zinc-700 hover:border-[#FFD600] text-[#FFD600] flex items-center gap-1 text-[10px] font-mono font-bold transition-colors"
+                                title="Ver Link de Localização do Motorista"
+                                id={`list-action-loc-${e.id}`}
+                              >
+                                <MapPin className="w-3 h-3" />
+                                📍 Loc
+                              </a>
+                            ) : (
+                              <button
+                                disabled
+                                className="p-1 px-1.5 rounded bg-zinc-900 border border-zinc-800 text-gray-600 flex items-center gap-1 text-[10px] font-mono cursor-not-allowed opacity-40 focus:outline-none"
+                                title="Sem link de localização cadastrado"
+                                id={`list-action-loc-none-${e.id}`}
+                              >
+                                <MapPin className="w-3 h-3" />
+                                Sem Loc
+                              </button>
+                            )}
+
+                            {/* WhatsApp Motorista */}
+                            <button
+                              onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
+                              className="p-1 px-1.5 rounded bg-green-950/40 hover:bg-green-600 hover:text-black border border-green-805 text-green-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                              title="Conversar com Motorista"
+                              id={`list-action-wa-motorista-${e.id}`}
+                            >
+                              <Phone className="w-2.5 h-2.5" />
+                              Mot
+                            </button>
+
+                            {/* WhatsApp Cliente */}
+                            <button
+                              onClick={() => openWhatsApp(e.tel_cliente, getWhatsappClientMsg(e))}
+                              className="p-1 px-1.5 rounded bg-amber-950/40 hover:bg-amber-655 hover:text-black border border-amber-800 text-amber-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                              title="Notificar Cliente"
+                              id={`list-action-wa-cliente-${e.id}`}
+                            >
+                              <Phone className="w-2.5 h-2.5" />
+                              Cli
+                            </button>
+
+                            {/* Individual Delete Button */}
+                            <button
+                              onClick={() => setIndividualDeleteTarget(e)}
+                              className="p-1 px-1.5 rounded bg-red-950/40 hover:bg-red-600 hover:text-white border border-red-900/60 text-red-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                              title="Excluir Carga do Sistema"
+                              id={`list-action-delete-${e.id}`}
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Detail selector row button */}
+                        <td className="py-3.5 px-4 text-right">
+                          <button 
+                            onClick={() => onSelectDelivery(e.id)}
+                            className="p-1 px-2 text-gray-400 hover:text-white hover:bg-zinc-800 rounded transition cursor-pointer"
+                            id={`list-action-view-${e.id}`}
+                          >
+                            <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

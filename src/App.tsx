@@ -406,76 +406,80 @@ export default function App() {
           </div>
 
           {/* Navigation with High Density spacing */}
-          <nav className="flex items-center gap-1 sm:gap-1.5">
+          <nav className="flex items-center flex-wrap justify-center gap-1 md:gap-1.5">
             
             {/* Nav Dashboard */}
             <button
               onClick={() => setSelectedView('dashboard')}
-              className={`px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
                 selectedView === 'dashboard' 
                 ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-dashboard"
             >
-              <Volume2 className="w-3.5 h-3.5" />
-              Painel Geral
+              <Volume2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Painel Geral</span>
+              <span className="inline sm:hidden">Painel</span>
             </button>
 
             {/* Nav List */}
             <button
               onClick={() => setSelectedView('list')}
-              className={`px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
                 selectedView === 'list' || selectedView === 'details'
                 ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-list"
             >
-              <List className="w-3.5 h-3.5" />
-              Cargas
+              <List className="w-3.5 h-3.5 shrink-0" />
+              <span>Cargas</span>
             </button>
 
             {/* Nav Stats */}
             <button
               onClick={() => setSelectedView('statistics')}
-              className={`px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
                 selectedView === 'statistics' 
                 ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-stats"
             >
-              <BarChart3 className="w-3.5 h-3.5" />
-              Desempenho
+              <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Desempenho</span>
+              <span className="inline sm:hidden">Desemp.</span>
             </button>
 
             {/* Nav WhatsApp */}
             <button
               onClick={() => setSelectedView('whatsapp')}
-              className={`px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
                 selectedView === 'whatsapp' 
                 ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
                 : 'text-[#0a0a0a]-400 text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-whatsapp"
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              Agenda Zap
+              <MessageSquare className="w-3.5 h-3.5 " />
+              <span className="hidden sm:inline">Agenda Zap</span>
+              <span className="inline sm:hidden">Zap</span>
             </button>
 
             {/* Nav Manager */}
             <button
               onClick={() => setSelectedView('manager')}
-              className={`px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
                 selectedView === 'manager' 
                 ? 'bg-red-650 text-white font-extrabold shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-manager"
             >
-              <Shield className="w-3.5 h-3.5 text-red-500" />
-              Gerente Genivaldo
+              <Shield className="w-3.5 h-3.5 text-red-500 shrink-0" />
+              <span className="hidden sm:inline">Gerente Genivaldo</span>
+              <span className="inline sm:hidden">Suporte</span>
             </button>
 
              {/* Floating Quick Action removed to prioritize only importing */}

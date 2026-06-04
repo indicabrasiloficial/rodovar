@@ -365,7 +365,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
               <span className="w-2.5 h-2.5 rounded-full bg-[#FFD600] animate-ping" />
               <h3 className="font-bold text-sm font-sans tracking-wide">MAPA DE MONITORAMENTO ATUAL</h3>
             </div>
-            <div className="flex gap-3 text-[11px] font-mono text-gray-400">
+            <div className="flex flex-wrap gap-2 md:gap-3 text-[10px] md:text-[11px] font-mono text-gray-400 justify-end">
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]" /> Coletando
               </span>
