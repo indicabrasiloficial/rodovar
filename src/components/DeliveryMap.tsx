@@ -33,47 +33,58 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    // Filter out delivered loads unless it's a single shipment detail view map
+    // 1. Create Leaflet Map Instance ONCE
+    if (!mapInstanceRef.current) {
+      let initialCenter: [number, number] = [-14.2350, -51.9253]; // Central Brazil
+      let initialZoom = 4;
+
+      const mapDeliveries = singleView 
+        ? entregas 
+        : entregas.filter(e => e.status !== 'entregue');
+
+      if (singleView && mapDeliveries.length === 1) {
+        initialCenter = [mapDeliveries[0].lat, mapDeliveries[0].lng];
+        initialZoom = 8;
+      } else if (selectedId) {
+        const selected = mapDeliveries.find(e => e.id === selectedId);
+        if (selected) {
+          initialCenter = [selected.lat, selected.lng];
+          initialZoom = 6;
+        }
+      }
+
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: true,
+        attributionControl: false
+      }).setView(initialCenter, initialZoom);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+      }).addTo(map);
+
+      mapInstanceRef.current = map;
+
+      // Fix render layout issues
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 150);
+    }
+
+    const map = mapInstanceRef.current;
+
+    // 2. Filter out delivered loads unless it's a single shipment detail view map
     const mapDeliveries = singleView 
       ? entregas 
       : entregas.filter(e => e.status !== 'entregue');
 
-    // Clear previous map if any
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.remove();
-      mapInstanceRef.current = null;
-    }
-
-    // Set initial center in Brazil (or selected delivery)
-    let center: [number, number] = [-14.2350, -51.9253]; // Central Brazil
-    let zoom = 4;
-
-    if (singleView && mapDeliveries.length === 1) {
-      center = [mapDeliveries[0].lat, mapDeliveries[0].lng];
-      zoom = 8;
-    } else if (selectedId) {
-      const selected = mapDeliveries.find(e => e.id === selectedId);
-      if (selected) {
-        center = [selected.lat, selected.lng];
-        zoom = 6;
-      }
-    }
-
-    // Create map instance
-    const map = L.map(mapContainerRef.current, {
-      zoomControl: true,
-      attributionControl: false
-    }).setView(center, zoom);
-
-    mapInstanceRef.current = map;
-
-    // Add beautiful dark tiles (OpenStreetMap styled via index.css rule)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-    }).addTo(map);
-
-    // Render Markers
+    // 3. Clear existing markers safely
+    markersRef.current.forEach(marker => {
+      marker.remove();
+    });
     markersRef.current = [];
+
+    // 4. Render Markers
+    const activeMarkers: L.Marker[] = [];
     
     mapDeliveries.forEach(entrega => {
       if (!entrega.lat || !entrega.lng) return;
@@ -151,29 +162,37 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
         marker.openPopup();
       }
 
-      markersRef.current.push(marker);
+      activeMarkers.push(marker);
     });
 
-    // Fit map bounds to show all markers if not singleView
-    if (!singleView && mapDeliveries.length > 1) {
-      const group = L.featureGroup(markersRef.current);
+    markersRef.current = activeMarkers;
+
+    // 5. Instantly pan or zoom smoothly to selected elements
+    if (singleView && mapDeliveries.length === 1) {
+      map.setView([mapDeliveries[0].lat, mapDeliveries[0].lng], 8);
+    } else if (selectedId) {
+      const selected = mapDeliveries.find(e => e.id === selectedId);
+      if (selected) {
+        map.setView([selected.lat, selected.lng], 6);
+      }
+    } else if (activeMarkers.length > 1) {
+      const group = L.featureGroup(activeMarkers);
       if (group.getBounds().isValid()) {
         map.fitBounds(group.getBounds().pad(0.15));
       }
     }
 
-    // Leaflet styles reset fix for map containers
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 150);
+  }, [entregas, selectedId, singleView]);
 
+  // Clean up on component unmount
+  useEffect(() => {
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
     };
-  }, [entregas, selectedId, singleView]);
+  }, []);
 
   return (
     <div className="relative w-full h-full rounded-xl overflow-hidden border border-zinc-800 dark-map">
