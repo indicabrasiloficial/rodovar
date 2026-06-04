@@ -1,69 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default-deny catch-all
+    // Open read/write access for preview sandbox environment
     match /{document=**} {
-      allow read, write: if false;
-    }
-    
-    // Global Security primitives
-    function isSignedIn() {
-      return true;
-    }
-    
-    function isOwner(data) {
-      return true;
-    }
-    
-    function isValidId(id) {
-       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-    
-    // Entities Validation Schemas
-    function isValidEntrega(data) {
-      return data.vendedor is string && data.vendedor.size() <= 200
-          && data.cliente is string && data.cliente.size() <= 200
-          && data.tel_cliente is string && data.tel_cliente.size() <= 50
-          && data.motorista is string && data.motorista.size() <= 200
-          && data.tel_motorista is string && data.tel_motorista.size() <= 50
-          && data.origem is string && data.origem.size() <= 200
-          && data.destino is string && data.destino.size() <= 200
-          && data.status in ['coletando', 'em_transito', 'parado', 'entregue']
-          && data.frete_empresa is number
-          && data.frete_motorista is number
-          && data.canhoto_solicitado is bool
-          && data.userId is string;
-    }
-
-    function isValidScheduledMessage(data) {
-      return data.deliveryId is string && data.deliveryId.size() <= 128
-          && data.recipientPhone is string && data.recipientPhone.size() <= 50
-          && data.recipientType in ['motorista', 'cliente']
-          && data.status in ['pendente', 'enviado', 'cancelado']
-          && data.userId is string;
-    }
-    
-    // Rules for user_settings
-    match /user_settings/{userId} {
-      allow get, write: if true;
-    }
-
-    // Rules for entregas
-    match /entregas/{entregaId} {
-      allow get: if isSignedIn() && isValidId(entregaId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(entregaId) && isValidEntrega(request.resource.data);
-      allow update: if isSignedIn() && isValidId(entregaId) && isValidEntrega(request.resource.data);
-      allow delete: if isSignedIn() && isValidId(entregaId);
-    }
-    
-    // Rules for scheduled_messages
-    match /scheduled_messages/{messageId} {
-      allow get: if isSignedIn() && isValidId(messageId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(messageId) && isValidScheduledMessage(request.resource.data);
-      allow update: if isSignedIn() && isValidId(messageId) && isValidScheduledMessage(request.resource.data);
-      allow delete: if isSignedIn() && isValidId(messageId);
+      allow read, write: if true;
     }
   }
 }

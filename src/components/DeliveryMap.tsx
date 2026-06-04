@@ -85,14 +85,27 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
     // 4. Render Markers
     const activeMarkers: L.Marker[] = [];
+    const coordinatesSeen = new Set<string>();
     
     mapDeliveries.forEach(entrega => {
       if (!entrega.lat || !entrega.lng) return;
 
+      let lat = Number(entrega.lat);
+      let lng = Number(entrega.lng);
+      
+      const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+      if (coordinatesSeen.has(coordKey)) {
+        const index = coordinatesSeen.size;
+        const angle = index * 0.75;
+        const radius = 0.012 + (index * 0.003);
+        lat += Math.cos(angle) * radius;
+        lng += Math.sin(angle) * radius;
+      }
+      coordinatesSeen.add(`${lat.toFixed(4)},${lng.toFixed(4)}`);
+
       const color = getStatusColor(entrega.status);
       const isSelected = entrega.id === selectedId;
 
-      // Custom HTML Marker using Tailwind styles
       const customIcon = L.divIcon({
         html: `
           <div class="relative flex items-center justify-center">
@@ -108,7 +121,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
         iconAnchor: [12, 12]
       });
 
-      const marker = L.marker([entrega.lat, entrega.lng], { icon: customIcon }).addTo(map);
+      const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
 
       // Simple WhatsApp links
       const telMot = entrega.tel_motorista.replace(/\D/g, '');

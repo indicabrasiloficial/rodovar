@@ -1,6 +1,6 @@
 import { Entrega } from '../types';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
-import { calculateRealisticDistanceKm } from '../utils/distance';
+import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
 import { 
   collection, 
   doc, 
@@ -218,9 +218,25 @@ onSnapshot(entregasQuery, async (snapshot) => {
     const kmVal = data.km !== undefined && data.km > 0 
       ? Number(data.km) 
       : calculateRealisticDistanceKm(data.origem || '', data.destino || '');
+    
+    // Auto-heal coordinates if they were incorrectly reset/cleared or set to default São Paulo coordinates for other destinations
+    let latVal = data.lat !== undefined ? Number(data.lat) : 0;
+    let lngVal = data.lng !== undefined ? Number(data.lng) : 0;
+    const dest = data.destino || '';
+
+    if ((!latVal || !lngVal || (latVal === -23.5505 && lngVal === -46.6333)) && dest && !dest.toLowerCase().includes('são paulo') && !dest.toLowerCase().includes('sao paulo')) {
+      const cityCoords = findCityCoords(dest);
+      if (cityCoords) {
+        latVal = cityCoords.lat;
+        lngVal = cityCoords.lng;
+      }
+    }
+
     cachedEntregas.push({
       id: docSnap.id,
       ...data,
+      lat: latVal || -23.5505,
+      lng: lngVal || -46.6333,
       km: kmVal
     } as Entrega);
   });
@@ -356,32 +372,53 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   const cleanId = entrega.id || 'ent-' + Math.random().toString(36).substring(2, 11);
   const existingDelivery = cachedEntregas.find(e => e.id === cleanId);
 
-  const calcKm = Number(entrega.km) || calculateRealisticDistanceKm(entrega.origem || '', entrega.destino || '');
-
-  const payload: Entrega = {
+  // Merge previous fields cleanly to support safe partial updates (e.g. status-only or location-link-only updates)
+  const basePayload = {
     id: cleanId,
     created_at: existingDelivery?.created_at || new Date().toISOString(),
-    data_coleta: entrega.data_coleta || new Date().toISOString().split('T')[0],
-    vendedor: entrega.vendedor || '',
-    cliente: entrega.cliente || '',
-    tel_cliente: entrega.tel_cliente || '',
-    motorista: entrega.motorista || '',
-    tel_motorista: entrega.tel_motorista || '',
-    origem: entrega.origem || '',
-    destino: entrega.destino || '',
-    frete_empresa: Number(entrega.frete_empresa) || 0,
-    frete_motorista: Number(entrega.frete_motorista) || 0,
-    prazo: entrega.prazo || new Date().toISOString().split('T')[0],
-    status: entrega.status || 'coletando',
-    observacoes: entrega.observacoes || '',
-    lat: Number(entrega.lat) || -23.5505,
-    lng: Number(entrega.lng) || -46.6333,
-    canhoto_solicitado: !!entrega.canhoto_solicitado,
-    updated_at: new Date().toISOString(),
-    km: calcKm,
-    ...entrega,
+    data_coleta: existingDelivery?.data_coleta || new Date().toISOString().split('T')[0],
+    vendedor: existingDelivery?.vendedor || '',
+    cliente: existingDelivery?.cliente || '',
+    tel_cliente: existingDelivery?.tel_cliente || '',
+    motorista: existingDelivery?.motorista || '',
+    tel_motorista: existingDelivery?.tel_motorista || '',
+    origem: existingDelivery?.origem || '',
+    destino: existingDelivery?.destino || '',
+    frete_empresa: existingDelivery?.frete_empresa || 0,
+    frete_motorista: existingDelivery?.frete_motorista || 0,
+    prazo: existingDelivery?.prazo || new Date().toISOString().split('T')[0],
+    status: existingDelivery?.status || 'coletando',
+    observacoes: existingDelivery?.observacoes || '',
+    lat: existingDelivery?.lat || -23.5505,
+    lng: existingDelivery?.lng || -46.6333,
+    canhoto_solicitado: !!existingDelivery?.canhoto_solicitado,
+    km: existingDelivery?.km || 0,
     userId: uid
+  };
+
+  const payload: Entrega = {
+    ...basePayload,
+    ...entrega,
+    updated_at: new Date().toISOString()
   } as Entrega;
+
+  // Let's ensure km is recalculated if origin or destination changed
+  if (entrega.origem !== undefined || entrega.destino !== undefined || !payload.km) {
+    payload.km = Number(entrega.km) || calculateRealisticDistanceKm(payload.origem, payload.destino);
+  }
+
+  // Ensure lat/lng are correct and updated if base values were default and they can be resolved based on destination
+  if (payload.destino && (payload.lat === -23.5505 && payload.lng === -46.6333) && !payload.destino.toLowerCase().includes('são paulo') && !payload.destino.toLowerCase().includes('sao paulo')) {
+    const cityCoords = findCityCoords(payload.destino);
+    if (cityCoords) {
+      payload.lat = cityCoords.lat;
+      payload.lng = cityCoords.lng;
+    }
+  }
+
+  // Set explicit conversion of string values if passed via forms
+  if (entrega.frete_empresa !== undefined) payload.frete_empresa = Number(entrega.frete_empresa) || 0;
+  if (entrega.frete_motorista !== undefined) payload.frete_motorista = Number(entrega.frete_motorista) || 0;
 
   // Optimistic local update
   const index = cachedEntregas.findIndex(e => e.id === cleanId);
