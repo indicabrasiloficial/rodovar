@@ -43,6 +43,11 @@ service cloud.firestore {
           && data.userId == request.auth.uid;
     }
     
+    // Rules for user_settings
+    match /user_settings/{userId} {
+      allow get, write: if isSignedIn() && userId == request.auth.uid;
+    }
+
     // Rules for entregas
     match /entregas/{entregaId} {
       allow get: if isSignedIn() && isOwner(resource.data) && isValidId(entregaId);

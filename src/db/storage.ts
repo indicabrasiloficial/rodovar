@@ -5,6 +5,7 @@ import {
   collection, 
   doc, 
   setDoc, 
+  getDoc,
   deleteDoc, 
   onSnapshot, 
   query, 
@@ -174,18 +175,40 @@ auth.onAuthStateChanged((user) => {
     // Listen to entregas
     const entregasQuery = query(collection(db, ENTREGAS_COLLECTION), where('userId', '==', uid));
     onSnapshot(entregasQuery, async (snapshot) => {
-      // If collection is empty, seed it on firestore so user sees demo data immediately
+      // If collection is empty, seed it on firestore if the user hasn't initialized yet
       if (snapshot.empty) {
-        console.log('Seeding initial dataset to Firestore for UID:', uid);
+        const seedKey = `rodovar_seeded_${uid}`;
+        if (localStorage.getItem(seedKey) === 'true') {
+          cachedEntregas = [];
+          window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+          return;
+        }
+
         try {
+          const settingsRef = doc(db, 'user_settings', uid);
+          const settingsSnap = await getDoc(settingsRef);
+          if (settingsSnap.exists() && settingsSnap.data()?.seeded) {
+            localStorage.setItem(seedKey, 'true');
+            cachedEntregas = [];
+            window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+            return;
+          }
+
+          console.log('Seeding initial dataset to Firestore for UID:', uid);
+          localStorage.setItem(seedKey, 'true');
+          await setDoc(settingsRef, { seeded: true, userId: uid });
+
           const batch = writeBatch(db);
           SEED_ENTREGAS.forEach(ent => {
-            const docRef = doc(db, ENTREGAS_COLLECTION, ent.id);
-            batch.set(docRef, { ...ent, userId: uid });
+            const uniqueId = `${ent.id}_${uid}`;
+            const docRef = doc(db, ENTREGAS_COLLECTION, uniqueId);
+            batch.set(docRef, { ...ent, id: uniqueId, userId: uid });
           });
           SEED_MESSAGES.forEach(msg => {
-            const docRef = doc(db, MESSAGES_COLLECTION, msg.id);
-            batch.set(docRef, { ...msg, userId: uid });
+            const uniqueId = `${msg.id}_${uid}`;
+            const uniqueDeliveryId = `${msg.deliveryId}_${uid}`;
+            const docRef = doc(db, MESSAGES_COLLECTION, uniqueId);
+            batch.set(docRef, { ...msg, id: uniqueId, deliveryId: uniqueDeliveryId, userId: uid });
           });
           await batch.commit();
         } catch (e) {
@@ -405,6 +428,13 @@ export function deleteEntrega(id: string): boolean {
     deleteDoc(doc(db, ENTREGAS_COLLECTION, id)).catch((error) => {
       handleFirestoreError(error, OperationType.DELETE, `${ENTREGAS_COLLECTION}/${id}`);
     });
+
+    // Cascade delete related scheduled messages
+    const relatedMsgs = cachedScheduledMessages.filter(m => m.deliveryId === id);
+    relatedMsgs.forEach(m => {
+      deleteDoc(doc(db, MESSAGES_COLLECTION, m.id)).catch(() => {});
+    });
+
     return true;
   }
   return false;
@@ -424,6 +454,17 @@ export function deleteEntregasBulk(ids: string[]): boolean {
     batch.commit().catch((error) => {
       handleFirestoreError(error, OperationType.DELETE, ENTREGAS_COLLECTION);
     });
+
+    // Cascade delete related scheduled messages
+    const relatedMsgs = cachedScheduledMessages.filter(m => ids.includes(m.deliveryId));
+    if (relatedMsgs.length > 0) {
+      const msgBatch = writeBatch(db);
+      relatedMsgs.forEach(m => {
+        msgBatch.delete(doc(db, MESSAGES_COLLECTION, m.id));
+      });
+      msgBatch.commit().catch(() => {});
+    }
+
     return true;
   }
   return false;

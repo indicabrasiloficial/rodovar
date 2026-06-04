@@ -700,16 +700,39 @@ export default function DeliveryList({
         ) : (
           <>
             {/* Mobile Cards List View */}
-            <div className="block lg:hidden divide-y divide-zinc-900 bg-zinc-950/30">
-              {filteredEntregas.map(e => {
-                const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
-                const BadgeIcon = badge.icon;
-
-                return (
-                  <div 
-                    key={e.id} 
-                    className="p-4 space-y-3 hover:bg-zinc-900/10 transition-colors"
+            <div className="block lg:hidden">
+              {/* Mobile Select-all Top Bar */}
+              <div className="p-3.5 px-4 bg-zinc-950/50 border-b border-zinc-900/60 flex items-center justify-between text-[11px] font-mono text-gray-400">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input 
+                    type="checkbox"
+                    checked={filteredEntregas.length > 0 && filteredEntregas.every(e => selectedIds.includes(e.id))}
+                    onChange={handleToggleAll}
+                    className="rounded border-zinc-800 bg-zinc-900 text-[#FFD600] focus:ring-[#FFD600] focus:ring-offset-0 cursor-pointer w-4 h-4"
+                    id="bulk-select-all-checkbox-mobile"
+                  />
+                  <span className="font-bold">SELECIONAR TODAS ({filteredEntregas.length})</span>
+                </label>
+                {selectedIds.length > 0 && (
+                  <button 
+                    onClick={() => setSelectedIds([])}
+                    className="text-red-400 hover:text-red-300 font-bold uppercase tracking-wider text-[10px] cursor-pointer"
                   >
+                    Desmarcar ({selectedIds.length})
+                  </button>
+                )}
+              </div>
+
+              <div className="divide-y divide-zinc-900 bg-zinc-950/30">
+                {filteredEntregas.map(e => {
+                  const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
+                  const BadgeIcon = badge.icon;
+
+                  return (
+                    <div 
+                      key={e.id} 
+                      className="p-4 space-y-3 hover:bg-zinc-900/10 transition-colors animate-fade-in"
+                    >
                     {/* Header Row: Checkbox, Route, Status Badge */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2.5">
@@ -835,6 +858,7 @@ export default function DeliveryList({
                 );
               })}
             </div>
+          </div>
 
             {/* Desktop Table View */}
             <div className="hidden lg:block overflow-x-auto">

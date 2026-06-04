@@ -76,9 +76,23 @@
         "status",
         "createdAt"
       ]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User specific initialization and settings flag",
+      "type": "object",
+      "properties": {
+        "seeded": { "type": "boolean" },
+        "userId": { "type": "string" }
+      },
+      "required": ["seeded", "userId"]
     }
   },
   "firestore": {
+    "/user_settings/{userId}": {
+      "schema": "UserSettings",
+      "description": "User specific initialization and settings flag"
+    },
     "/entregas/{entregaId}": {
       "schema": "Entrega",
       "description": "Brazilian deliveres monitored in real-time"
