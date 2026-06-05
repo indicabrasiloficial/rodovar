@@ -28,7 +28,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       'jairobahia': 'Danone01',
       'genivaldo': 'rodovar2026',
       'alexandre': 'rodovar2026',
-      'vitor': 'rodovar2026'
+      'vitor': 'rodovar2026',
+      'petronio': 'rodovar2026',
+      'petrônio': 'rodovar2026'
     };
     
     let currentPasswords = defaults;
@@ -56,10 +58,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         role = 'Gerente Genivaldo';
       } else if (cleanUser === 'alexandre') {
         displayName = 'Alexandre';
-        role = 'Operador Rodovar';
+        role = 'Diretor comercial';
       } else if (cleanUser === 'vitor') {
         displayName = 'Vitor';
-        role = 'Operador Rodovar';
+        role = 'Diretor de Operações';
+      } else if (cleanUser === 'petronio' || cleanUser === 'petrônio') {
+        displayName = 'Petrônio';
+        role = 'Financeiro';
       }
       
       const sessionData = {

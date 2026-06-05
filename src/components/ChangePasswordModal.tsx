@@ -37,7 +37,9 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
       'jairobahia': 'Danone01',
       'genivaldo': 'rodovar2026',
       'alexandre': 'rodovar2026',
-      'vitor': 'rodovar2026'
+      'vitor': 'rodovar2026',
+      'petronio': 'rodovar2026',
+      'petrônio': 'rodovar2026'
     };
     
     let currentPasswords = defaults;
