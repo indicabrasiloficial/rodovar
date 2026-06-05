@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Clipboard,
   Trash2,
-  Lock
+  Lock,
+  Truck
 } from 'lucide-react';
 
 interface DeliveryListProps {
@@ -30,6 +31,7 @@ interface DeliveryListProps {
   setSearchFilter: (v: string) => void;
   statusFilter: string;
   setStatusFilter: (v: string) => void;
+  onAddDelivery?: () => void;
 }
 
 const statusBadgeStyle: Record<string, { bg: string; text: string; label: string; icon: any }> = {
@@ -251,7 +253,8 @@ export default function DeliveryList({
   searchFilter,
   setSearchFilter,
   statusFilter,
-  setStatusFilter
+  setStatusFilter,
+  onAddDelivery
 }: DeliveryListProps) {
   
   const [origemFilter, setOrigemFilter] = useState('');
@@ -380,6 +383,11 @@ export default function DeliveryList({
 
     if (importedCount > 0) {
       setImportFeedback({ success: true, message: `${importedCount} cargas importadas sequencialmente com sucesso absoluto!` });
+      
+      if (window.falarRodovar) {
+        window.falarRodovar(`${importedCount} novas cargas importadas com sucesso absoluto para monitoramento.`);
+      }
+
       onRefresh();
       setTimeout(() => {
         setIsImportModalOpen(false);
@@ -538,6 +546,17 @@ export default function DeliveryList({
         </h2>
         
         <div className="flex items-center gap-2.5">
+          {onAddDelivery && (
+            <button
+              onClick={onAddDelivery}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#FFD600] hover:bg-[#ffe23b] text-black uppercase text-xs font-mono font-black tracking-wider rounded-lg transition-all cursor-pointer"
+              id="list-add-delivery-btn"
+            >
+              <Truck className="w-3.5 h-3.5 text-black shrink-0" />
+              Cadastrar Carga
+            </button>
+          )}
+
           <button
             onClick={() => setIsImportModalOpen(true)}
             className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] uppercase text-xs font-mono font-bold tracking-wider rounded-lg transition-all cursor-pointer text-gray-300"

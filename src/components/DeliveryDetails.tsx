@@ -27,6 +27,23 @@ import {
 } from 'lucide-react';
 import DeliveryMap from './DeliveryMap';
 
+const formatTimestamp = (isoString: string) => {
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch (e) {
+    return isoString;
+  }
+};
+
 interface DeliveryDetailsProps {
   entregaId: string;
   onBack: () => void;
@@ -116,6 +133,11 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
       setEntrega(updated);
       setIsSavingLink(false);
       setShowSaveSuccess(true);
+
+      if (window.falarRodovar) {
+        window.falarRodovar(`Rastreamento ao vivo ativado para o motorista ${entrega.motorista}.`);
+      }
+
       setTimeout(() => setShowSaveSuccess(false), 3000);
     }, 450);
   };
@@ -126,6 +148,16 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
       status: newStatus
     });
     setEntrega(updated);
+
+    if (window.falarRodovar) {
+      const statusLabels: Record<string, string> = {
+        coletando: 'carregando em fase de coleta',
+        em_transito: 'em trânsito acelerando',
+        parado: 'parada no acostamento',
+        entregue: 'concluída e entregue com sucesso!'
+      };
+      window.falarRodovar(`Viagem do motorista ${entrega.motorista} atualizada para o status de: ${statusLabels[newStatus] || newStatus}`);
+    }
   };
 
   // WhatsApp Trigger helpers
@@ -153,6 +185,10 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
       canhoto_solicitado: true
     });
     setEntrega(updated);
+
+    if (window.falarRodovar) {
+      window.falarRodovar(`Iniciando solicitação de comprovante e canhoto com o motorista ${entrega.motorista}.`);
+    }
     
     // 2. Fire WhatsApp template
     clickWhatsApp(entrega.tel_motorista, waTemplates.solicitarCanhoto);
@@ -253,7 +289,14 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
           Voltar para Monitoramento
         </button>
 
-        {/* Editar Dados button removed */}
+        <button
+          onClick={() => onEdit(entrega.id)}
+          className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] text-gray-300 hover:text-white text-xs font-mono font-bold uppercase rounded-lg transition-all cursor-pointer"
+          id="details-edit-btn"
+        >
+          <Edit3 className="w-4 h-4 text-[#FFD600]" />
+          Editar Dados da Carga
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -359,6 +402,28 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                 </div>
               </div>
 
+              {/* Box Freight Values */}
+              <div className="bg-zinc-950/50 p-4 border border-zinc-900 rounded-xl space-y-3 sm:col-span-2">
+                <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] flex items-center gap-1.5 font-bold">
+                  <DollarSign className="w-4 h-4 text-[#FFD600]" />
+                  Valores e Custos do Frete (R$)
+                </span>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-gray-550 font-mono block uppercase text-[9px]">FRETE EMPRESA</span>
+                    <span className="text-emerald-400 font-mono font-bold text-base block mt-0.5">
+                      {entrega.frete_empresa ? `R$ ${Number(entrega.frete_empresa).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-550 font-mono block uppercase text-[9px]">FRETE MOTORISTA</span>
+                    <span className="text-amber-400 font-mono font-bold text-base block mt-0.5">
+                      {entrega.frete_motorista ? `R$ ${Number(entrega.frete_motorista).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Box Notes */}
               <div className="bg-zinc-950/50 p-4 border border-zinc-900 rounded-xl space-y-1 text-xs sm:col-span-2">
                 <span className="text-gray-500 font-mono block uppercase text-[9px]">OBSERVAÇÕES INTERNAS RODOVAR</span>
@@ -438,6 +503,74 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               <p className="text-[11px] text-emerald-400 font-mono mt-2 flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Link de localização gravado com sucesso! Geolocalização atualizada.
               </p>
+            )}
+          </div>
+
+          {/* Histórico de Eventos */}
+          <div className="bg-[#121212] border border-zinc-800 rounded-xl p-5 space-y-4 shadow-sm" id="details-event-history">
+            <div className="flex justify-between items-center border-b border-zinc-900 pb-2">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] font-bold flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-[#FFD600]" />
+                Histórico de Eventos da Carga
+              </span>
+              {entrega.historico && entrega.historico.length > 0 && (
+                <span className="text-[10px] font-mono text-gray-500">
+                  {entrega.historico.length} {entrega.historico.length === 1 ? 'registro' : 'registros'}
+                </span>
+              )}
+            </div>
+
+            {!entrega.historico || entrega.historico.length === 0 ? (
+              <p className="text-zinc-500 font-sans text-xs text-center py-4">
+                Aguardando primeiro evento ou alteração para iniciar o registro de histórico desta carga...
+              </p>
+            ) : (
+              <div className="relative pl-5 space-y-5 before:absolute before:inset-y-1 before:left-2 before:w-0.5 before:bg-zinc-800/80">
+                {/* We render them in chronological order or reverse chronological order (newest on top) */}
+                {[...entrega.historico].reverse().map((evt) => {
+                  const isCreate = evt.descricao.includes('Cadastrou') || evt.descricao.includes('Importou');
+                  const isStatus = evt.descricao.includes('status');
+                  const isLive = evt.descricao.includes('rastreamento') || evt.descricao.includes('localização');
+                  const isCanhoto = evt.descricao.includes('canhoto');
+                  
+                  let dotColor = 'bg-zinc-700 border-zinc-600';
+                  if (isCreate) dotColor = 'bg-[#FFD600] border-[#FFD600]/40';
+                  else if (isStatus) dotColor = 'bg-blue-500 border-blue-500/40';
+                  else if (isLive) dotColor = 'bg-amber-400 border-amber-400/40';
+                  else if (isCanhoto) dotColor = 'bg-emerald-500 border-emerald-500/40';
+
+                  let roleColor = 'text-zinc-400 bg-zinc-900 border-zinc-800';
+                  const cargo = evt.cargo || '';
+                  if (cargo.toLowerCase().includes('gerente')) {
+                    roleColor = 'text-[#FFD600] bg-yellow-950/20 border-yellow-900/30';
+                  } else if (cargo.toLowerCase().includes('diretor')) {
+                    roleColor = 'text-red-400 bg-red-950/20 border-red-900/30';
+                  } else if (cargo.toLowerCase().includes('financeiro')) {
+                    roleColor = 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30';
+                  }
+
+                  return (
+                    <div key={evt.id} className="relative text-xs flex flex-col gap-1 pr-1 group">
+                      {/* Dotted indicator */}
+                      <span className={`absolute -left-[17px] top-[5px] w-2.5 h-2.5 rounded-full border-2 ${dotColor} z-10 transition-transform group-hover:scale-125`} />
+                      
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-gray-200">{evt.usuarioNome}</span>
+                        <span className={`text-[8px] font-mono uppercase px-1 py-0.2 rounded border font-extrabold tracking-wider ${roleColor}`}>
+                          {cargo || 'Operador'}
+                        </span>
+                        <span className="text-[10px] text-gray-500 font-mono ml-auto">
+                          {formatTimestamp(evt.timestamp)}
+                        </span>
+                      </div>
+                      
+                      <p className="text-gray-400 font-sans leading-relaxed">
+                        {evt.descricao}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 

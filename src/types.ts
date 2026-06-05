@@ -1,5 +1,14 @@
 export type DeliveryStatus = 'coletando' | 'em_transito' | 'parado' | 'entregue';
 
+export interface EventoEntrega {
+  id: string;
+  timestamp: string;
+  usuario: string;
+  usuarioNome: string;
+  cargo: string;
+  descricao: string;
+}
+
 export interface Entrega {
   id: string;
   created_at: string;
@@ -22,6 +31,7 @@ export interface Entrega {
   canhoto_solicitado: boolean;
   updated_at: string;
   km?: number;
+  historico?: EventoEntrega[];
 }
 
 export interface SupabaseConfig {
@@ -43,4 +53,11 @@ export interface ScheduledMessage {
   status: 'pendente' | 'enviado' | 'cancelado';
   createdAt: string;
 }
+
+declare global {
+  interface Window {
+    falarRodovar?: (texto: string, onEndCallback?: () => void) => void;
+  }
+}
+
 

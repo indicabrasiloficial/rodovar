@@ -172,6 +172,15 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
 
     const saved = saveEntrega(payload);
     setIsGeocoding(false);
+
+    if (window.falarRodovar) {
+      if (isEditMode) {
+        window.falarRodovar(`Carga para ${payload.destino} atualizada com sucesso!`);
+      } else {
+        window.falarRodovar(`Nova carga cadastrada com destino a ${payload.destino || 'destino informado'}.`);
+      }
+    }
+
     onSaved(saved.id);
   };
 
@@ -414,10 +423,53 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
               </div>
             </div>
 
-            {/* Secao 3: Observações gerais */}
+            {/* Secao 3: Valores e Custos do Frete */}
+            <div className="pt-2">
+              <h3 className="text-xs uppercase tracking-wider font-mono text-[#FFD600] mb-4 font-bold border-b border-zinc-950 pb-2">
+                3. Valores e Custos do Frete (R$)
+              </h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Frete Empresa */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-400 font-medium">Valor do Frete Empresa (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    {...register('frete_empresa', { 
+                      valueAsNumber: true,
+                      min: { value: 0, message: 'O valor do frete deve ser positivo' }
+                    })}
+                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none font-mono placeholder-gray-700"
+                    id="form-input-frete-empresa"
+                  />
+                  {errors.frete_empresa && <p className="text-[10px] text-red-400 font-mono">{errors.frete_empresa.message}</p>}
+                </div>
+
+                {/* Frete Motorista */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-400 font-medium">Valor do Frete Motorista (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    {...register('frete_motorista', { 
+                      valueAsNumber: true,
+                      min: { value: 0, message: 'O valor do frete deve ser positivo' }
+                    })}
+                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none font-mono placeholder-gray-700"
+                    id="form-input-frete-motorista"
+                  />
+                  {errors.frete_motorista && <p className="text-[10px] text-red-00 font-mono">{errors.frete_motorista.message}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Secao 4: Observações gerais */}
             <div className="pt-2">
               <h3 className="text-xs uppercase tracking-wider font-mono text-gray-500 mb-3 font-bold border-b border-zinc-900 pb-2">
-                3. Observações Operacionais da Carga
+                4. Observações Operacionais da Carga
               </h3>
               
               <div className="space-y-1.5">

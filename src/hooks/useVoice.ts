@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Entrega } from '../types';
 import { getEntregas } from '../db/storage';
+import { falarRodovar } from '../utils/speech';
+
 
 export interface VoiceState {
   isSupported: boolean;
@@ -193,86 +195,7 @@ export function useVoice(
   }, []);
 
   const speak = (text: string, onEndCallback?: () => void) => {
-    if (!window.speechSynthesis) return;
-    
-    // Cancel prior speech
-    window.speechSynthesis.cancel();
-    
-    const normalized = normalizeTextForSpeech(text);
-    const utterance = new SpeechSynthesisUtterance(normalized);
-    utterance.lang = 'pt-BR';
-    utterance.pitch = 1.0; // Restored to 1.0 (default) to eliminate robotic trembling/vibrating DSP artifacts entirely
-    utterance.volume = 1.0; 
-    utterance.rate = 1.15; // Set to a perfectly balanced rate (1.15) for a natural, fluent, and highly professional delivery
-
-    // Advanced Brazilian Portuguese Male Voice Selector
-    const voices = window.speechSynthesis.getVoices();
-    const ptBRVoices = voices.filter((v) => {
-      const l = v.lang.toLowerCase().replace('_', '-');
-      return l === 'pt-br' || l === 'pt';
-    });
-
-    // Score pt-BR voices prioritizing male sounding voice profiles
-    const getScore = (voice: SpeechSynthesisVoice) => {
-      const name = voice.name.toLowerCase();
-      let score = 1;
-
-      // Strong indicators for Male Brazilian Portuguese voices
-      const isMale = name.includes('daniel') || 
-                     name.includes('felipe') || 
-                     name.includes('male') || 
-                     name.includes('homem') || 
-                     name.includes('guy') || 
-                     name.includes('antonio') || 
-                     name.includes('junior') ||
-                     name.includes('helio');
-
-      // Strong indicators for Female voices (to be deprioritized)
-      const isFemale = name.includes('luciana') || 
-                       name.includes('sandra') || 
-                       name.includes('female') || 
-                       name.includes('mulher') || 
-                       name.includes('maria') || 
-                       name.includes('helena') || 
-                       name.includes('zita') ||
-                       name.includes('google português do brasil'); // Usually defaults to female online on chrome
-
-      if (isMale) {
-        score += 300; // Top-tier priority for male voices
-      } else if (isFemale) {
-        score -= 200; // Heavily penalize female voices to keep masculine preference
-      }
-
-      // Quality markers
-      if (name.includes('natural')) score += 50;
-      if (name.includes('neural')) score += 45;
-      if (name.includes('online')) score += 40;
-      if (name.includes('google')) score += 30;
-      if (name.includes('microsoft')) score += 20;
-
-      return score;
-    };
-
-    const bestVoice = [...ptBRVoices].sort((a, b) => getScore(b) - getScore(a))[0] || 
-                      voices.find((v) => v.lang.toLowerCase().startsWith('pt'));
-
-    if (bestVoice) {
-      utterance.voice = bestVoice;
-    }
-    
-    // Prevent browser garbage collection bug cutting off speech sound
-    (window as any)._activeUtterances = (window as any)._activeUtterances || [];
-    (window as any)._activeUtterances.push(utterance);
-
-    utterance.onend = () => {
-      const idx = (window as any)._activeUtterances.indexOf(utterance);
-      if (idx > -1) {
-        (window as any)._activeUtterances.splice(idx, 1);
-      }
-      if (onEndCallback) onEndCallback();
-    };
-
-    window.speechSynthesis.speak(utterance);
+    falarRodovar(text, onEndCallback);
     setState((prev) => ({ ...prev, assistantResponse: text }));
   };
 

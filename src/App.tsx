@@ -144,6 +144,11 @@ export default function App() {
 
     if (importedCount > 0) {
       setImportFeedback({ success: true, message: `${importedCount} cargas importadas sequencialmente com sucesso absoluto!` });
+      
+      if (window.falarRodovar) {
+        window.falarRodovar(`${importedCount} novas cargas importadas com sucesso absoluto para monitoramento.`);
+      }
+
       setTimeout(() => {
         setIsImportModalOpen(false);
         setPastedText('');
@@ -233,6 +238,7 @@ export default function App() {
             setSearchFilter={setSearchFilter}
             statusFilter={statusFilter}
             setStatusFilter={setStatusFilter}
+            onAddDelivery={handleAddNewDelivery}
           />
         );
       case 'details':
@@ -425,6 +431,16 @@ export default function App() {
 
           {/* High Density Right Side Info Items */}
           <div className="flex items-center gap-4">
+            {/* Cadastrar Carga Button */}
+            <button
+              onClick={handleAddNewDelivery}
+              className="flex items-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-full px-4 py-1.5 gap-1.5 transition-all text-[10px] font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.15)] hover:scale-[1.02] active:scale-95"
+              id="global-cadastrar-btn"
+            >
+              <Truck className="w-3.5 h-3.5 text-black shrink-0" />
+              <span>Cadastrar Carga</span>
+            </button>
+
             {/* Import Button */}
             <button
               onClick={() => setIsImportModalOpen(true)}

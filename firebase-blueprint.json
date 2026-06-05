@@ -25,7 +25,22 @@
         "lng": { "type": "number" },
         "canhoto_solicitado": { "type": "boolean" },
         "updated_at": { "type": "string", "format": "date-time" },
-        "userId": { "type": "string" }
+        "userId": { "type": "string" },
+        "historico": {
+          "type": "array",
+          "description": "List of tracked action events made to this delivery",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "usuario": { "type": "string" },
+              "usuarioNome": { "type": "string" },
+              "cargo": { "type": "string" },
+              "descricao": { "type": "string" }
+            }
+          }
+        }
       },
       "required": [
         "data_coleta",

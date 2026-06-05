@@ -460,8 +460,13 @@ export default function WhatsAppScheduler() {
           {/* Quick Informational note */}
           <div className="mt-4 p-3 bg-zinc-900/40 border border-dashed border-zinc-800 rounded-lg text-[10px] text-zinc-500 font-mono leading-relaxed flex gap-2">
             <AlertCircle className="w-4 h-4 text-[#FFD600] shrink-0" />
-            <span>
-              Ao disparar, o Agente Rodovar abre uma nova aba no seu navegador integrada diretamente com o WhatsApp Web (ou aplicativo celular) contendo a mensagem preenchida sequencialmente. Gratuito e 100% legal sem necessidade de APIs pagas da Meta.
+            <span className="space-y-1 block">
+              <span className="block">
+                Ao disparar, o Agente Rodovar abre uma nova aba no seu navegador integrada diretamente com o WhatsApp Web (ou aplicativo celular) contendo a mensagem preenchida sequencialmente. Gratuito e 100% legal sem necessidade de APIs pagas da Meta.
+              </span>
+              <span className="block text-[#FFD600] font-bold uppercase mt-1">
+                ⚠️ IMPORTANTE: O envio das mensagens NÃO é automático. Toda ação e disparo de mensagens é MANUAL e requer a confirmação do operador para enviar.
+              </span>
             </span>
           </div>
 

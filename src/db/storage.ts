@@ -234,12 +234,120 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     lng: existingDelivery?.lng || -46.6333,
     canhoto_solicitado: !!existingDelivery?.canhoto_solicitado,
     km: existingDelivery?.km || 0,
+    historico: existingDelivery?.historico || [],
     userId: uid
   };
+
+  // Compile difference list
+  const logs: string[] = [];
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      coletando: 'Coletando 📦',
+      em_transito: 'Trânsito 🚚',
+      parado: 'Parado 🛑',
+      entregue: 'Entregue ✅'
+    };
+    return labels[status] || status;
+  };
+
+  if (!existingDelivery) {
+    const isImport = (entrega.observacoes && entrega.observacoes.includes('de texto copiado')) || 
+                     (entrega.observacoes && entrega.observacoes.includes('MONITORAMENTO'));
+    logs.push(isImport ? 'Importou esta carga em lote de dados' : 'Cadastrou uma nova carga no sistema.');
+  } else {
+    // Check status
+    if (entrega.status && entrega.status !== existingDelivery.status) {
+      logs.push(`Alterou o status de "${getStatusLabel(existingDelivery.status)}" para "${getStatusLabel(entrega.status)}"`);
+    }
+    // Check link_localizacao
+    if (entrega.link_localizacao !== undefined && entrega.link_localizacao !== existingDelivery.link_localizacao) {
+      if (!existingDelivery.link_localizacao && entrega.link_localizacao) {
+        logs.push('Iniciou rastreamento ao vivo (adicionou o Link de Localização)');
+      } else if (existingDelivery.link_localizacao && !entrega.link_localizacao) {
+        logs.push('Removeu o link de localização');
+      } else {
+        logs.push('Atualizou o link de localização do rastreio ao vivo');
+      }
+    }
+    // Check canhoto_solicitado
+    if (entrega.canhoto_solicitado !== undefined && entrega.canhoto_solicitado !== existingDelivery.canhoto_solicitado) {
+      if (entrega.canhoto_solicitado) {
+        logs.push('Solicitou o envio do canhoto assinado pelo WhatsApp do motorista');
+      } else {
+        logs.push('Cancelou ou reiniciou a solicitação de canhoto');
+      }
+    }
+    // Check motorista
+    if (entrega.motorista !== undefined && entrega.motorista !== existingDelivery.motorista) {
+      logs.push(`Alterou o motorista de "${existingDelivery.motorista || 'Sem registro'}" para "${entrega.motorista}"`);
+    }
+    // Check tel_motorista
+    if (entrega.tel_motorista !== undefined && entrega.tel_motorista !== existingDelivery.tel_motorista) {
+      logs.push(`Alterou o telefone do motorista de "${existingDelivery.tel_motorista || 'Sem registro'}" para "${entrega.tel_motorista}"`);
+    }
+    // Check cliente
+    if (entrega.cliente !== undefined && entrega.cliente !== existingDelivery.cliente) {
+      logs.push(`Alterou o cliente de "${existingDelivery.cliente || 'Sem registro'}" para "${entrega.cliente}"`);
+    }
+    // Check tel_cliente
+    if (entrega.tel_cliente !== undefined && entrega.tel_cliente !== existingDelivery.tel_cliente) {
+      logs.push(`Alterou o telefone do cliente de "${existingDelivery.tel_cliente || 'Sem registro'}" para "${entrega.tel_cliente}"`);
+    }
+    // Check origem
+    if (entrega.origem !== undefined && entrega.origem !== existingDelivery.origem) {
+      logs.push(`Modificou a origem de "${existingDelivery.origem}" para "${entrega.origem}"`);
+    }
+    // Check destino
+    if (entrega.destino !== undefined && entrega.destino !== existingDelivery.destino) {
+      logs.push(`Modificou o destino de "${existingDelivery.destino}" para "${entrega.destino}"`);
+    }
+    // Check vendedor
+    if (entrega.vendedor !== undefined && entrega.vendedor !== existingDelivery.vendedor) {
+      logs.push(`Alterou o vendedor de "${existingDelivery.vendedor || 'Sem registro'}" para "${entrega.vendedor}"`);
+    }
+    // Check frete_empresa
+    if (entrega.frete_empresa !== undefined && Number(entrega.frete_empresa) !== existingDelivery.frete_empresa) {
+      logs.push(`Alterou frete empresa de R$ ${existingDelivery.frete_empresa.toFixed(2)} para R$ ${Number(entrega.frete_empresa).toFixed(2)}`);
+    }
+    // Check frete_motorista
+    if (entrega.frete_motorista !== undefined && Number(entrega.frete_motorista) !== existingDelivery.frete_motorista) {
+      logs.push(`Alterou frete motorista de R$ ${existingDelivery.frete_motorista.toFixed(2)} para R$ ${Number(entrega.frete_motorista).toFixed(2)}`);
+    }
+    // Check prazo
+    if (entrega.prazo !== undefined && entrega.prazo !== existingDelivery.prazo) {
+      logs.push(`Alterou o prazo de "${existingDelivery.prazo}" para "${entrega.prazo}"`);
+    }
+    // Check observacoes
+    if (entrega.observacoes !== undefined && entrega.observacoes !== existingDelivery.observacoes) {
+      logs.push('Atualizou as observações de entrega');
+    }
+  }
+
+  // Retrieve current logged-in user details
+  let activeUser = { username: 'sistema', displayName: 'Sistema', role: 'Operador Rodovar' };
+  const userStored = localStorage.getItem('rodovar_active_login_v2');
+  if (userStored) {
+    try {
+      activeUser = JSON.parse(userStored);
+    } catch {
+      // Ignored
+    }
+  }
+
+  const newEvents = logs.map(desc => ({
+    id: 'evt-' + Math.random().toString(36).substring(2, 11),
+    timestamp: new Date().toISOString(),
+    usuario: activeUser.username,
+    usuarioNome: activeUser.displayName,
+    cargo: activeUser.role,
+    descricao: desc
+  }));
 
   const payload: Entrega = {
     ...basePayload,
     ...entrega,
+    historico: [...(basePayload.historico || []), ...newEvents],
     updated_at: new Date().toISOString()
   } as Entrega;
 
