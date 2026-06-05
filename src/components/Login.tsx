@@ -24,9 +24,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
 
     // Load custom passwords list
-    const defaults = {
+    const defaults: Record<string, string> = {
       'jairobahia': 'Danone01',
-      'genivaldo': 'rodovar2026'
+      'genivaldo': 'rodovar2026',
+      'alexandre': 'rodovar2026',
+      'vitor': 'rodovar2026'
     };
     
     let currentPasswords = defaults;
@@ -40,11 +42,25 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
 
     const isValidUser = Object.prototype.hasOwnProperty.call(currentPasswords, cleanUser);
-    const correctPass = currentPasswords[cleanUser as keyof typeof currentPasswords];
+    const correctPass = currentPasswords[cleanUser];
 
     if (isValidUser && correctPass === cleanPass) {
-      const displayName = cleanUser === 'jairobahia' ? 'Jairo Bahia' : 'Genivaldo';
-      const role = cleanUser === 'jairobahia' ? 'Operador Rodovar' : 'Gerente Genivaldo';
+      let displayName = 'Operador';
+      let role = 'Operador Rodovar';
+
+      if (cleanUser === 'jairobahia') {
+        displayName = 'Jairo Bahia';
+        role = 'Operador Rodovar';
+      } else if (cleanUser === 'genivaldo') {
+        displayName = 'Genivaldo';
+        role = 'Gerente Genivaldo';
+      } else if (cleanUser === 'alexandre') {
+        displayName = 'Alexandre';
+        role = 'Operador Rodovar';
+      } else if (cleanUser === 'vitor') {
+        displayName = 'Vitor';
+        role = 'Operador Rodovar';
+      }
       
       const sessionData = {
         username: cleanUser,

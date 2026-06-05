@@ -33,9 +33,11 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
     }
 
     // Load passwords list
-    const defaults = {
+    const defaults: Record<string, string> = {
       'jairobahia': 'Danone01',
-      'genivaldo': 'rodovar2026'
+      'genivaldo': 'rodovar2026',
+      'alexandre': 'rodovar2026',
+      'vitor': 'rodovar2026'
     };
     
     let currentPasswords = defaults;
@@ -48,7 +50,7 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
       }
     }
 
-    const correctPass = currentPasswords[cleanUser as keyof typeof currentPasswords];
+    const correctPass = currentPasswords[cleanUser];
 
     if (currentPassword !== correctPass) {
       setError('A senha atual inserida está incorreta.');
