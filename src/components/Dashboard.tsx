@@ -12,7 +12,8 @@ import {
   Search, 
   HelpCircle,
   TrendingDown,
-  Navigation
+  Navigation,
+  Package
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import DeliveryMap from './DeliveryMap';
@@ -43,6 +44,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
   // Calculate Metrics
   const metrics = useMemo(() => {
     let totalCargas = entregas.length;
+    let coletando = entregas.filter(e => e.status === 'coletando').length;
     let emTransito = entregas.filter(e => e.status === 'em_transito').length;
     let entregues = entregas.filter(e => e.status === 'entregue').length;
     let paradas = entregas.filter(e => e.status === 'parado').length;
@@ -53,6 +55,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
 
     return {
       totalCargas,
+      coletando,
       emTransito,
       entregues,
       paradas,
@@ -306,9 +309,9 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
       </div>
 
       {/* Grid of Key Metric cards (Custom High Density without financial metrics) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {/* Metric Total */}
-        <div className="bg-[#121212] border border-zinc-800 hover:border-zinc-700 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-total">
+        <div className="bg-[#121212] border border-zinc-800 hover:border-zinc-700 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-total col-span-2 md:col-span-1">
           <div className="flex justify-between items-start">
             <span className="text-[11px] uppercase tracking-wider font-mono text-gray-500">Total de Cargas</span>
             <div className="p-1 px-1.5 rounded-md bg-zinc-900 text-gray-400 font-mono text-[10px] border border-zinc-800">CARGAS</div>
@@ -316,6 +319,18 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-2xl md:text-3xl font-extrabold font-sans text-white group-hover:text-yellow-400 transition-colors">{metrics.totalCargas}</span>
             <Truck className="w-5 h-5 text-gray-600 self-end mb-1" />
+          </div>
+        </div>
+
+        {/* Metric Coletando */}
+        <div className="bg-[#121212] border border-zinc-800 hover:border-blue-900/50 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-collecting">
+          <div className="flex justify-between items-start">
+            <span className="text-[11px] uppercase tracking-wider font-mono text-blue-400">Coletando</span>
+            <Package className="w-4 h-4 text-blue-400" />
+          </div>
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="text-2xl md:text-3xl font-extrabold font-sans text-white">{metrics.coletando}</span>
+            <span className="text-[10px] font-bold text-blue-400 bg-blue-950/10 px-1.5 py-0.5 rounded font-mono">PREPARAÇÃO</span>
           </div>
         </div>
 
@@ -327,7 +342,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
           </div>
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-2xl md:text-3xl font-extrabold font-sans text-white">{metrics.emTransito}</span>
-            <span className="text-[10px] font-bold text-[#FFD600] bg-[#FFD600]/10 px-1 py-0.5 rounded font-mono">LIVE</span>
+            <span className="text-[10px] font-bold text-[#FFD600] bg-[#FFD600]/10 px-1.5 py-0.5 rounded font-mono">EM ATIVIDADES</span>
           </div>
         </div>
 
@@ -409,13 +424,19 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
                   />
                   <Tooltip
                     cursor={{ fill: 'rgba(255, 214, 0, 0.04)' }}
-                    contentStyle={{ 
-                      backgroundColor: '#18181b', 
-                      borderColor: '#3f3f46',
-                      borderRadius: '8px',
-                      color: '#ffffff',
-                      fontFamily: 'monospace',
-                      fontSize: '11px'
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-[#18181b] border-2 border-zinc-700 rounded-lg p-2.5 shadow-xl font-mono text-[11px] space-y-1">
+                            <p className="text-[#FFD600] font-bold uppercase tracking-wider">{data.name}</p>
+                            <p className="text-white">
+                              Quantidade: <span className="font-extrabold text-[#FFD600] text-sm">{payload[0].value}</span>
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
                     }}
                   />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
