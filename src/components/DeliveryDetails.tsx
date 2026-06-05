@@ -279,15 +279,13 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               </div>
 
               <div className="flex flex-col sm:items-end gap-1.5">
-                <span className="text-[10px] font-mono text-gray-500 flex items-center gap-1.5 uppercase font-bold">
-                  <Lock className="w-3 h-3 text-[#FFD600]" />
-                  STATUS DA CARGA (Bloqueado)
+                <span className="text-[10px] font-mono text-[#FFD600] uppercase font-bold flex items-center gap-1.5">
+                  STATUS DA CARGA
                 </span>
                 <select
                   value={entrega.status}
                   onChange={(e) => handleUpdateStatus(e.target.value as DeliveryStatus)}
-                  disabled={true}
-                  className={`px-3 py-1.5 text-xs font-bold font-sans rounded-lg border-2 focus:ring-0 focus:outline-none opacity-80 cursor-not-allowed ${statusColors[entrega.status]}`}
+                  className={`px-3 py-1.5 text-xs font-bold font-sans rounded-lg border-2 focus:ring-1 focus:ring-[#FFD600] focus:outline-none cursor-pointer transition-all hover:scale-[1.02] active:scale-95 duration-150 ${statusColors[entrega.status]}`}
                   id="details-status-selector"
                 >
                   <option value="coletando" className="bg-zinc-950 text-white">Coletando 📦</option>
