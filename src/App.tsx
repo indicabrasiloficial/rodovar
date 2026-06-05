@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getEntregas, deleteEntrega, subscribeToRealtime, saveEntrega } from './db/storage';
-import { auth, logout } from './db/firebase';
+import { auth } from './db/firebase';
 import { Entrega } from './types';
 import { parsePastedTextToDeliveries } from './components/DeliveryList';
 import { useVoice } from './hooks/useVoice';
@@ -11,6 +11,8 @@ import DeliveryForm from './components/DeliveryForm';
 import Statistics from './components/Statistics';
 import WhatsAppScheduler from './components/WhatsAppScheduler';
 import ManagerSupport from './components/ManagerSupport';
+import Login from './components/Login';
+import ChangePasswordModal from './components/ChangePasswordModal';
 
 import { 
   Truck, 
@@ -38,6 +40,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const [entregas, setEntregas] = useState<Entrega[]>([]);
   const [selectedView, setSelectedView] = useState<ViewMode>('dashboard');
@@ -51,25 +54,25 @@ export default function App() {
 
   // Load user session on start
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((u) => {
-      if (u) {
-        setUser(u);
-      } else {
-        // Fallback to static system operator context for unauthenticated usage
-        setUser({
-          displayName: 'Jairo Bahia',
-          email: 'Operador Rodovar',
-          photoURL: null
-        });
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        setUser(parsed);
+      } catch {
+        setUser(null);
       }
-      setIsAuthLoading(false);
-      setEntregas(getEntregas());
-    });
-
-    return () => {
-      unsubscribe();
-    };
+    } else {
+      setUser(null);
+    }
+    setIsAuthLoading(false);
+    setEntregas(getEntregas());
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('rodovar_active_login_v2');
+    setUser(null);
+  };
 
   // Global Import Modal state
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -313,6 +316,10 @@ export default function App() {
     );
   }
 
+  if (!user) {
+    return <Login onLoginSuccess={(userData) => setUser(userData)} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col font-sans selection:bg-[#FFD600] selection:text-black">
       
@@ -431,26 +438,26 @@ export default function App() {
             {/* User badge customized */}
             <div className="flex items-center gap-2.5 border-l border-zinc-800 pl-4">
               <div className="text-right hidden sm:block">
-                <p className="text-xs font-bold leading-none uppercase text-zinc-200 m-0">{user.displayName || 'Jairo Bahia'}</p>
-                <p className="text-[9px] text-zinc-500 font-mono leading-none mt-1 mb-0">{user.email || 'Operador Rodovar'}</p>
+                <p className="text-xs font-bold leading-none uppercase text-zinc-200 m-0">{user.displayName}</p>
+                <p className="text-[9px] text-zinc-500 font-mono leading-none mt-1 mb-0">{user.role}</p>
               </div>
-              <div>
-                {user.photoURL ? (
-                  <img 
-                    src={user.photoURL} 
-                    alt={user.displayName || ''} 
-                    className="w-8 h-8 rounded-full border border-zinc-800 object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800 font-bold text-xs text-[#FFD600]">
-                    {(user.displayName || 'JB').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
-                  </div>
-                )}
+              <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800 font-bold text-xs text-[#FFD600]" title={user.displayName}>
+                {user.displayName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
               </div>
+              
+              {/* Password Change Button */}
               <button
-                onClick={() => logout()}
-                className="p-1 px-2 border border-zinc-800 hover:border-red-900 text-zinc-400 hover:text-red-400 bg-zinc-900/40 rounded transition-colors cursor-pointer ml-1 h-8 flex items-center"
+                onClick={() => setIsChangePasswordOpen(true)}
+                className="p-1 px-2.5 border border-zinc-800 hover:border-[#FFD600] text-zinc-400 hover:text-[#FFD600] bg-zinc-900/40 rounded transition-colors cursor-pointer ml-1 h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold"
+                title="Alterar Senha"
+              >
+                <Lock className="w-3 h-3 text-[#FFD600]" />
+                <span className="hidden md:inline">Senha</span>
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="p-1 px-2 border border-zinc-800 hover:border-red-900 text-zinc-400 hover:text-red-400 bg-zinc-900/40 rounded transition-colors cursor-pointer h-8 flex items-center"
                 title="Sair do Sistema"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -663,6 +670,15 @@ export default function App() {
             </div>
           </motion.div>
         </div>
+      )}
+
+      {/* Change Password Modal */}
+      {isChangePasswordOpen && (
+        <ChangePasswordModal 
+          username={user.username}
+          onClose={() => setIsChangePasswordOpen(false)}
+          onSuccess={() => setIsChangePasswordOpen(false)}
+        />
       )}
     </div>
   );
