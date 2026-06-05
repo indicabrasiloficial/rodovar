@@ -25,147 +25,9 @@ const REALTIME_EVENT = 'rodovar_realtime_event';
 const SCHEDULED_REALTIME_EVENT = 'rodovar_scheduled_realtime_event';
 
 // SEED DATA
-const SEED_ENTREGAS: Omit<Entrega, 'userId'>[] = [
-  {
-    id: 'ent-1',
-    created_at: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
-    data_coleta: '2026-05-30',
-    vendedor: 'Carlos Souza',
-    cliente: 'JV Alimentos Ltda',
-    tel_cliente: '98981223344',
-    motorista: 'João Silva',
-    tel_motorista: '98991443322',
-    origem: 'Camaçari-BA',
-    destino: 'São Luís-MA',
-    frete_empresa: 8500,
-    frete_motorista: 6800,
-    prazo: '2026-06-08',
-    status: 'em_transito',
-    observacoes: 'Carga refrigerada de laticínios. Monitoramento térmico ativado.',
-    link_localizacao: 'https://maps.google.com/?q=-2.5307,-44.3068',
-    lat: -2.5307,
-    lng: -44.3068,
-    canhoto_solicitado: false,
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'ent-2',
-    created_at: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString(),
-    data_coleta: '2026-06-01',
-    vendedor: 'Ana Lima',
-    cliente: 'Metalúrgica Gerdau',
-    tel_cliente: '21971234567',
-    motorista: 'Marcos Roberto',
-    tel_motorista: '21981112233',
-    origem: 'São Paulo-SP',
-    destino: 'Rio de Janeiro-RJ',
-    frete_empresa: 3200,
-    frete_motorista: 2400,
-    prazo: '2026-06-04',
-    status: 'entregue',
-    observacoes: 'Perfilados de aço de 12 metros. Canhoto assinado e enviado.',
-    link_localizacao: 'https://maps.google.com/?q=-22.9068,-43.1729',
-    lat: -22.9068,
-    lng: -43.1729,
-    canhoto_solicitado: true,
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'ent-3',
-    created_at: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
-    data_coleta: '2026-06-02',
-    vendedor: 'Bruno Rocha',
-    cliente: 'Ambev Distribuidora',
-    tel_cliente: '51982223333',
-    motorista: 'Claudinho Ferreira',
-    tel_motorista: '51993334444',
-    origem: 'Curitiba-PR',
-    destino: 'Porto Alegre-RS',
-    frete_empresa: 4500,
-    frete_motorista: 3600,
-    prazo: '2026-06-05',
-    status: 'parado',
-    observacoes: 'Carga de engradados de bebidas. Parado no Posto Humaitá aguardando liberação fiscal.',
-    link_localizacao: 'https://maps.google.com/?q=-30.0346,-51.2177',
-    lat: -30.0346,
-    lng: -51.2177,
-    canhoto_solicitado: false,
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'ent-4',
-    created_at: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString(),
-    data_coleta: '2026-06-03',
-    vendedor: 'Carlos Souza',
-    cliente: 'Carrefour Logística',
-    tel_cliente: '62985556666',
-    motorista: 'Jeferson Santos',
-    tel_motorista: '62998887777',
-    origem: 'Belo Horizonte-MG',
-    destino: 'Goiânia-GO',
-    frete_empresa: 5100,
-    frete_motorista: 4100,
-    prazo: '2026-06-07',
-    status: 'coletando',
-    observacoes: 'Carga seca diversificada de mercearia. Carregamento pátio de BH.',
-    link_localizacao: 'https://maps.google.com/?q=-16.6869,-49.2648',
-    lat: -16.6869,
-    lng: -49.2648,
-    canhoto_solicitado: false,
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'ent-5',
-    created_at: new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString(),
-    data_coleta: '2026-05-25',
-    vendedor: 'Ana Lima',
-    cliente: 'Bahia Distribuidora',
-    tel_cliente: '71991223344',
-    motorista: 'Marcio Oliveira',
-    tel_motorista: '75988112233',
-    origem: 'Salvador-BA',
-    destino: 'Feira de Santana-BA',
-    frete_empresa: 1800,
-    frete_motorista: 1300,
-    prazo: '2026-05-26',
-    status: 'entregue',
-    observacoes: 'Paletes de fardos plásticos. Entregue sem intercorrências.',
-    link_localizacao: 'https://maps.google.com/?q=-12.2664,-38.9662',
-    lat: -12.2664,
-    lng: -38.9662,
-    canhoto_solicitado: true,
-    updated_at: new Date().toISOString()
-  }
-];
+const SEED_ENTREGAS: Omit<Entrega, 'userId'>[] = [];
 
-const SEED_MESSAGES: any[] = [
-  {
-    id: 'sch-1',
-    deliveryId: 'ent-1',
-    deliveryDriver: 'João Silva',
-    deliveryDestiny: 'São Luís-MA',
-    recipientName: 'João Silva',
-    recipientPhone: '98991443322',
-    recipientType: 'motorista',
-    scheduledTime: new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString().substring(0, 16),
-    messageText: 'Olá João Silva! Agente Rodovar na escuta. Por favor, nos envie sua localização em tempo real no link do mapa para nosso boletim periódico. Boa viagem!',
-    status: 'pendente',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'sch-2',
-    deliveryId: 'ent-3',
-    deliveryDriver: 'Claudinho Ferreira',
-    deliveryDestiny: 'Porto Alegre-RS',
-    recipientName: 'Ambev Distribuidora',
-    recipientPhone: '51982223333',
-    recipientType: 'cliente',
-    scheduledTime: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString().substring(0, 16),
-    messageText: 'Olá! Aqui é o Agente Rodovar com um boletim de viagem. Informamos que o carregamento do motorista Claudinho com destino a Porto Alegre está atualmente parado para trâmites fiscais regulamentares.',
-    status: 'pendente',
-    createdAt: new Date().toISOString()
-  }
-];
+const SEED_MESSAGES: any[] = [];
 
 // Setup real-time listeners upon auth state change (Optimized to always run for unauthenticated workspace)
 const uid = 'system_operator';
@@ -173,47 +35,21 @@ const uid = 'system_operator';
 // Listen to entregas (entire collection for shared multi-user workspace)
 const entregasQuery = collection(db, ENTREGAS_COLLECTION);
 onSnapshot(entregasQuery, async (snapshot) => {
-  // If collection is empty, check system seeding flag to avoid auto-redefaulting when they are deleted on purpose
   if (snapshot.empty) {
-    const seedLocalKey = 'rodovar_seeded_system';
-    if (localStorage.getItem(seedLocalKey) === 'true') {
-      cachedEntregas = [];
-      window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-      return;
-    }
-
-    try {
-      const settingsRef = doc(db, 'user_settings', 'global_config');
-      const settingsSnap = await getDoc(settingsRef);
-      if (settingsSnap.exists() && settingsSnap.data()?.seeded) {
-        localStorage.setItem(seedLocalKey, 'true');
-        cachedEntregas = [];
-        window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-        return;
-      }
-
-      console.log('Seeding initial system dataset to Firestore...');
-      localStorage.setItem(seedLocalKey, 'true');
-      await setDoc(settingsRef, { seeded: true, userId: 'global_config' });
-
-      const batch = writeBatch(db);
-      SEED_ENTREGAS.forEach(ent => {
-        const docRef = doc(db, ENTREGAS_COLLECTION, ent.id);
-        batch.set(docRef, { ...ent, id: ent.id, userId: uid });
-      });
-      SEED_MESSAGES.forEach(msg => {
-        const docRef = doc(db, MESSAGES_COLLECTION, msg.id);
-        batch.set(docRef, { ...msg, id: msg.id, deliveryId: msg.deliveryId, userId: uid });
-      });
-      await batch.commit();
-    } catch (e) {
-      console.error('Error seeding initial data to Firestore:', e);
-    }
+    cachedEntregas = [];
+    window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
     return;
   }
 
   cachedEntregas = [];
   snapshot.forEach(docSnap => {
+    // Actively purge any preset seed IDs created automatically in previous versions
+    const seedIds = ['ent-1', 'ent-2', 'ent-3', 'ent-4', 'ent-5'];
+    if (seedIds.includes(docSnap.id)) {
+      deleteDoc(doc(db, ENTREGAS_COLLECTION, docSnap.id)).catch(() => {});
+      return; // skip caching
+    }
+
     const data = docSnap.data();
     const kmVal = data.km !== undefined && data.km > 0 
       ? Number(data.km) 
@@ -226,10 +62,8 @@ onSnapshot(entregasQuery, async (snapshot) => {
 
     if ((!latVal || !lngVal || (latVal === -23.5505 && lngVal === -46.6333)) && dest && !dest.toLowerCase().includes('são paulo') && !dest.toLowerCase().includes('sao paulo')) {
       const cityCoords = findCityCoords(dest);
-      if (cityCoords) {
-        latVal = cityCoords.lat;
-        lngVal = cityCoords.lng;
-      }
+      latVal = cityCoords.lat;
+      lngVal = cityCoords.lng;
     }
 
     cachedEntregas.push({
@@ -255,6 +89,13 @@ const messagesQuery = collection(db, MESSAGES_COLLECTION);
 onSnapshot(messagesQuery, (snapshot) => {
   cachedScheduledMessages = [];
   snapshot.forEach(docSnap => {
+    // Actively purge preset seed messages
+    const seedMsgIds = ['sch-1', 'sch-2'];
+    if (seedMsgIds.includes(docSnap.id)) {
+      deleteDoc(doc(db, MESSAGES_COLLECTION, docSnap.id)).catch(() => {});
+      return; // skip caching
+    }
+
     cachedScheduledMessages.push({
       id: docSnap.id,
       ...docSnap.data()
