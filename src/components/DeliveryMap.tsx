@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { Entrega } from '../types';
 
@@ -30,17 +30,33 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
 
+  // Map Filter toggles (enabled/activated on the map dynamically)
+  const [filterTransito, setFilterTransito] = useState(true);
+  const [filterParado, setFilterParado] = useState(true); // "Bloqueadas" represented by "parado"
+  const [filterColetando, setFilterColetando] = useState(true);
+  const [filterEntregue, setFilterEntregue] = useState(false);
+
+  // Compute active map deliveries based on filters
+  const getFilteredDeliveries = () => {
+    return entregas.filter(e => {
+      if (singleView) return true; // Always show single view item details regardless of filters
+      if (e.status === 'em_transito') return filterTransito;
+      if (e.status === 'parado') return filterParado;
+      if (e.status === 'coletando') return filterColetando;
+      if (e.status === 'entregue') return filterEntregue;
+      return true;
+    });
+  };
+
   useEffect(() => {
     if (!mapContainerRef.current) return;
+
+    const mapDeliveries = getFilteredDeliveries();
 
     // 1. Create Leaflet Map Instance ONCE
     if (!mapInstanceRef.current) {
       let initialCenter: [number, number] = [-14.2350, -51.9253]; // Central Brazil
       let initialZoom = 4;
-
-      const mapDeliveries = singleView 
-        ? entregas 
-        : entregas.filter(e => e.status !== 'entregue');
 
       if (singleView && mapDeliveries.length === 1) {
         initialCenter = [mapDeliveries[0].lat, mapDeliveries[0].lng];
@@ -72,10 +88,8 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
     const map = mapInstanceRef.current;
 
+
     // 2. Filter out delivered loads unless it's a single shipment detail view map
-    const mapDeliveries = singleView 
-      ? entregas 
-      : entregas.filter(e => e.status !== 'entregue');
 
     // 3. Clear existing markers safely
     markersRef.current.forEach(marker => {
@@ -234,7 +248,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       }
     }
 
-  }, [entregas, selectedId, singleView]);
+  }, [entregas, selectedId, singleView, filterTransito, filterParado, filterColetando, filterEntregue]);
 
   // Clean up on component unmount
   useEffect(() => {
@@ -249,6 +263,79 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
   return (
     <div className="relative w-full h-full rounded-xl overflow-hidden border border-zinc-800 dark-map">
       <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: '300px' }} />
+      
+      {/* Dynamic interactive map filter bar overlay */}
+      {!singleView && (
+        <div className="absolute top-2.5 left-2.5 z-[1000] bg-black/90 backdrop-blur-md border border-zinc-850 p-2 text-left rounded-xl shadow-2xl flex flex-col gap-1.5 max-w-[calc(100%-20px)] sm:w-64">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-1 px-1">
+            <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-[#FFD600]">ATIVAR NO MAPA</span>
+            <span className="text-[8px] font-mono text-zinc-500 bg-zinc-950 px-1.5 py-0.2 rounded uppercase">Painel Mapas</span>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-1 mt-1">
+            {/* Trânsito */}
+            <button
+              type="button"
+              onClick={() => setFilterTransito(!filterTransito)}
+              className={`px-1.5 py-1 rounded text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer border text-left ${
+                filterTransito 
+                  ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 shadow-[0_0_8px_rgba(255,214,0,0.05)]' 
+                  : 'bg-zinc-950/40 text-zinc-650 border-transparent hover:text-zinc-500'
+              }`}
+              title="Ativar/desativar veículos em trânsito"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${filterTransito ? 'bg-yellow-400 animate-pulse' : 'bg-zinc-700'}`}></span>
+              <span className="truncate">Trânsito ({entregas.filter(e => e.status === 'em_transito').length})</span>
+            </button>
+
+            {/* Parado / Bloqueadas */}
+            <button
+              type="button"
+              onClick={() => setFilterParado(!filterParado)}
+              className={`px-1.5 py-1 rounded text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer border text-left ${
+                filterParado 
+                  ? 'bg-red-500/10 text-red-400 border-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.05)]' 
+                  : 'bg-zinc-950/40 text-zinc-650 border-transparent hover:text-zinc-500'
+              }`}
+              title="Ativar/desativar veículos bloqueados ou parados"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${filterParado ? 'bg-red-500 animate-pulse' : 'bg-zinc-700'}`}></span>
+              <span className="truncate">Bloqueadas ({entregas.filter(e => e.status === 'parado').length})</span>
+            </button>
+
+            {/* Coletando */}
+            <button
+              type="button"
+              onClick={() => setFilterColetando(!filterColetando)}
+              className={`px-1.5 py-1 rounded text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer border text-left ${
+                filterColetando 
+                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-[0_0_8px_rgba(59,130,246,0.05)]' 
+                  : 'bg-zinc-950/40 text-zinc-650 border-transparent hover:text-zinc-500'
+              }`}
+              title="Ativar/desativar veículos coletando"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${filterColetando ? 'bg-blue-400 animate-pulse' : 'bg-zinc-700'}`}></span>
+              <span className="truncate">Coleta ({entregas.filter(e => e.status === 'coletando').length})</span>
+            </button>
+
+            {/* Entregue */}
+            <button
+              type="button"
+              onClick={() => setFilterEntregue(!filterEntregue)}
+              className={`px-1.5 py-1 rounded text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer border text-left ${
+                filterEntregue 
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.05)]' 
+                  : 'bg-zinc-950/40 text-zinc-650 border-transparent hover:text-zinc-500'
+              }`}
+              title="Ativar/desativar veículos já entregues"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${filterEntregue ? 'bg-emerald-400' : 'bg-zinc-700'}`}></span>
+              <span className="truncate">Entregue ({entregas.filter(e => e.status === 'entregue').length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="absolute top-2 right-2 bg-black/80 px-2 py-1 rounded text-[10px] text-gray-400 font-mono border border-zinc-800 z-[1000] pointer-events-none">
         OpenStreetMap • Leaflet.js
       </div>

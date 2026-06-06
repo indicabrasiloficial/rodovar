@@ -658,8 +658,8 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
                 </div>
 
                 {/* Frete Empresa */}
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-xs text-gray-400 font-medium">Valor do Frete Empresa (R$)</label>
+                <div className="space-y-1.5 sm:col-span-1">
+                  <label className="text-xs text-gray-400 font-medium font-sans">Valor do Frete Empresa (R$)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -672,6 +672,23 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
                     id="form-input-frete-empresa"
                   />
                   {errors.frete_empresa && <p className="text-[10px] text-red-400 font-mono">{errors.frete_empresa.message}</p>}
+                </div>
+
+                {/* Frete Motorista */}
+                <div className="space-y-1.5 sm:col-span-1">
+                  <label className="text-xs text-gray-400 font-medium font-sans">Valor do Frete Motorista (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    {...register('frete_motorista', { 
+                      valueAsNumber: true,
+                      min: { value: 0, message: 'O valor do frete do motorista deve ser positivo' }
+                    })}
+                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none font-mono placeholder-gray-700"
+                    id="form-input-frete-motorista"
+                  />
+                  {errors.frete_motorista && <p className="text-[10px] text-red-400 font-mono">{errors.frete_motorista.message}</p>}
                 </div>
               </div>
             </div>

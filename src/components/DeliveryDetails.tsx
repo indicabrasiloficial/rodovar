@@ -421,31 +421,22 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                 </span>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
-                  {/* Cargo Value */}
-                  <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/40">
-                    <span className="text-gray-550 font-mono block uppercase text-[8px] tracking-wider mb-1">Valor Comercial da Carga</span>
-                    <span className="text-white font-mono font-black text-lg block leading-none">
-                      {entrega.valor_carga ? `R$ ${Number(entrega.valor_carga).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
-                    </span>
-                    <div className="mt-1.5 flex items-center gap-1">
-                      {(() => {
-                        const val = entrega.valor_carga || 0;
-                        if (val >= 1000000) return <span className="text-rose-450 text-[10px] font-mono font-medium">💎 Super Diamante</span>;
-                        if (val >= 500000) return <span className="text-amber-450 text-[10px] font-mono font-medium">🥇 Risco Ouro</span>;
-                        if (val >= 100000) return <span className="text-indigo-400 text-[10px] font-mono font-medium">🥈 Risco Prata</span>;
-                        if (val >= 50000) return <span className="text-[#FFD600] text-[10px] font-mono font-medium">🥉 Risco Bronze</span>;
-                        return <span className="text-zinc-500 text-[10px] font-mono">Padrão Geral</span>;
-                      })()}
-                    </div>
-                  </div>
-
                   {/* Frete empresa */}
                   <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/40">
-                    <span className="text-gray-550 font-mono block uppercase text-[8px] tracking-wider mb-1">RECEITA FRETE EMPRESA</span>
+                    <span className="text-gray-550 font-mono block uppercase text-[10px] tracking-wider mb-1 font-bold">FRETE EMPRESA (FRETE EMP.)</span>
                     <span className="text-emerald-400 font-mono font-bold text-lg block leading-none">
                       {entrega.frete_empresa ? `R$ ${Number(entrega.frete_empresa).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
                     </span>
-                    <span className="text-[10px] text-zinc-500 font-mono block mt-2">Faturamento de Frete</span>
+                    <span className="text-[10px] text-zinc-500 font-mono block mt-1">Receita de Faturamento</span>
+                  </div>
+
+                  {/* Frete motorista */}
+                  <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/40">
+                    <span className="text-gray-550 font-mono block uppercase text-[10px] tracking-wider mb-1 font-bold">FRETE MOTORISTA (FRETE MOT.)</span>
+                    <span className="text-emerald-400 font-mono font-bold text-lg block leading-none">
+                      {entrega.frete_motorista ? `R$ ${Number(entrega.frete_motorista).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
+                    </span>
+                    <span className="text-[10px] text-zinc-500 font-mono block mt-1">Custo de Operação Repassado</span>
                   </div>
                 </div>
 
