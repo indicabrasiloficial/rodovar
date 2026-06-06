@@ -407,23 +407,19 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               </div>
 
               {/* Box Freight Values & Cargo Risk Assessment */}
+              {/* Box Valores e Custos de Frete */}
               <div className="bg-zinc-950/50 p-5 border border-zinc-900 rounded-xl space-y-4 sm:col-span-2">
                 <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] flex items-center justify-between font-bold">
                   <span className="flex items-center gap-1.5">
                     <Coins className="w-4 h-4 text-[#FFD600]" />
-                    Valores, Custos e Gerenciamento de Risco
+                    Valores e Custos do Frete
                   </span>
-                  {entrega.valor_carga && entrega.valor_carga >= 100000 && (
-                    <span className="bg-red-950 text-red-400 border border-red-500/30 font-mono text-[9px] px-2 py-0.5 rounded animate-pulse font-bold uppercase">
-                      ⚠️ CARGA CARA DE RISCO
-                    </span>
-                  )}
                 </span>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
                   {/* Frete empresa */}
                   <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/40">
-                    <span className="text-gray-550 font-mono block uppercase text-[10px] tracking-wider mb-1 font-bold">FRETE EMPRESA (FRETE EMP.)</span>
+                    <span className="text-zinc-500 font-mono block uppercase text-[10px] tracking-wider mb-1 font-bold">FRETE EMPRESA (FRETE EMP.)</span>
                     <span className="text-emerald-400 font-mono font-bold text-lg block leading-none">
                       {entrega.frete_empresa ? `R$ ${Number(entrega.frete_empresa).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
                     </span>
@@ -432,44 +428,13 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
                   {/* Frete motorista */}
                   <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/40">
-                    <span className="text-gray-550 font-mono block uppercase text-[10px] tracking-wider mb-1 font-bold">FRETE MOTORISTA (FRETE MOT.)</span>
-                    <span className="text-emerald-400 font-mono font-bold text-lg block leading-none">
+                    <span className="text-zinc-500 font-mono block uppercase text-[10px] tracking-wider mb-1 font-bold">FRETE MOTORISTA (FRETE MOT.)</span>
+                    <span className="text-orange-400 font-mono font-bold text-lg block leading-none">
                       {entrega.frete_motorista ? `R$ ${Number(entrega.frete_motorista).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00'}
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono block mt-1">Custo de Operação Repassado</span>
                   </div>
                 </div>
-
-                {/* Risk Action Flag */}
-                {(() => {
-                  const val = entrega.valor_carga || 0;
-                  if (val >= 100000) {
-                    const grData = val >= 1000000 ? {
-                      label: 'PROTOCOLO DIAMANTE ATIVADO',
-                      style: 'border-rose-500/20 bg-rose-950/10 text-rose-300',
-                      desc: 'Comboio com escolta armada habilitada, redundância de feeds GPRS de dois satélites ativos, parada restrita.'
-                    } : val >= 500000 ? {
-                      label: 'PROTOCOLO OURO ATIVADO',
-                      style: 'border-amber-500/20 bg-amber-950/10 text-amber-300',
-                      desc: 'Checklists obrigatórios GR de motorista, telemetria de sensores de baú ativados, paradas permitidas apenas em postos conveniados.'
-                    } : {
-                      label: 'PROTOCOLO PRATA ATIVADO',
-                      style: 'border-indigo-500/20 bg-indigo-950/10 text-indigo-300',
-                      desc: 'Carga segurada de alto valor. Escolta móvel e redundância de antenas recomendada nas rotas do plano de viagem.'
-                    };
-
-                    return (
-                      <div className={`border p-3 rounded-xl flex items-start gap-2.5 text-[11px] leading-relaxed ${grData.style}`}>
-                        <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 animate-pulse" />
-                        <div>
-                          <strong className="font-mono text-xs block font-bold uppercase">{grData.label}</strong>
-                          <span className="opacity-85 font-sans block mt-0.5">{grData.desc}</span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
               </div>
 
               {/* Box Notes */}

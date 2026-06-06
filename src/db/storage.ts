@@ -66,12 +66,20 @@ onSnapshot(entregasQuery, async (snapshot) => {
       lngVal = cityCoords.lng;
     }
 
+    // Align with real registration inputs for freight and cargo values
+    let freteEmp = data.frete_empresa !== undefined ? Number(data.frete_empresa) : 0;
+    let freteMot = data.frete_motorista !== undefined ? Number(data.frete_motorista) : 0;
+    let valCarga = data.valor_carga !== undefined ? Number(data.valor_carga) : 0;
+
     cachedEntregas.push({
       id: docSnap.id,
       ...data,
       lat: latVal || -23.5505,
       lng: lngVal || -46.6333,
-      km: kmVal
+      km: kmVal,
+      frete_empresa: freteEmp,
+      frete_motorista: freteMot,
+      valor_carga: valCarga
     } as Entrega);
   });
 
@@ -370,21 +378,22 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   }
 
   // Set explicit conversion of string values if passed via forms
-  if (entrega.frete_empresa !== undefined) payload.frete_empresa = Number(entrega.frete_empresa) || 0;
-  if (entrega.frete_motorista !== undefined) payload.frete_motorista = Number(entrega.frete_motorista) || 0;
-  
-  if (entrega.valor_carga !== undefined) {
-    const val = Number(entrega.valor_carga) || 0;
-    payload.valor_carga = val;
-    if (val >= 500000) {
-      payload.categoria_risco = 'critico';
-    } else if (val >= 100000) {
-      payload.categoria_risco = 'alto';
-    } else if (val >= 50000) {
-      payload.categoria_risco = 'medio';
-    } else {
-      payload.categoria_risco = 'comum';
-    }
+  let freteEmp = entrega.frete_empresa !== undefined ? Number(entrega.frete_empresa) : (payload.frete_empresa || 0);
+  let freteMot = entrega.frete_motorista !== undefined ? Number(entrega.frete_motorista) : (payload.frete_motorista || 0);
+  let valCarga = entrega.valor_carga !== undefined ? Number(entrega.valor_carga) : (payload.valor_carga || 0);
+
+  payload.frete_empresa = freteEmp;
+  payload.frete_motorista = freteMot;
+  payload.valor_carga = valCarga;
+
+  if (valCarga >= 500000) {
+    payload.categoria_risco = 'critico';
+  } else if (valCarga >= 100000) {
+    payload.categoria_risco = 'alto';
+  } else if (valCarga >= 50000) {
+    payload.categoria_risco = 'medio';
+  } else {
+    payload.categoria_risco = 'comum';
   }
 
   // Optimistic local update
