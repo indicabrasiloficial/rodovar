@@ -6,7 +6,9 @@ import {
   getUniqueClientes, 
   getUniqueMotoristas, 
   saveEntrega,
-  getEntregaById
+  getEntregaById,
+  setEditLock,
+  clearEditLock
 } from '../db/storage';
 import { geocodeCity } from '../db/geocoder';
 import { 
@@ -21,13 +23,21 @@ import {
   Check, 
   Database,
   HelpCircle,
-  Loader2
+  Loader2,
+  Lock,
+  AlertTriangle,
+  Coins,
+  ShieldAlert,
+  TrendingUp,
+  AlertCircle,
+  Clipboard
 } from 'lucide-react';
 
 interface DeliveryFormProps {
   entregaId?: string; // If present, edit mode
   onBack: () => void;
   onSaved: (savedId: string) => void;
+  onImportClick?: () => void;
 }
 
 interface FormInputs {
@@ -41,6 +51,7 @@ interface FormInputs {
   destino: string;
   frete_empresa: number;
   frete_motorista: number;
+  valor_carga: number;
   prazo: string;
   status: DeliveryStatus;
   observacoes: string;
@@ -48,10 +59,64 @@ interface FormInputs {
   canhoto_solicitado: boolean;
 }
 
-export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFormProps) {
+export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick }: DeliveryFormProps) {
   const isEditMode = !!entregaId;
   const [isStatusBlocked, setIsStatusBlocked] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+
+  const [activeUser, setActiveUser] = useState({ username: 'sistema', displayName: 'Sistema', role: 'Operador Rodovar' });
+  const [isLockedByAnother, setIsLockedByAnother] = useState(false);
+  const [lockedUserInfo, setLockedUserInfo] = useState<{ nome: string; usuario: string; timestamp: string } | null>(null);
+  const [forceEdit, setForceEdit] = useState(false);
+
+  useEffect(() => {
+    const userStored = localStorage.getItem('rodovar_active_login_v2');
+    let userObj = { username: 'sistema', displayName: 'Sistema', role: 'Operador Rodovar' };
+    if (userStored) {
+      try {
+        userObj = JSON.parse(userStored);
+        setActiveUser(userObj);
+      } catch {
+        // Ignore
+      }
+    }
+
+    if (isEditMode && entregaId && !forceEdit) {
+      const delivery = getEntregaById(entregaId);
+      if (delivery && delivery.editando_por) {
+        const diffMs = new Date().getTime() - new Date(delivery.editando_por.timestamp).getTime();
+        const MINUTES_5 = 5 * 60 * 1000;
+        if (delivery.editando_por.usuario !== userObj.username && diffMs < MINUTES_5) {
+          setIsLockedByAnother(true);
+          setLockedUserInfo(delivery.editando_por);
+          return;
+        }
+      }
+      setEditLock(entregaId, userObj.displayName, userObj.username);
+    }
+  }, [isEditMode, entregaId, forceEdit]);
+
+  useEffect(() => {
+    return () => {
+      if (isEditMode && entregaId && activeUser.username) {
+        const delivery = getEntregaById(entregaId);
+        if (delivery?.editando_por?.usuario === activeUser.username) {
+          clearEditLock(entregaId);
+        }
+      }
+    };
+  }, [isEditMode, entregaId, activeUser.username]);
+
+  const handleForceEdit = () => {
+    if (entregaId && activeUser.username) {
+      setEditLock(entregaId, activeUser.displayName, activeUser.username);
+      setIsLockedByAnother(false);
+      setForceEdit(true);
+      if (window.falarRodovar) {
+        window.falarRodovar('Você assumiu o controle de edição deste cadastro.');
+      }
+    }
+  };
   
   // Autocomplete lists from database storage
   const vendedoresList = useMemo(() => getUniqueVendedores(), []);
@@ -75,6 +140,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
       destino: '',
       frete_empresa: 0,
       frete_motorista: 0,
+      valor_carga: 0,
       prazo: new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString().split('T')[0],
       status: 'coletando',
       observacoes: '',
@@ -86,6 +152,51 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
   const watchVendedor = watch('vendedor') || '';
   const watchCliente = watch('cliente') || '';
   const watchMotorista = watch('motorista') || '';
+  const watchValorCarga = watch('valor_carga') || 0;
+
+  const getRiskCategoryDetailsByVal = (val: number) => {
+    if (val >= 1000000) {
+      return {
+        label: 'Risco Máximo Diamante 💎 - Escolta e Blindagem Requerida',
+        color: 'text-rose-400 border-rose-500/30 bg-rose-950/20',
+        icon: <ShieldAlert className="w-4 h-4 text-rose-400 animate-pulse" />,
+        desc: 'Cargas acima de R$ 1 Milhão necessitam de escolta armada nível 3 e monitoramento satelital minuto a minuto.',
+        alertStatus: true
+      };
+    } else if (val >= 500000) {
+      return {
+        label: 'Risco Crítico Ouro 🥇 - Monitoramento Nível III',
+        color: 'text-amber-400 border-amber-500/30 bg-amber-950/20',
+        icon: <ShieldAlert className="w-4 h-4 text-amber-400" />,
+        desc: 'Cargas entre R$ 500 Mil e R$ 1 Milhão requerem iscas de carga ativas e monitoramento de paradas não programadas.',
+        alertStatus: true
+      };
+    } else if (val >= 100000) {
+      return {
+        label: 'Alto Risco Prata 🥈 - Monitoramento Nível II',
+        color: 'text-indigo-400 border-indigo-500/30 bg-indigo-950/20',
+        icon: <AlertTriangle className="w-4 h-4 text-indigo-400 animate-fade-in" />,
+        desc: 'Cargas de R$ 100 Mil a R$ 500 Mil exigem controle de rota rigoroso e cerca eletrônica de destino ativada.',
+        alertStatus: true
+      };
+    } else if (val >= 50000) {
+      return {
+        label: 'Médio Risco Bronze 🥉 - Monitoramento Nível I',
+        color: 'text-[#FFD600] border-[#FFD600]/30 bg-[#FFD600]/5',
+        icon: <AlertCircle className="w-4 h-4 text-[#FFD600]" />,
+        desc: 'Cargas de R$ 50 Mil a R$ 100 Mil de risco moderado. Monitoramento por check-points e telefone.',
+        alertStatus: true
+      };
+    } else {
+      return {
+        label: 'Risco Padrão Comum - Operação Normal',
+        color: 'text-gray-400 border-zinc-800 bg-zinc-900/30',
+        icon: <Check className="w-4 h-4 text-emerald-400" />,
+        desc: 'Cargas de baixo valor. Operação padrão sem exigência de gerenciamento de risco especial.',
+        alertStatus: false
+      };
+    }
+  };
 
   // Load existing records for edit mode
   useEffect(() => {
@@ -104,6 +215,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
           destino: data.destino,
           frete_empresa: data.frete_empresa,
           frete_motorista: data.frete_motorista,
+          valor_carga: data.valor_carga || 0,
           prazo: data.prazo,
           status: data.status,
           observacoes: data.observacoes,
@@ -161,6 +273,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
       ...data,
       frete_empresa: Number(data.frete_empresa || 0),
       frete_motorista: Number(data.frete_motorista || 0),
+      valor_carga: Number(data.valor_carga || 0),
       lat: coords.lat,
       lng: coords.lng,
       updated_at: new Date().toISOString()
@@ -184,22 +297,89 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
     onSaved(saved.id);
   };
 
+  if (isLockedByAnother && lockedUserInfo) {
+    return (
+      <div className="bg-zinc-950 border border-zinc-900 p-8 rounded-2xl max-w-md mx-auto text-center space-y-6 shadow-[0_0_50px_rgba(0,0,0,0.8)] mt-12 animate-fade-in" id="edit-lockout-container">
+        <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/20 text-[#FFD600] rounded-full flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(255,214,0,0.1)]">
+          <Lock className="w-8 h-8" />
+        </div>
+
+        <div className="space-y-2">
+          <h2 className="text-sm font-mono uppercase tracking-widest text-[#FFD600] font-bold">
+            🔒 Cadastro Bloqueado
+          </h2>
+          <p className="text-xs text-zinc-400 leading-relaxed font-sans max-w-sm mx-auto">
+            Para evitar conflitos de dados e salvamento duplicado, este cadastro de carga está temporariamente bloqueado para edição.
+          </p>
+        </div>
+
+        <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 text-left space-y-3 font-mono text-xs text-zinc-300">
+          <div className="flex justify-between border-b border-zinc-800/50 pb-2">
+            <span className="text-zinc-500 font-bold uppercase text-[9px]">OPERADOR ATUAL:</span>
+            <span className="font-bold text-[#FFD600] text-[11px] uppercase">{lockedUserInfo.nome}</span>
+          </div>
+          <div className="flex justify-between border-b border-zinc-800/50 pb-2">
+            <span className="text-zinc-500 font-bold uppercase text-[9px]">SESSÃO USER:</span>
+            <span className="text-zinc-400">@{lockedUserInfo.usuario}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-zinc-500 font-bold uppercase text-[9px]">INICIADA EM:</span>
+            <span className="text-zinc-400">
+              {new Date(lockedUserInfo.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 pt-2">
+          <button
+            onClick={onBack}
+            className="w-full bg-zinc-900 hover:bg-zinc-800 text-gray-300 border border-zinc-800 hover:border-zinc-700 font-mono text-xs font-bold py-2.5 rounded-lg transition-all uppercase tracking-wider cursor-pointer"
+          >
+            Voltar para o Monitoramento
+          </button>
+          
+          <button
+            onClick={handleForceEdit}
+            className="w-full bg-[#FFD600] hover:bg-[#ffe23b] text-zinc-950 font-mono text-xs font-black py-2.5 rounded-lg transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.1)] active:scale-[0.99]"
+          >
+            <AlertTriangle className="w-4 h-4 text-black shrink-0" />
+            Forçar Liberação e Edição
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header bar */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition font-mono cursor-pointer"
-          id="form-back-btn"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar
-        </button>
-        <div className="h-4 w-px bg-zinc-800"></div>
-        <h2 className="text-lg font-bold font-sans tracking-tight">
-          {isEditMode ? '📝 EDITAR CARGA MONITORADA' : '🚚 REGISTRAR NOVA CARGA RODOVAR'}
-        </h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition font-mono cursor-pointer"
+            id="form-back-btn"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Voltar
+          </button>
+          <div className="h-4 w-px bg-zinc-800"></div>
+          <h2 className="text-lg font-bold font-sans tracking-tight">
+            {isEditMode ? '📝 EDITAR CARGA MONITORADA' : '🚚 REGISTRAR NOVA CARGA RODOVAR'}
+          </h2>
+        </div>
+
+        {!isEditMode && onImportClick && (
+          <button
+            type="button"
+            onClick={onImportClick}
+            className="flex items-center self-start sm:self-auto bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-[#FFD600] rounded-full px-4 py-1.5 gap-1.5 transition-all text-[10px] font-mono uppercase text-zinc-350 font-bold cursor-pointer"
+            id="form-header-import-btn"
+          >
+            <Clipboard className="w-3.5 h-3.5 text-[#FFD600]" />
+            <span>Importar Planilha (Ctrl+C/V)</span>
+          </button>
+        )}
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -423,15 +603,62 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
               </div>
             </div>
 
-            {/* Secao 3: Valores e Custos do Frete */}
+            {/* Secao 3: Valores, Custos e Gerenciamento de Risco */}
             <div className="pt-2">
-              <h3 className="text-xs uppercase tracking-wider font-mono text-[#FFD600] mb-4 font-bold border-b border-zinc-950 pb-2">
-                3. Valores e Custos do Frete (R$)
+              <h3 className="text-xs uppercase tracking-wider font-mono text-[#FFD600] mb-4 font-bold border-b border-zinc-950 pb-2 flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-[#FFD600]" />
+                3. Valores, Riscos e Custos do Frete (R$)
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Valor Comercial da Carga */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs text-gray-400 font-medium flex items-center justify-between">
+                    <span className="flex items-center gap-1">Valor Comercial da Carga (R$) <span className="text-red-500">*</span></span>
+                    <span className="text-[10px] text-zinc-500 font-mono">Gerenciamento de Risco Automatizado</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500 font-mono text-xs">
+                      R$
+                    </div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      {...register('valor_carga', { 
+                        required: 'Valor da carga é obrigatório',
+                        valueAsNumber: true,
+                        min: { value: 0, message: 'O valor da carga deve ser positivo' }
+                      })}
+                      className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 pl-9 text-xs text-white focus:outline-none font-mono placeholder-gray-700"
+                      id="form-input-valor-carga"
+                    />
+                  </div>
+                  {errors.valor_carga && <p className="text-[10px] text-red-400 font-mono">{errors.valor_carga.message}</p>}
+                  
+                  {/* Real-time Risk Category feedback panel */}
+                  <div className={`mt-2.5 border rounded-xl p-3.5 text-xs flex gap-3 items-start transition-all duration-300 ${getRiskCategoryDetailsByVal(watchValorCarga).color}`}>
+                    <div className="mt-0.5 shrink-0">
+                      {getRiskCategoryDetailsByVal(watchValorCarga).icon}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 font-sans text-white">
+                        {getRiskCategoryDetailsByVal(watchValorCarga).label}
+                        {getRiskCategoryDetailsByVal(watchValorCarga).alertStatus && (
+                          <span className="bg-red-600 text-white font-mono uppercase text-[8px] px-1.5 py-0.5 rounded animate-pulse font-black leading-none">
+                            ALTO VALOR
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed font-sans">
+                        {getRiskCategoryDetailsByVal(watchValorCarga).desc}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Frete Empresa */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-xs text-gray-400 font-medium">Valor do Frete Empresa (R$)</label>
                   <input
                     type="number"
@@ -445,23 +672,6 @@ export default function DeliveryForm({ entregaId, onBack, onSaved }: DeliveryFor
                     id="form-input-frete-empresa"
                   />
                   {errors.frete_empresa && <p className="text-[10px] text-red-400 font-mono">{errors.frete_empresa.message}</p>}
-                </div>
-
-                {/* Frete Motorista */}
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-400 font-medium">Valor do Frete Motorista (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    {...register('frete_motorista', { 
-                      valueAsNumber: true,
-                      min: { value: 0, message: 'O valor do frete deve ser positivo' }
-                    })}
-                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none font-mono placeholder-gray-700"
-                    id="form-input-frete-motorista"
-                  />
-                  {errors.frete_motorista && <p className="text-[10px] text-red-00 font-mono">{errors.frete_motorista.message}</p>}
                 </div>
               </div>
             </div>

@@ -287,6 +287,7 @@ export default function App() {
               setSelectedEntregaId(savedId);
               setSelectedView('details');
             }}
+            onImportClick={() => setIsImportModalOpen(true)}
           />
         );
       case 'statistics':
@@ -439,16 +440,6 @@ export default function App() {
             >
               <Truck className="w-3.5 h-3.5 text-black shrink-0" />
               <span>Cadastrar Carga</span>
-            </button>
-
-            {/* Import Button */}
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="hidden lg:flex items-center bg-zinc-900 hover:bg-zinc-805 border border-zinc-800 hover:border-[#FFD600] rounded-full px-4 py-1.5 gap-1.5 transition-all text-[10px] font-mono uppercase text-zinc-300 font-bold cursor-pointer"
-              id="global-import-btn"
-            >
-              <Clipboard className="w-3.5 h-3.5 text-[#FFD600]" />
-              <span>Importar</span>
             </button>
 
             {/* User badge customized */}

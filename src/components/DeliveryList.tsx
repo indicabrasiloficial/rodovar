@@ -558,15 +558,6 @@ export default function DeliveryList({
           )}
 
           <button
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] uppercase text-xs font-mono font-bold tracking-wider rounded-lg transition-all cursor-pointer text-gray-300"
-            id="list-import-btn"
-          >
-            <Clipboard className="w-3.5 h-3.5 text-[#FFD600]" />
-            Importar (Ctrl+C/V)
-          </button>
-
-          <button
             onClick={handleExportToCSV}
             className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] uppercase text-xs font-mono font-bold tracking-wider rounded-lg transition-all cursor-pointer text-gray-300"
             id="list-export-excel"
@@ -785,22 +776,41 @@ export default function DeliveryList({
                     {/* Middle Row: Key Info Grid */}
                     <div className="grid grid-cols-2 gap-3 text-xs bg-zinc-950/40 border border-zinc-900/60 p-3 rounded-lg" onClick={() => onSelectDelivery(e.id)}>
                       <div>
-                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider">Cliente</span>
+                        <span className="text-gray-555 font-mono block text-[9px] uppercase tracking-wider text-gray-500">Cliente</span>
                         <span className="font-semibold text-gray-300 block truncate max-w-full">{e.cliente}</span>
                         <span className="text-[10px] text-gray-400 font-mono block mt-0.5">{e.tel_cliente}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider">Motorista</span>
+                        <span className="text-gray-555 font-mono block text-[9px] uppercase tracking-wider text-gray-500">Motorista</span>
                         <span className="font-semibold text-gray-300 block truncate max-w-full">{e.motorista}</span>
                         <span className="text-[10px] text-gray-400 font-mono block mt-0.5">{e.tel_motorista}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider">Coleta</span>
+                        <span className="text-gray-555 font-mono block text-[9px] uppercase tracking-wider text-gray-500 font-bold">Coleta</span>
                         <span className="font-mono text-gray-350 block">{e.data_coleta}</span>
                       </div>
                       <div>
                         <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider text-[#FFD600]">Prazo</span>
                         <span className="font-mono text-[#FFD600] block">{e.prazo}</span>
+                      </div>
+                      <div className="col-span-2 border-t border-zinc-900/40 pt-2 flex items-center justify-between text-[11px] font-sans">
+                        <div>
+                          <span className="text-gray-555 font-mono block text-[8px] uppercase tracking-wider text-gray-500 font-bold">Valor da Carga</span>
+                          <span className="font-mono text-zinc-300 block font-extrabold text-xs mt-0.5">
+                            {e.valor_carga ? `R$ ${Number(e.valor_carga).toLocaleString('pt-BR')}` : 'R$ 0,00'}
+                          </span>
+                        </div>
+                        {e.valor_carga && e.valor_carga >= 100000 ? (
+                          <span className="bg-red-950 border border-red-500/20 text-red-500 font-mono text-[8px] font-black px-1.5 py-0.5 rounded uppercase animate-pulse">
+                            ⚠️ RISCO GR / CARA
+                          </span>
+                        ) : e.valor_carga && e.valor_carga >= 50000 ? (
+                          <span className="bg-[#FFD600]/10 border border-[#FFD600]/30 text-[#FFD600] font-mono text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
+                            🥉 BRONZE
+                          </span>
+                        ) : (
+                          <span className="text-zinc-605 font-mono text-[9px]">Normal</span>
+                        )}
                       </div>
                     </div>
 

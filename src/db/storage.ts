@@ -314,6 +314,10 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     if (entrega.frete_motorista !== undefined && Number(entrega.frete_motorista) !== existingDelivery.frete_motorista) {
       logs.push(`Alterou frete motorista de R$ ${existingDelivery.frete_motorista.toFixed(2)} para R$ ${Number(entrega.frete_motorista).toFixed(2)}`);
     }
+    // Check valor_carga
+    if (entrega.valor_carga !== undefined && Number(entrega.valor_carga) !== (existingDelivery.valor_carga || 0)) {
+      logs.push(`Alterou o valor da carga de R$ ${Number(existingDelivery.valor_carga || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para R$ ${Number(entrega.valor_carga).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+    }
     // Check prazo
     if (entrega.prazo !== undefined && entrega.prazo !== existingDelivery.prazo) {
       logs.push(`Alterou o prazo de "${existingDelivery.prazo}" para "${entrega.prazo}"`);
@@ -368,6 +372,20 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   // Set explicit conversion of string values if passed via forms
   if (entrega.frete_empresa !== undefined) payload.frete_empresa = Number(entrega.frete_empresa) || 0;
   if (entrega.frete_motorista !== undefined) payload.frete_motorista = Number(entrega.frete_motorista) || 0;
+  
+  if (entrega.valor_carga !== undefined) {
+    const val = Number(entrega.valor_carga) || 0;
+    payload.valor_carga = val;
+    if (val >= 500000) {
+      payload.categoria_risco = 'critico';
+    } else if (val >= 100000) {
+      payload.categoria_risco = 'alto';
+    } else if (val >= 50000) {
+      payload.categoria_risco = 'medio';
+    } else {
+      payload.categoria_risco = 'comum';
+    }
+  }
 
   // Optimistic local update
   const index = cachedEntregas.findIndex(e => e.id === cleanId);
@@ -550,4 +568,27 @@ export function getUniqueMotoristas(): { nome: string; tel: string }[] {
     }
   }
   return res;
+}
+
+export function setEditLock(id: string, nome: string, usuario: string): void {
+  saveEntrega({
+    id,
+    editando_por: {
+      nome,
+      usuario,
+      timestamp: new Date().toISOString()
+    }
+  });
+}
+
+export function clearEditLock(id: string): void {
+  const existing = getEntregaById(id);
+  if (!existing) return;
+  
+  if (existing.editando_por) {
+    saveEntrega({
+      id,
+      editando_por: null
+    });
+  }
 }

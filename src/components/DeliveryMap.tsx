@@ -106,8 +106,29 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       const color = getStatusColor(entrega.status);
       const isSelected = entrega.id === selectedId;
 
-      const customIcon = L.divIcon({
-        html: `
+      const val = entrega.valor_carga || 0;
+      let markerHtml = '';
+      if (val >= 100000) {
+        // High risk cargo (R$ 100k+)
+        const ringBg = val >= 1000000 ? 'bg-rose-500' : val >= 500000 ? 'bg-amber-500' : 'bg-indigo-500';
+        const borderCol = val >= 1000000 ? 'border-rose-400' : val >= 500000 ? 'border-amber-400' : 'border-indigo-400';
+        const ringStyle = val >= 1000000 ? 'rgba(244, 63, 94, 0.7)' : val >= 500000 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(99, 102, 241, 0.7)';
+        const symbol = val >= 1000000 ? '🚨' : val >= 500000 ? '🔥' : '💎';
+        
+        markerHtml = `
+          <div class="relative flex items-center justify-center">
+            <span class="absolute inline-flex h-8 w-8 rounded-full opacity-60 animate-ping ${ringBg}"></span>
+            <div class="relative flex items-center justify-center rounded-full border-2 ${borderCol} shadow-2xl text-center font-extrabold text-[12px] bg-zinc-950 flex items-center justify-center ${isSelected ? 'scale-125' : ''}" style="width: 25px; height: 25px; box-shadow: 0 0 12px ${ringStyle};">
+              <span>${symbol}</span>
+            </div>
+            <span class="absolute -top-1.5 -right-1.5 bg-red-600 font-mono font-black text-[7px] text-white w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-lg border border-zinc-900">
+              GR
+            </span>
+          </div>
+        `;
+      } else {
+        // Standard cargo
+        markerHtml = `
           <div class="relative flex items-center justify-center">
             <span class="absolute inline-flex h-6 w-6 rounded-full opacity-40 animate-ping" style="background-color: ${color}"></span>
             <div class="relative flex items-center justify-center p-2 rounded-full border-2 ${isSelected ? 'border-white scale-125' : 'border-black'} shadow-lg text-black font-extrabold text-[10px]" style="background-color: ${color}; width: 22px; height: 22px;">
@@ -115,10 +136,14 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
             </div>
             ${isSelected ? '<div class="absolute -top-1 right-2 w-2 h-2 bg-white rounded-full"></div>' : ''}
           </div>
-        `,
+        `;
+      }
+
+      const customIcon = L.divIcon({
+        html: markerHtml,
         className: 'custom-leaflet-marker',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
       });
 
       const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
@@ -137,12 +162,26 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       };
 
       const popupContent = `
-        <div class="text-xs font-sans text-gray-200 bg-[#121212] p-2 rounded border border-[#FFD600]/40" style="min-width: 180px;">
-          <h4 class="font-bold text-[#FFD600] text-sm mb-1">${entrega.destino}</h4>
-          <p class="mb-1"><strong>Motorista:</strong> ${entrega.motorista}</p>
-          <p class="mb-1"><strong>Status:</strong> <span class="px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${color}20; color: ${color}; font-weight: 600;">${statusLabels[entrega.status]}</span></p>
-          <p class="mb-2"><strong>Prazo:</strong> ${entrega.prazo}</p>
-          <div class="mt-2 flex flex-col gap-1">
+        <div class="text-xs font-sans text-gray-200 bg-[#121212] p-2.5 rounded border border-[#FFD600]/40" style="min-width: 190px;">
+          <h4 class="font-bold text-[#FFD600] text-sm mb-1 uppercase tracking-tight">${entrega.destino}</h4>
+          <p class="mb-1 text-[11px]"><strong>Motorista:</strong> ${entrega.motorista}</p>
+          <p class="mb-1 text-[11px]"><strong>Origem:</strong> ${entrega.origem || 'Não informada'}</p>
+          <p class="mb-1 text-[11px]"><strong>Destino:</strong> ${entrega.destino || 'Não informado'}</p>
+          <p class="mb-1 text-[11px]"><strong>Valor do Frete:</strong> R$ ${Number(entrega.frete_empresa || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          <p class="mb-1 text-[11px]"><strong>Status:</strong> <span class="px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${color}20; color: ${color}; font-weight: 600;">${statusLabels[entrega.status]}</span></p>
+          <p class="mb-1 text-[11px]"><strong>Prazo:</strong> ${entrega.prazo}</p>
+          ${val ? `
+            <div class="my-1.5 border-t border-zinc-905 pt-1.5 text-[11px]">
+              <span class="text-zinc-500 font-mono text-[9px] uppercase tracking-wider block">VALOR DA CARGA:</span>
+              <span class="font-mono font-bold text-white uppercase tracking-tight block">R$ ${Math.round(val).toLocaleString('pt-BR')}</span>
+              ${val >= 100000 ? `
+                <span class="bg-red-950/80 border border-red-500/30 text-red-400 font-mono text-[8px] font-black tracking-wide px-1 rounded block mt-1 text-center py-0.5 animate-pulse">
+                  ⚠️ ALTO RISCO / GR
+                </span>
+              ` : ''}
+            </div>
+          ` : ''}
+          <div class="mt-2.5 flex flex-col gap-1">
             <a href="${waUrl}" target="_blank" class="block text-center py-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded text-[10px] no-underline">
               💬 WhatsApp Motorista
             </a>

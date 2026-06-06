@@ -32,6 +32,13 @@ export interface Entrega {
   updated_at: string;
   km?: number;
   historico?: EventoEntrega[];
+  valor_carga?: number;
+  categoria_risco?: 'comum' | 'medio' | 'alto' | 'critico';
+  editando_por?: {
+    nome: string;
+    usuario: string;
+    timestamp: string;
+  } | null;
 }
 
 export interface SupabaseConfig {
