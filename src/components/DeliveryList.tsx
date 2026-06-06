@@ -351,6 +351,20 @@ export default function DeliveryList({
   setStatusFilter,
   onAddDelivery
 }: DeliveryListProps) {
+  const getActiveUserFullName = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.displayName) {
+          return parsed.displayName;
+        }
+      } catch {
+        // Ignored
+      }
+    }
+    return 'Jairo Bahia';
+  };
   
   const [origemFilter, setOrigemFilter] = useState('');
   const [destinoFilter, setDestinoFilter] = useState('');
@@ -622,11 +636,11 @@ export default function DeliveryList({
   };
 
   const getWhatsappDriverMsg = (entrega: Entrega) => {
-    return `Olá ${entrega.motorista}! Sou o Jairo Bahia, representante da Rodovar Transportadora. Poderia me enviar o link de localização dessa viagem para ${entrega.destino}? Aguardo o retorno!`;
+    return `Olá ${entrega.motorista}! Sou o ${getActiveUserFullName()}, representante da Rodovar Transportadora. Poderia me enviar o link de localização dessa viagem para ${entrega.destino}? Aguardo o retorno!`;
   };
 
   const getWhatsappClientMsg = (entrega: Entrega) => {
-    return `Olá! Sou o Jairo Bahia da Rodovar Transportadora. Sua carga para ${entrega.destino} está a caminho. O motorista ${entrega.motorista} está em deslocamento com previsão para ${entrega.prazo}. Qualquer dúvida estou por aqui!`;
+    return `Olá! Sou o ${getActiveUserFullName()} da Rodovar Transportadora. Sua carga para ${entrega.destino} está a caminho. O motorista ${entrega.motorista} está em deslocamento com previsão para ${entrega.prazo}. Qualquer dúvida estou por aqui!`;
   };
 
   return (

@@ -26,6 +26,21 @@ const getStatusColor = (status: string) => {
 };
 
 export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, singleView = false }: DeliveryMapProps) {
+  const getActiveUserName = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.displayName) {
+          return parsed.displayName.split(' ')[0];
+        }
+      } catch {
+        // Ignored
+      }
+    }
+    return 'Jairo';
+  };
+
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
@@ -164,7 +179,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
       // Simple WhatsApp links
       const telMot = entrega.tel_motorista.replace(/\D/g, '');
-      const whatsMsg = `Olá ${entrega.motorista}! Tudo bem? Sou o Jairo da Rodovar. Me envia o link de localização dessa viagem para ${entrega.destino}?`;
+      const whatsMsg = `Olá ${entrega.motorista}! Tudo bem? Sou o ${getActiveUserName()} da Rodovar. Me envia o link de localização dessa viagem para ${entrega.destino}?`;
       const waUrl = `https://wa.me/55${telMot}?text=${encodeURIComponent(whatsMsg)}`;
 
       // Create Popup

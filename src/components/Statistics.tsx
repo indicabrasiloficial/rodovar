@@ -29,6 +29,20 @@ interface StatisticsProps {
 }
 
 export default function Statistics({ entregas }: StatisticsProps) {
+  const getActiveUserFullName = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.displayName) {
+          return parsed.displayName;
+        }
+      } catch {
+        // Ignored
+      }
+    }
+    return 'Jairo Bahia';
+  };
   
   // 1. Calculations: Vendedor operational activity (number of loads)
   const vendedorData = useMemo(() => {
@@ -138,7 +152,7 @@ export default function Statistics({ entregas }: StatisticsProps) {
       {/* Title */}
       <div>
         <h2 className="text-xl font-bold font-sans tracking-tight">📊 DESEMPENHO OPERACIONAL RODOVAR</h2>
-        <p className="text-xs text-gray-400 font-mono">Consolidado e análises logísticas sob gerência de Jairo Bahia</p>
+        <p className="text-xs text-gray-400 font-mono">Consolidado e análises logísticas sob gerência de {getActiveUserFullName()}</p>
       </div>
 
       {/* Analytical KPI Metrics Row */}

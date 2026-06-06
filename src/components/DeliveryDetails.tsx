@@ -71,6 +71,36 @@ const statusColors: Record<DeliveryStatus, string> = {
 };
 
 export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, onNavigateToManager }: DeliveryDetailsProps) {
+  const getActiveUserFullName = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.displayName) {
+          return parsed.displayName;
+        }
+      } catch {
+        // Ignored
+      }
+    }
+    return 'Jairo Bahia';
+  };
+
+  const getActiveUserName = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.displayName) {
+          return parsed.displayName.split(' ')[0];
+        }
+      } catch {
+        // Ignored
+      }
+    }
+    return 'Jairo';
+  };
+
   const [entrega, setEntrega] = useState<Entrega | null>(null);
   const [locLinkInput, setLocLinkInput] = useState('');
   const [isSavingLink, setIsSavingLink] = useState(false);
@@ -173,13 +203,13 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
   // Preset WhatsApp templates
   const waTemplates = {
-    apresentar: `Olá ${entrega.motorista}! Aqui é o Jairo Bahia, representante da Rodovar Transportadora. Estarei acompanhando sua viagem de ${entrega.origem} até ${entrega.destino} até o término. Poderia me enviar seu link de localização em tempo real pelo WhatsApp? Obrigado!`,
+    apresentar: `Olá ${entrega.motorista}! Aqui é o ${getActiveUserFullName()}, representante da Rodovar Transportadora. Estarei acompanhando sua viagem de ${entrega.origem} até ${entrega.destino} até o término. Poderia me enviar seu link de localização em tempo real pelo WhatsApp? Obrigado!`,
     solicitarLoc: `Olá ${entrega.motorista}! Tudo bem? Poderia me enviar sua localização em tempo real agora? Preciso informar ao cliente o status da carga. Grato!`,
-    informarCliente: `Olá! Aqui é o Jairo Bahia da Rodovar Transportadora. Sua carga está a caminho! O motorista ${entrega.motorista} está em deslocamento e chegará até ${entrega.prazo}. Qualquer dúvida estou à disposição.`,
+    informarCliente: `Olá! Aqui é o ${getActiveUserFullName()} da Rodovar Transportadora. Sua carga está a caminho! O motorista ${entrega.motorista} está em deslocamento e chegará até ${entrega.prazo}. Qualquer dúvida estou à disposição.`,
     solicitarCanhoto: `Olá ${entrega.motorista}! Após a entrega, por favor solicite o canhoto assinado e nos envie uma foto. Obrigado pela parceria!`,
     confirmarEntrega: `Olá! Confirmamos a entrega da sua carga realizada pelo motorista ${entrega.motorista}. Foi um prazer atendê-lo! Rodovar Transportadora.`,
     prazoMotorista: `Olá ${entrega.motorista}! Como está a viagem para ${entrega.destino}? Gostaríamos de alinhar sobre o tempo de percurso: o prazo limite de recebimento da carga é ${entrega.prazo}. Está tudo correndo de forma segura dentro deste planejado? Qualquer contratempo nos comunique de imediato. Obrigado! Rodovar.`,
-    prazoCliente: `Olá! Aqui é o Jairo Bahia da Rodovar. Tudo bem? Referente à carga com destino a vocês, gostaríamos de confirmar que o prazo estimado/limite para a entrega é ${entrega.prazo}. O motorista ${entrega.motorista} está sob monitoramento e qualquer alteração de rota avisamos no mesmo instante!`
+    prazoCliente: `Olá! Aqui é o ${getActiveUserFullName()} da Rodovar. Tudo bem? Referente à carga com destino a vocês, gostaríamos de confirmar que o prazo estimado/limite para a entrega é ${entrega.prazo}. O motorista ${entrega.motorista} está sob monitoramento e qualquer alteração de rota avisamos no mesmo instante!`
   };
 
   const handleSolicitarCanhotoClick = () => {
@@ -596,7 +626,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
           <div className="bg-[#121212] border border-zinc-800 rounded-xl p-5 space-y-4 shadow-sm">
             <div className="flex justify-between items-center border-b border-zinc-950 pb-2">
               <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] font-bold">
-                MENSAGENS DO JAIRO (SCRIPTS WHATSAPP)
+                MENSAGENS DE {getActiveUserName().toUpperCase()} (SCRIPTS WHATSAPP)
               </span>
               {clickedScripts.length > 0 && (
                 <button
@@ -618,7 +648,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
             </p>
 
             <div className="space-y-2 text-xs animate-fade-in">
-              {renderScriptButton('apresentar', '1. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Olá ${entrega.motorista}! Aqui é o Jairo...`)}
+              {renderScriptButton('apresentar', '1. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Olá ${entrega.motorista}! Aqui é o ${getActiveUserName()}...`)}
               {renderScriptButton('solicitarLoc', '2. Solicitar Localização', entrega.tel_motorista, waTemplates.solicitarLoc, 'Poderia me enviar sua localização ao vivo?')}
               {renderScriptButton('informarCliente', '3. Informar Cliente', entrega.tel_cliente, waTemplates.informarCliente, `Sua carga está a caminho...`)}
               {renderScriptButton('solicitarCanhoto', '4. Solicitar Canhoto', entrega.tel_motorista, waTemplates.solicitarCanhoto, 'Após a entrega solicite o canhoto assinado...', true)}

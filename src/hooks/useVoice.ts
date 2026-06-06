@@ -129,6 +129,36 @@ function normalizeTextForSpeech(text: string): string {
   return spoken;
 }
 
+const getActiveUserName = (): string => {
+  const active = localStorage.getItem('rodovar_active_login_v2');
+  if (active) {
+    try {
+      const parsed = JSON.parse(active);
+      if (parsed && parsed.displayName) {
+        return parsed.displayName.split(' ')[0];
+      }
+    } catch {
+      // Ignored
+    }
+  }
+  return 'Jairo';
+};
+
+const getActiveUserFullName = (): string => {
+  const active = localStorage.getItem('rodovar_active_login_v2');
+  if (active) {
+    try {
+      const parsed = JSON.parse(active);
+      if (parsed && parsed.displayName) {
+        return parsed.displayName;
+      }
+    } catch {
+      // Ignored
+    }
+  }
+  return 'Jairo Bahia';
+};
+
 export function useVoice(
   onSelectDelivery: (id: string) => void,
   onFilterStatus: (status: string | 'all') => void,
@@ -222,7 +252,7 @@ export function useVoice(
 
   const confirmPendingAction = (accepted: boolean) => {
     if (!accepted) {
-      speak('Tranquilo, Jairo. O que mais você precisa monitorar?');
+      speak(`Tranquilo, ${getActiveUserName()}. O que mais você precisa monitorar?`);
       setState((prev) => ({ ...prev, showConfirmPrompt: false }));
       return;
     }
@@ -239,11 +269,11 @@ export function useVoice(
           msg = `Olá ${entrega.motorista}! Tudo bem? Poderia me enviar sua localização em tempo real agora? Preciso informar ao cliente o status da carga. Grato!`;
         } else {
           phone = entrega.tel_cliente.replace(/\D/g, '');
-          msg = `Olá! Aqui é o Jairo Bahia da Rodovar Transportadora. Sua carga está a caminho! O motorista ${entrega.motorista} está em deslocamento e chegará até ${entrega.prazo}. Qualquer dúvida estou à disposição.`;
+          msg = `Olá! Aqui é o ${getActiveUserFullName()} da Rodovar Transportadora. Sua carga está a caminho! O motorista ${entrega.motorista} está em deslocamento e chegará até ${entrega.prazo}. Qualquer dúvida estou à disposição.`;
         }
 
         const url = `https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`;
-        speak('Prontinho, Jairo! Abrindo o WhatsApp do motorista...');
+        speak(`Prontinho, ${getActiveUserName()}! Abrindo o WhatsApp do motorista...`);
         window.open(url, '_blank');
       }
     }
@@ -281,7 +311,7 @@ export function useVoice(
       const semLocalizacao = entregas.filter(e => e.status === 'em_transito' && !e.link_localizacao);
       const coletando = entregas.filter(e => e.status === 'coletando');
 
-      let diagnostic = 'Fala, Jairo! Rodovar na escuta. Analisei a frota ativa agora. ';
+      let diagnostic = `Fala, ${getActiveUserName()}! Rodovar na escuta. Analisei a frota ativa agora. `;
 
       if (paradas.length === 0 && semLocalizacao.length === 0) {
         diagnostic += 'Tudo rodando liso na rota ou entregue com sucesso! Nenhuma pendência crítica.';
@@ -318,7 +348,7 @@ export function useVoice(
       onFilterStatus('parado');
       onSearchQuery('');
       const count = entregas.filter((e) => e.status === 'parado').length;
-      const resp = `Na tela, Jairo! Filtrei aqui, são ${count} ${count === 1 ? 'carga parada' : 'cargas paradas atualmente'}.`;
+      const resp = `Na tela, ${getActiveUserName()}! Filtrei aqui, são ${count} ${count === 1 ? 'carga parada' : 'cargas paradas atualmente'}.`;
       speak(resp);
       return;
     }
@@ -327,7 +357,7 @@ export function useVoice(
       onFilterStatus('em_transito');
       onSearchQuery('');
       const count = entregas.filter((e) => e.status === 'em_transito').length;
-      const resp = `Prontinho, Jairo! Temos ${count} ${count === 1 ? 'carga acelerando' : 'cargas ativas em trânsito'} agora.`;
+      const resp = `Prontinho, ${getActiveUserName()}! Temos ${count} ${count === 1 ? 'carga acelerando' : 'cargas ativas em trânsito'} agora.`;
       speak(resp);
       return;
     }
@@ -336,7 +366,7 @@ export function useVoice(
       onFilterStatus('coletando');
       onSearchQuery('');
       const count = entregas.filter((e) => e.status === 'coletando').length;
-      const resp = `Fala, Jairo. Temos ${count} ${count === 1 ? 'carga carregando' : 'cargas em fase de coleta'} agora.`;
+      const resp = `Fala, ${getActiveUserName()}. Temos ${count} ${count === 1 ? 'carga carregando' : 'cargas em fase de coleta'} agora.`;
       speak(resp);
       return;
     }
@@ -353,7 +383,7 @@ export function useVoice(
     if (query.includes('todas') || query.includes('limpar') || query.includes('todos')) {
       onFilterStatus('all');
       onSearchQuery('');
-      speak(`Feito, Jairo! Painel com o total das ${entregas.length} cargas limpo.`);
+      speak(`Feito, ${getActiveUserName()}! Painel com o total das ${entregas.length} cargas limpo.`);
       return;
     }
 
@@ -396,7 +426,7 @@ export function useVoice(
           ? 'está parada no momento'
           : 'já foi entregue';
 
-      const resp = `Achei aqui, Jairo! A viagem do ${bestMatch.motorista} com destino a ${bestMatch.destino} ${statusLabel}. Saiu de ${bestMatch.origem} com prazo de chegada para ${bestMatch.prazo}. Deseja abrir o WhatsApp dele?`;
+      const resp = `Achei aqui, ${getActiveUserName()}! A viagem do ${bestMatch.motorista} com destino a ${bestMatch.destino} ${statusLabel}. Saiu de ${bestMatch.origem} com prazo de chegada para ${bestMatch.prazo}. Deseja abrir o WhatsApp dele?`;
 
       setState((prev) => ({
         ...prev,
@@ -412,9 +442,9 @@ export function useVoice(
       if (matchedSearchWords.length > 2) {
         onSearchQuery(matchedSearchWords);
         onFilterStatus('all');
-        speak(`Jairo, não achei exato para "${matchedSearchWords}", mas ordenei a aproximação na tela.`);
+        speak(`${getActiveUserName()}, não achei exato para "${matchedSearchWords}", mas ordenei a aproximação na tela.`);
       } else {
-        speak('Não entendi bem Jairo. Me peça para analisar a frota, filtrar cargas paradas ou buscar motorista.');
+        speak(`Não entendi bem, ${getActiveUserName()}. Me peça para analisar a frota, filtrar cargas paradas ou buscar motorista.`);
       }
     }
   };
