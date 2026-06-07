@@ -324,7 +324,17 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login onLoginSuccess={(userData) => setUser(userData)} />;
+    return (
+      <Login 
+        onLoginSuccess={(userData) => {
+          setUser(userData);
+          // Personalized vocal greeting on successful login
+          if ((window as any).falarRodovar) {
+            (window as any).falarRodovar(`Seja bem vindo ao sistema Rodovar Monitora, ${userData.displayName}! Painel de cargas ativado.`);
+          }
+        }} 
+      />
+    );
   }
 
   return (

@@ -32,8 +32,9 @@ const SEED_MESSAGES: any[] = [];
 // Setup real-time listeners upon auth state change (Optimized to always run for unauthenticated workspace)
 const uid = 'system_operator';
 
-// Listen to entregas (entire collection for shared multi-user workspace)
-const entregasQuery = collection(db, ENTREGAS_COLLECTION);
+// Listen to recent entregas to keep Dashboard metrics and caches fast and responsive without freezing on large datasets
+import { limit as firestoreLimit, orderBy as firestoreOrderBy } from 'firebase/firestore';
+const entregasQuery = query(collection(db, ENTREGAS_COLLECTION), firestoreOrderBy('created_at', 'desc'), firestoreLimit(250));
 onSnapshot(entregasQuery, async (snapshot) => {
   if (snapshot.empty) {
     cachedEntregas = [];
@@ -356,12 +357,18 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     descricao: desc
   }));
 
-  const payload: Entrega = {
+  const payload: any = {
     ...basePayload,
     ...entrega,
     historico: [...(basePayload.historico || []), ...newEvents],
     updated_at: new Date().toISOString()
-  } as Entrega;
+  };
+
+  // Enforce lowercase search normalization keys for ultra high speed server-side Firestore queries
+  payload.search_origem = (payload.origem || '').toLowerCase().trim();
+  payload.search_destino = (payload.destino || '').toLowerCase().trim();
+  payload.search_cliente = (payload.cliente || '').toLowerCase().trim();
+  payload.search_motorista = (payload.motorista || '').toLowerCase().trim();
 
   // Let's ensure km is recalculated if origin or destination changed
   if (entrega.origem !== undefined || entrega.destino !== undefined || !payload.km) {

@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
 import { saveEntrega, deleteEntregasBulk, deleteEntrega } from '../db/storage';
+import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
 import { getDeliveryKm } from '../utils/distance';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -341,6 +342,74 @@ export function parsePastedTextToDeliveries(text: string) {
   return results;
 }
 
+// High-fidelity shimmer skeleton loading component for mobile viewport card decks
+function MobileSkeletonCard() {
+  return (
+    <div className="p-4 space-y-3 bg-[#121212]/50 border border-zinc-900 rounded-xl animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="h-4 bg-zinc-800 rounded w-2/3" />
+        <div className="h-5 bg-zinc-800 rounded-full w-16" />
+      </div>
+      <div className="space-y-2 h-20 bg-zinc-950/40 border border-zinc-900/60 p-3 rounded-lg flex flex-col justify-between">
+        <div className="h-3 bg-zinc-700/60 rounded w-1/2" />
+        <div className="h-3 bg-zinc-700/60 rounded w-3/4" />
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="h-6 bg-zinc-800 rounded w-24" />
+        <div className="h-6 bg-zinc-850 rounded w-20" />
+      </div>
+    </div>
+  );
+}
+
+// High-fidelity shimmer skeleton loading component for desktop table grid structures
+function DesktopSkeletonRow() {
+  return (
+    <tr className="border-b border-zinc-900 animate-pulse bg-zinc-950/20">
+      <td className="py-4 px-4 w-10 text-center">
+        <div className="h-4 bg-zinc-800 rounded w-4 mx-auto" />
+      </td>
+      <td className="py-4 px-4">
+        <div className="space-y-1.5">
+          <div className="h-4 bg-zinc-850 rounded w-40" />
+          <div className="h-3 bg-zinc-800 rounded w-20" />
+        </div>
+      </td>
+      <td className="py-4 px-4">
+        <div className="space-y-1.5">
+          <div className="h-3 bg-zinc-800 rounded w-28" />
+          <div className="h-3 bg-zinc-800 rounded w-20" />
+        </div>
+      </td>
+      <td className="py-4 px-4">
+        <div className="h-4 bg-zinc-800 rounded w-32" />
+      </td>
+      <td className="py-4 px-4">
+        <div className="h-4 bg-zinc-800 rounded w-28" />
+      </td>
+      <td className="py-4 px-4">
+        <div className="space-y-1.5">
+          <div className="h-3.5 bg-zinc-850 rounded w-24" />
+          <div className="h-3 bg-zinc-800 rounded w-16" />
+        </div>
+      </td>
+      <td className="py-4 px-4 text-center">
+        <div className="h-5 bg-zinc-800 rounded-full w-16 mx-auto" />
+      </td>
+      <td className="py-4 px-4">
+        <div className="flex items-center justify-center gap-1.5">
+          <div className="h-6 bg-zinc-800 rounded w-10" />
+          <div className="h-6 bg-zinc-800 rounded w-10" />
+          <div className="h-6 bg-zinc-800 rounded w-10" />
+        </div>
+      </td>
+      <td className="py-4 px-4 text-right">
+        <div className="h-4 bg-zinc-805 rounded w-4 ml-auto" />
+      </td>
+    </tr>
+  );
+}
+
 export default function DeliveryList({
   entregas,
   onSelectDelivery,
@@ -369,6 +438,111 @@ export default function DeliveryList({
   const [origemFilter, setOrigemFilter] = useState('');
   const [destinoFilter, setDestinoFilter] = useState('');
   const [dataColetaFilter, setDataColetaFilter] = useState('');
+  const [clienteFilter, setClienteFilter] = useState('');
+
+  // Scrolling & Virtualization viewport hooks
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(600);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollTop(window.scrollY);
+    };
+    const handleResize = () => {
+      setViewportHeight(window.innerHeight);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
+    
+    // Set initial calculations safely
+    setScrollTop(window.scrollY);
+    setViewportHeight(window.innerHeight);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  // Initialize the pagination, search, and real-time slice synchronizer hook
+  const {
+    loadedEntregas,
+    loading,
+    loadingMore,
+    hasMore,
+    totalCount,
+    loadedCount,
+    setFilters,
+    loadMore,
+    indexWarning
+  } = usePaginatedEntregas({
+    status: statusFilter,
+    origem: origemFilter,
+    destino: destinoFilter,
+    dataColeta: dataColetaFilter,
+    cliente: clienteFilter,
+    search: searchFilter
+  });
+
+  // Debouncing filters to prevent excess Firebase reads during active keystrokes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters({
+        status: statusFilter,
+        origem: origemFilter,
+        destino: destinoFilter,
+        dataColeta: dataColetaFilter,
+        cliente: clienteFilter,
+        search: searchFilter
+      });
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [statusFilter, origemFilter, destinoFilter, dataColetaFilter, clienteFilter, searchFilter]);
+
+  // Handle auto infinite scrolling when nearing bottom of page
+  useEffect(() => {
+    const handleInfiniteScroll = () => {
+      if (!hasMore || loadingMore || loading) return;
+      
+      // Calculate remaining scroll height
+      const threshold = 350; // trigger distance in pixels from bottom
+      const scrolledToBottom = 
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - threshold;
+      
+      if (scrolledToBottom) {
+        loadMore();
+      }
+    };
+
+    window.addEventListener('scroll', handleInfiniteScroll);
+    return () => window.removeEventListener('scroll', handleInfiniteScroll);
+  }, [hasMore, loadingMore, loading, loadMore]);
+
+  // Virtualization slicing parameters for extreme performance with zero overhead
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+  const rowHeight = isMobile ? 220 : 76; 
+  const totalItems = loadedEntregas.length;
+
+  // Track coordinates of container relative to page top dynamically
+  const [offsetTop, setOffsetTop] = useState(0);
+  useEffect(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setOffsetTop(rect.top + window.scrollY);
+    }
+  }, [loadedEntregas.length, scrollTop]);
+
+  const relativeScrollTop = Math.max(0, scrollTop - offsetTop);
+  
+  // Render buffer of 6 rows above and below to ensure natural and pristine scrolling
+  const startIndex = Math.max(0, Math.floor(relativeScrollTop / rowHeight) - 6);
+  const endIndex = Math.min(totalItems, Math.ceil((relativeScrollTop + viewportHeight) / rowHeight) + 6);
+
+  const visibleEntregas = loadedEntregas.slice(startIndex, endIndex);
+  const topSpacerHeight = startIndex * rowHeight;
+  const bottomSpacerHeight = Math.max(0, (totalItems - endIndex) * rowHeight);
 
   // States for bulk select and deletion
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -522,56 +696,12 @@ export default function DeliveryList({
     setOrigemFilter('');
     setDestinoFilter('');
     setDataColetaFilter('');
+    setClienteFilter('');
     setStatusFilter('all');
   };
 
-  // Filter Logic
-  const filteredEntregas = useMemo(() => {
-    return entregas.filter(e => {
-      // Status Filter
-      if (statusFilter !== 'all' && e.status !== statusFilter) {
-        return false;
-      }
-
-      // Search Query Filter
-      if (searchFilter) {
-        const query = searchFilter.toLowerCase().trim();
-        const matchesClient = e.cliente?.toLowerCase().includes(query);
-        const matchesDriver = e.motorista?.toLowerCase().includes(query);
-        const matchesSeller = e.vendedor?.toLowerCase().includes(query);
-        const matchesObs = e.observacoes?.toLowerCase().includes(query);
-        const matchesOrigem = e.origem?.toLowerCase().includes(query);
-        const matchesDestino = e.destino?.toLowerCase().includes(query);
-        const matchesId = e.id?.toLowerCase().includes(query);
-        const matchesStatus = e.status?.toLowerCase().replace('_', ' ').includes(query) || 
-                              (query === 'parado' && e.status === 'parado') ||
-                              (query === 'entregue' && e.status === 'entregue') ||
-                              ((query === 'transito' || query === 'trânsito') && e.status === 'em_transito') ||
-                              ((query === 'coleta' || query === 'coletando') && e.status === 'coletando');
-        
-        if (!matchesClient && !matchesDriver && !matchesSeller && !matchesObs && !matchesOrigem && !matchesDestino && !matchesId && !matchesStatus) {
-          return false;
-        }
-      }
-
-      // Origem filter
-      if (origemFilter && !e.origem?.toLowerCase().includes(origemFilter.toLowerCase())) {
-        return false;
-      }
-
-      // Destino filter
-      if (destinoFilter && !e.destino?.toLowerCase().includes(destinoFilter.toLowerCase())) {
-        return false;
-      }
-
-      // Date filter
-      if (dataColetaFilter && e.data_coleta !== dataColetaFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [entregas, statusFilter, searchFilter, origemFilter, destinoFilter, dataColetaFilter]);
+  // Filter Logic grounded on high performance secure cursor paginated lists
+  const filteredEntregas = loadedEntregas;
 
   // Export to Excel-ready CSV
   const handleExportToCSV = () => {
@@ -647,12 +777,28 @@ export default function DeliveryList({
     <div className="space-y-6">
       {/* Top action toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-        <h2 className="text-xl font-bold font-sans tracking-tight flex items-center gap-2">
-          🚚 PAINEL DE CARGAS 
-          <span className="text-xs bg-zinc-800 text-gray-400 px-2 py-0.5 rounded font-mono">
-            {filteredEntregas.length} filtradas
-          </span>
-        </h2>
+        <div className="space-y-1.5">
+          <h2 className="text-xl font-bold font-sans tracking-tight flex items-center gap-2">
+            🚚 PAINEL DE CARGAS 
+          </h2>
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono">
+            <span className="bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded text-gray-400">
+              Total Geral: <strong className="text-emerald-450 font-bold">{totalCount}</strong>
+            </span>
+            <span className="bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded text-gray-400">
+              Carregadas: <strong className="text-[#FFD600] font-bold">{loadedCount}</strong>
+            </span>
+            {hasMore ? (
+              <span className="text-[9px] text-[#FFD600] opacity-80 animate-pulse font-semibold ml-1">
+                (Role a página para mais cargas se necessário)
+              </span>
+            ) : totalCount > 0 && (
+              <span className="text-[9.5px] text-zinc-650 ml-1">
+                (Todas as cargas carregadas)
+              </span>
+            )}
+          </div>
+        </div>
         
         <div className="flex items-center gap-2.5">
           {onAddDelivery && (
@@ -705,13 +851,13 @@ export default function DeliveryList({
           <span className="text-xs font-bold uppercase tracking-wider font-mono text-gray-300">Filtros Avançados</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Text search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-500" />
             <input
               type="text"
-              placeholder="Buscar por vendedor, cliente, cidade, ID, status..."
+              placeholder="Buscar por motorista, vendedor, etc..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className="w-full bg-zinc-900/50 border border-zinc-800 text-xs text-white rounded-lg pl-9 pr-3 py-2 focus:border-[#FFD600] focus:ring-0 focus:outline-none placeholder-gray-500 font-mono"
@@ -745,6 +891,19 @@ export default function DeliveryList({
             />
           </div>
 
+          {/* Cliente Filter */}
+          <div className="relative">
+            <Truck className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Cliente (Ex: Valec)"
+              value={clienteFilter}
+              onChange={(e) => setClienteFilter(e.target.value)}
+              className="w-full bg-zinc-900/50 border border-zinc-800 text-xs text-white rounded-lg pl-9 pr-3 py-2 focus:border-[#FFD600] focus:ring-0 focus:outline-none placeholder-gray-500 font-mono"
+              id="filter-cliente"
+            />
+          </div>
+
           {/* Date Filter */}
           <div className="relative">
             <Calendar className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-500" />
@@ -758,7 +917,7 @@ export default function DeliveryList({
           </div>
         </div>
 
-        {(searchFilter || origemFilter || destinoFilter || dataColetaFilter || statusFilter !== 'all') && (
+        {(searchFilter || origemFilter || destinoFilter || dataColetaFilter || clienteFilter || statusFilter !== 'all') && (
           <div className="flex justify-end">
             <button 
               onClick={handleClearFilters}
@@ -808,9 +967,52 @@ export default function DeliveryList({
         )}
       </AnimatePresence>
 
+      {/* Index Build status warning board */}
+      {indexWarning && (
+        <div className="p-3.5 bg-yellow-950/20 border border-yellow-900/40 rounded-xl text-yellow-450 text-xs font-mono flex items-center gap-3 animate-pulse">
+          <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />
+          <span>
+            <strong>Aviso de Indexação:</strong> O Firebase está gerando os índices de busca (origem, destino, cliente, motorista). Cargas mais antigas podem demorar alguns segundos a mais para carregar durante esse processo automático.
+          </span>
+        </div>
+      )}
+
       {/* Main Table List */}
       <div className="bg-[#121212] border border-zinc-800 rounded-xl overflow-hidden">
-        {filteredEntregas.length === 0 ? (
+        {loading && filteredEntregas.length === 0 ? (
+          <div>
+            {/* Shimmer skeleton screen for mobile */}
+            <div className="block lg:hidden space-y-3 p-4 bg-zinc-950/30">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <MobileSkeletonCard key={i} />
+              ))}
+            </div>
+
+            {/* Shimmer skeleton rows for desktop */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-zinc-950/80 border-b border-zinc-800 text-gray-400 font-mono uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-4 w-10 text-center"></th>
+                    <th className="py-3 px-4">Rota / Vendedor</th>
+                    <th className="py-3 px-4">Coleta / Prazo</th>
+                    <th className="py-3 px-4">Cliente</th>
+                    <th className="py-3 px-4">Motorista</th>
+                    <th className="py-3 px-4">Valores / Fretes</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Contatos Rápidos (WhatsApp)</th>
+                    <th className="py-3 px-4 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900 font-sans">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <DesktopSkeletonRow key={i} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : filteredEntregas.length === 0 ? (
           <div className="p-12 text-center text-gray-500 font-medium space-y-2">
             <div className="text-3xl">📭</div>
             <p className="text-sm">Nenhuma carga encontrada com os filtros selecionados.</p>
@@ -842,8 +1044,9 @@ export default function DeliveryList({
                 )}
               </div>
 
-              <div className="divide-y divide-zinc-900 bg-zinc-950/30">
-                {filteredEntregas.map(e => {
+              <div ref={containerRef} className="divide-y divide-zinc-900 bg-zinc-950/30 relative" style={{ minHeight: totalItems * rowHeight }}>
+                {topSpacerHeight > 0 && <div style={{ height: topSpacerHeight }} />}
+                {visibleEntregas.map(e => {
                   const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
                   const BadgeIcon = badge.icon;
 
@@ -990,8 +1193,9 @@ export default function DeliveryList({
                   </div>
                 );
               })}
+                {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} />}
+              </div>
             </div>
-          </div>
 
             {/* Desktop Table View */}
             <div className="hidden lg:block overflow-x-auto">
@@ -1017,8 +1221,13 @@ export default function DeliveryList({
                     <th className="py-3 px-4 text-right">Ação</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-900 font-sans">
-                  {filteredEntregas.map(e => {
+                <tbody ref={containerRef} className="divide-y divide-zinc-900 font-sans relative" style={{ minHeight: totalItems * rowHeight }}>
+                  {topSpacerHeight > 0 && (
+                    <tr style={{ height: topSpacerHeight }}>
+                      <td colSpan={9} style={{ height: topSpacerHeight, padding: 0, border: 'none' }} />
+                    </tr>
+                  )}
+                  {visibleEntregas.map(e => {
                     const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
                     const BadgeIcon = badge.icon;
 
@@ -1179,6 +1388,11 @@ export default function DeliveryList({
                       </tr>
                     );
                   })}
+                  {bottomSpacerHeight > 0 && (
+                    <tr style={{ height: bottomSpacerHeight }}>
+                      <td colSpan={9} style={{ height: bottomSpacerHeight, padding: 0, border: 'none' }} />
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
