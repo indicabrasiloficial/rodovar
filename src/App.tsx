@@ -13,6 +13,8 @@ import WhatsAppScheduler from './components/WhatsAppScheduler';
 import ManagerSupport from './components/ManagerSupport';
 import Login from './components/Login';
 import ChangePasswordModal from './components/ChangePasswordModal';
+import EmployeeRegistration from './components/EmployeeRegistration';
+import AgentManual from './components/AgentManual';
 
 import { 
   Truck, 
@@ -29,7 +31,9 @@ import {
   Clipboard,
   LogOut,
   Lock,
-  Shield
+  Shield,
+  Users,
+  BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -305,6 +309,19 @@ export default function App() {
             initialEntregaId={selectedEntregaId}
           />
         );
+      case 'registration':
+        return (
+          <EmployeeRegistration 
+            onClose={() => setSelectedView('dashboard')}
+            onSuccess={() => setSelectedView('dashboard')}
+          />
+        );
+      case 'manual':
+        return (
+          <AgentManual 
+            onClose={() => setSelectedView('dashboard')}
+          />
+        );
       default:
         return <div className="text-center p-12 text-gray-500">Selecione uma opção válida.</div>;
     }
@@ -328,9 +345,27 @@ export default function App() {
       <Login 
         onLoginSuccess={(userData) => {
           setUser(userData);
-          // Personalized vocal greeting on successful login
+          // Personalized vocal greeting on successful login based on role
           if ((window as any).falarRodovar) {
-            (window as any).falarRodovar(`Seja bem vindo ao sistema Rodovar Monitora, ${userData.displayName}! Painel de cargas ativado.`);
+            let greeting = `Seja bem vindo ao sistema Rodovar Monitora, ${userData.displayName}! Painel ativado.`;
+            const lowerRole = (userData.role || '').toLowerCase();
+            const lowerUser = (userData.username || '').toLowerCase();
+            
+            if (lowerUser === 'master') {
+              greeting = `Olá, Administrador Mestre! O sistema Rodovar está totalmente liberado. O painel de controle e cadastro de funcionários foi desbloqueado com segurança.`;
+            } else if (lowerUser === 'jairobahia' || lowerRole.includes('operador')) {
+              greeting = `Seja bem vindo ao sistema Rodovar Monitora, Jairo Bahia! Painel de controle operacional ativo. Como estão as coletas e os envios de WhatsApp hoje?`;
+            } else if (lowerUser === 'genivaldo' || lowerRole.includes('gerente')) {
+              greeting = `Olá, Gerente Genivaldo! O painel gerencial da Rodovar está pronto. Notei alguns veículos parados na rota, deseja iniciar uma varredura?`;
+            } else if (lowerUser === 'alexandre' || lowerRole.includes('comercial')) {
+              greeting = `Olá, Diretor Alexandre! Painel de faturamento e carteira comercial ativo. Deseja analisar o valor total das cargas monitoradas no sistema?`;
+            } else if (lowerUser === 'petronio' || lowerRole.includes('financeiro')) {
+              greeting = `Olá, Petrônio! Painel financeiro carregado com sucesso. Como estão as conciliações de frete e aprovação de repasses hoje?`;
+            } else if (lowerUser === 'vitor' || lowerRole.includes('operações') || lowerRole.includes('operacoes')) {
+              greeting = `Olá, Diretor Vitor! Painel geral carregado. O índice de pontualidade operacional e monitoramento geográfico segue cem por cento atualizado.`;
+            }
+            
+            (window as any).falarRodovar(greeting);
           }
         }} 
       />
@@ -435,6 +470,38 @@ export default function App() {
               <span className="hidden sm:inline">Gerente Genivaldo</span>
               <span className="inline sm:hidden">Suporte</span>
             </button>
+
+            {/* Nav Manual */}
+            <button
+              onClick={() => setSelectedView('manual')}
+              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
+                selectedView === 'manual' 
+                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+              id="nav-manual"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+              <span className="hidden sm:inline">Manual Agente</span>
+              <span className="inline sm:hidden">Manual</span>
+            </button>
+
+            {/* Nav Registration */}
+            {user && (user.username === 'master' || user.role === 'Master') && (
+              <button
+                onClick={() => setSelectedView('registration')}
+                className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
+                  selectedView === 'registration' 
+                  ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+                }`}
+                id="nav-registration"
+              >
+                <Users className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                <span className="hidden sm:inline">Cadastro</span>
+                <span className="inline sm:hidden">Cad.</span>
+              </button>
+            )}
 
              {/* Floating Quick Action removed to prioritize only importing */}
 

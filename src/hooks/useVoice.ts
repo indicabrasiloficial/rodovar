@@ -161,6 +161,21 @@ const getActiveUserFullName = (): string => {
   return 'Jairo Bahia';
 };
 
+const getActiveUserRole = (): string => {
+  const active = localStorage.getItem('rodovar_active_login_v2');
+  if (active) {
+    try {
+      const parsed = JSON.parse(active);
+      if (parsed && parsed.role) {
+        return parsed.role;
+      }
+    } catch {
+      // Ignored
+    }
+  }
+  return 'Operador';
+};
+
 export function useVoice(
   onSelectDelivery: (id: string) => void,
   onFilterStatus: (status: string | 'all') => void,
@@ -341,22 +356,49 @@ export function useVoice(
         const paradas = entregas.filter(e => e.status === 'parado');
         const semLocalizacao = entregas.filter(e => e.status === 'em_transito' && !e.link_localizacao);
         const coletando = entregas.filter(e => e.status === 'coletando');
+        const rName = getActiveUserName();
+        const rRole = getActiveUserRole().toLowerCase();
 
-        let diagnostic = `Fala, ${getActiveUserName()}! Rodovar na escuta. Analisei a frota ativa agora. `;
+        let diagnostic = `Olá, ${rName}! Rodovar na escuta. Como seu assistente de confiança, analisei as cargas agora. `;
 
-        if (paradas.length === 0 && semLocalizacao.length === 0) {
-          diagnostic += 'Tudo rodando liso na rota ou entregue com sucesso! Nenhuma pendência crítica.';
-        } else {
-          diagnostic += 'Achei só uns detalhes na rodovia. ';
+        // Customize speech text depending heavily on profile for human concern!
+        if (rRole.includes('gerente') || rRole.includes('genivaldo')) {
+          diagnostic += `Como gestor, sei do seu compromisso com a eficiência. Temos ${paradas.length} cargas paradas na estrada que preocupam o andamento comercial e ${coletando.length} em coleta no porto. `;
           if (paradas.length > 0) {
-            const mNames = paradas.map(p => p.motorista || 'Sem Name').join(' e ');
-            diagnostic += `O motorista ${mNames} tá parado na estrada. Precisa pedir localização. `;
+            diagnostic += `O motorista ${paradas[0].motorista} está inativo e pode impactar o prazo planejado. `;
           }
-          if (semLocalizacao.length > 0) {
-            const slNames = semLocalizacao.map(p => p.motorista || 'Sem Name').join(' e ');
-            diagnostic += `Temos também a viagem de ${slNames} em trânsito sem rastreamento de mapa ativo. `;
+          diagnostic += `Quer que eu abra o canal rápido do gerente com o motorista para coordenarmos uma solução?`;
+        } else if (rRole.includes('comercial') || rRole.includes('diretor comercial') || rName.toLowerCase() === 'alexandre') {
+          const totalVal = entregas.reduce((sum, e) => sum + (e.valor_carga || 0), 0);
+          diagnostic += `Diretor comercial Alexandre, nosso faturamento total de fretes está em andamento. Mas notei ${paradas.length} cargas de clientes paradas na rodovia que correm risco de atraso comercial. `;
+          if (paradas.length > 0) {
+            diagnostic += `A entrega de ${paradas[0].cliente} sob responsabilidade comercial do motorista ${paradas[0].motorista} está retida. `;
           }
-          diagnostic += 'Quer que eu abra o zap dele para cobrar?';
+          diagnostic += `Acha razoável cobrarmos um retorno prioritário deles agora para assegurar nossos contratos?`;
+        } else if (rRole.includes('financeiro') || rName.toLowerCase() === 'petronio') {
+          const receita = entregas.reduce((sum, e) => sum + (e.frete_empresa || 0), 0);
+          const despesa = entregas.reduce((sum, e) => sum + (e.frete_motorista || 0), 0);
+          const margem = receita - despesa;
+          diagnostic += `Prezado Petrônio do Financeiro, nos preocupamos diretamente com a lucratividade! Nossas margens estimadas somam R$ ${margem}. Contudo, há ${paradas.length} cargas de alto valor paradas nas estradas. `;
+          if (paradas.length > 0) {
+            diagnostic += `Se a viagem de ${paradas[0].motorista} atrasar, podemos ter cobranças adicionais de diárias. `;
+          }
+          diagnostic += `Deseja monitorar os repasses ou prefere que eu auxilie na cobrança desses recibos?`;
+        } else if (rRole.includes('operações') || rRole.includes('operacoes') || rName.toLowerCase() === 'vitor') {
+          diagnostic += `Diretor de operações Vitor, monitoramento logístico tático ativo! Temos ${coletando.length} coletas em andamento, ${entregas.filter(e => e.status === 'em_transito').length} em trânsito e ${paradas.length} paradas críticas. `;
+          if (paradas.length > 0) {
+            diagnostic += `Temos também ${semLocalizacao.length} veículos em trânsito sem rastreamento de mapa ativo, o que prejudica nosso SLA internacional de operações. `;
+          }
+          diagnostic += `Gostaria de rodar uma varredura geral para regularizar estes trajetos agora?`;
+        } else {
+          // Default Operador (Jairo Bahia)
+          diagnostic += `Grande Jairo, tudo sob controle operacional. Temos ${coletando.length} cargas coletando e ${paradas.length} paradas. `;
+          if (paradas.length > 0) {
+            diagnostic += `O motorista ${paradas.map(p => p.motorista).join(' e ')} está com veículo parado. `;
+            diagnostic += `Acho super prudente cobrarmos a posição geográfica dele. Quer abrir o WhatsApp para disparar a mensagem agora?`;
+          } else {
+            diagnostic += `Tudo rodando perfeitamente liso nas vias neste exato momento!`;
+          }
         }
 
         // If we have any parados, set them as pending confirmation to help speed up user's workflow

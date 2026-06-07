@@ -101,6 +101,35 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     return 'Jairo';
   };
 
+  const isUserJairo = (): boolean => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        // Deixar somente para JairoBahia (username = 'jairobahia')
+        return parsed && parsed.username === 'jairobahia';
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  };
+
+  const getActiveUserRole = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.role) {
+          return parsed.role;
+        }
+      } catch {
+        // Ignored
+      }
+    }
+    return 'Operador';
+  };
+
   const [entrega, setEntrega] = useState<Entrega | null>(null);
   const [locLinkInput, setLocLinkInput] = useState('');
   const [isSavingLink, setIsSavingLink] = useState(false);
@@ -622,64 +651,78 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
         {/* Right Column: Pre-made messages to Whatsapp AND Map Pin Preview references */}
         <div className="lg:col-span-4 space-y-6">
 
-          {/* Action block - Jairo's Quick Messages panel */}
-          <div className="bg-[#121212] border border-zinc-800 rounded-xl p-5 space-y-4 shadow-sm">
-            <div className="flex justify-between items-center border-b border-zinc-950 pb-2">
-              <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] font-bold">
-                MENSAGENS DE {getActiveUserName().toUpperCase()} (SCRIPTS WHATSAPP)
-              </span>
-              {clickedScripts.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setClickedScripts([]);
-                    localStorage.removeItem(`clicked_scripts_${entregaId}`);
-                  }}
-                  className="text-[9px] font-mono text-zinc-500 hover:text-red-400 transition cursor-pointer"
-                  title="Limpar todos os marcadores de script desta carga"
-                >
-                  LIMPAR MARCADORES
-                </button>
-              )}
-            </div>
-            
-            <p className="text-[11px] text-gray-400 font-sans">
-              Envie mensagens rápidas clicando nas etapas abaixo. Os scripts enviados mudarão de cor, mas você também pode marcar ou desmarcar clicando no quadrado ao lado do número:
-            </p>
-
-            <div className="space-y-2 text-xs animate-fade-in">
-              {renderScriptButton('apresentar', '1. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Olá ${entrega.motorista}! Aqui é o ${getActiveUserName()}...`)}
-              {renderScriptButton('solicitarLoc', '2. Solicitar Localização', entrega.tel_motorista, waTemplates.solicitarLoc, 'Poderia me enviar sua localização ao vivo?')}
-              {renderScriptButton('informarCliente', '3. Informar Cliente', entrega.tel_cliente, waTemplates.informarCliente, `Sua carga está a caminho...`)}
-              {renderScriptButton('solicitarCanhoto', '4. Solicitar Canhoto', entrega.tel_motorista, waTemplates.solicitarCanhoto, 'Após a entrega solicite o canhoto assinado...', true)}
-              {renderScriptButton('confirmarEntrega', '5. Entrega Confirmada', entrega.tel_cliente, waTemplates.confirmarEntrega, `Confirmamos a entrega pelo motorista ${entrega.motorista}.`)}
+          {/* Action block - Jairo's Quick Messages panel (Only for jairobahia!) */}
+          {isUserJairo() ? (
+            <div className="bg-[#121212] border border-zinc-800 rounded-xl p-5 space-y-4 shadow-sm animate-fade-in">
+              <div className="flex justify-between items-center border-b border-zinc-950 pb-2">
+                <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] font-bold">
+                  MENSAGENS DE JAIRO (SCRIPTS WHATSAPP)
+                </span>
+                {clickedScripts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClickedScripts([]);
+                      localStorage.removeItem(`clicked_scripts_${entregaId}`);
+                    }}
+                    className="text-[9px] font-mono text-zinc-500 hover:text-red-400 transition cursor-pointer"
+                    title="Limpar todos os marcadores de script desta carga"
+                  >
+                    LIMPAR MARCADORES
+                  </button>
+                )}
+              </div>
               
-              {/* New deadline alignment scripts */}
-              {renderScriptButton('prazoMotorista', '6. Alinhar Prazo (Motorista)', entrega.tel_motorista, waTemplates.prazoMotorista, `Prazo limite de recebimento: ${entrega.prazo}.`)}
-              {renderScriptButton('prazoCliente', '7. Alinhar Prazo (Cliente)', entrega.tel_cliente, waTemplates.prazoCliente, `Confirmando prazo estimado de entrega: ${entrega.prazo}.`)}
+              <p className="text-[11px] text-gray-400 font-sans">
+                Envie mensagens rápidas clicando nas etapas abaixo. Os scripts enviados mudarão de cor, mas você também pode marcar ou desmarcar clicando no quadrado ao lado do número:
+              </p>
 
-              {/* Botão / Suporte Gerencial Genivaldo */}
-              {onNavigateToManager && (
-                <button
-                  type="button"
-                  onClick={() => onNavigateToManager(entrega.id)}
-                  className="w-full text-left p-3.5 rounded-lg bg-red-950/20 hover:bg-red-950/40 border border-red-900/40 hover:border-red-500/50 transition group cursor-pointer mt-2"
-                  id="details-report-manager-btn"
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold text-red-400 text-[11px] uppercase tracking-wider flex items-center gap-1 font-sans">
-                      🚨 Relatar ao Gerente Genivaldo
-                    </span>
-                    <ChevronRight className="w-3.5 h-3.5 text-red-500 group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                  <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
-                    Comunique quebras, atrasos na fiscalização, recusas de carga e peça suporte imediato.
-                  </p>
-                </button>
-              )}
-
+              <div className="space-y-2 text-xs">
+                {renderScriptButton('apresentar', '1. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Olá ${entrega.motorista}! Aqui é o ${getActiveUserName()}...`)}
+                {renderScriptButton('solicitarLoc', '2. Solicitar Localização', entrega.tel_motorista, waTemplates.solicitarLoc, 'Poderia me enviar sua localização ao vivo?')}
+                {renderScriptButton('informarCliente', '3. Informar Cliente', entrega.tel_cliente, waTemplates.informarCliente, `Sua carga está a caminho...`)}
+                {renderScriptButton('solicitarCanhoto', '4. Solicitar Canhoto', entrega.tel_motorista, waTemplates.solicitarCanhoto, 'Após a entrega solicite o canhoto assinado...', true)}
+                {renderScriptButton('confirmarEntrega', '5. Entrega Confirmada', entrega.tel_cliente, waTemplates.confirmarEntrega, `Confirmamos a entrega pelo motorista ${entrega.motorista}.`)}
+                
+                {/* New deadline alignment scripts */}
+                {renderScriptButton('prazoMotorista', '6. Alinhar Prazo (Motorista)', entrega.tel_motorista, waTemplates.prazoMotorista, `Prazo limite de recebimento: ${entrega.prazo}.`)}
+                {renderScriptButton('prazoCliente', '7. Alinhar Prazo (Cliente)', entrega.tel_cliente, waTemplates.prazoCliente, `Confirmando prazo estimado de entrega: ${entrega.prazo}.`)}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-[#121212] border border-zinc-800 rounded-xl p-5 space-y-3 shadow-sm text-center">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-zinc-550 font-bold block border-b border-zinc-900 pb-2">
+                SCRIPTS WHATSAPP INDISPONÍVEIS
+              </span>
+              <p className="text-[10px] text-zinc-500 font-sans leading-relaxed m-0 text-left">
+                Os scripts pré-definidos de conversa do WhatsApp são ferramentas exclusivas de controle para a equipe de <strong>Operadores</strong> (Jairo Bahia).
+              </p>
+              <div className="bg-zinc-950 p-2.5 rounded border border-zinc-900 text-left text-[11px]">
+                <p className="font-mono text-zinc-400 m-0">Perfil logado:</p>
+                <p className="font-bold text-[#FFD600] uppercase font-sans mt-0.5 m-0">{getActiveUserName()} ({getActiveUserRole()})</p>
+              </div>
+            </div>
+          )}
+
+          {/* Botão Support / Escalabilidade para todos os cargos relevantes */}
+          {onNavigateToManager && (
+            <button
+              type="button"
+              onClick={() => onNavigateToManager(entrega.id)}
+              className="w-full text-left p-3.5 rounded-lg bg-red-950/20 hover:bg-red-950/40 border border-red-900/40 hover:border-red-500/50 transition group cursor-pointer"
+              id="details-report-manager-btn"
+            >
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-bold text-red-400 text-[11px] uppercase tracking-wider flex items-center gap-1 font-sans">
+                  🚨 Relatar ao Gerente Genivaldo
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-red-500 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+              <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
+                Comunique quebras, atrasos na fiscalização, recusas de carga e peça suporte imediato.
+              </p>
+            </button>
+          )}
 
           {/* Map region reference coordinates */}
           <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 space-y-3 shadow-sm">

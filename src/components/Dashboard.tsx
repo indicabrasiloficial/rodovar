@@ -13,7 +13,15 @@ import {
   HelpCircle,
   TrendingDown,
   Navigation,
-  Package
+  Package,
+  Shield,
+  Clock,
+  ArrowUpRight,
+  Briefcase,
+  Layers,
+  ChevronRight,
+  Sparkles,
+  Info
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import DeliveryMap from './DeliveryMap';
@@ -141,6 +149,329 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
       voiceHook.processSpeech(voiceQueryInput);
       setVoiceQueryInput('');
     }
+  };
+
+  const getActiveUserRole = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        return parsed.role || 'Operador';
+      } catch {
+        return 'Operador';
+      }
+    }
+    return 'Operador';
+  };
+
+  const getActiveUserNameLabel = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        return parsed.displayName || 'Colaborador';
+      } catch {
+        return 'Colaborador';
+      }
+    }
+    return 'Colaborador';
+  };
+
+  // Render role-specific custom widgets panel
+  const renderRoleSpecificBoard = () => {
+    const role = getActiveUserRole();
+    const name = getActiveUserNameLabel();
+
+    // Financial sums for Petrônio
+    const financeSummary = useMemo(() => {
+      const revenue = entregas.reduce((sum, e) => sum + (e.frete_empresa || 0), 0);
+      const expense = entregas.reduce((sum, e) => sum + (e.frete_motorista || 0), 0);
+      const profit = revenue - expense;
+      const marginPct = revenue > 0 ? (profit / revenue) * 100 : 0;
+      
+      // Filter list of negative or zero profit margin routes as warning ledger
+      const criticalRoutes = entregas.filter(e => e.frete_empresa <= e.frete_motorista || e.frete_empresa === 0 || e.frete_motorista === 0);
+
+      return { revenue, expense, profit, marginPct, criticalRoutes };
+    }, [entregas]);
+
+    // Commercial metrics for Alexandre
+    const commercialSummary = useMemo(() => {
+      const totalCargoValue = entregas.reduce((sum, e) => sum + (e.valor_carga || 0), 0);
+      const totalFreight = entregas.reduce((sum, e) => sum + (e.frete_empresa || 0), 0);
+      
+      // Group cargo value by client name
+      const clientGroup: Record<string, number> = {};
+      entregas.forEach(e => {
+        const cName = e.cliente || 'OutrosCl';
+        clientGroup[cName] = (clientGroup[cName] || 0) + (e.frete_empresa || 0);
+      });
+      const topClients = Object.entries(clientGroup)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3);
+
+      return { totalCargoValue, totalFreight, topClients };
+    }, [entregas]);
+
+    // Ocorrências escalated to Genivaldo / Gerente
+    const paradasEscalated = useMemo(() => {
+      return entregas.filter(e => e.status === 'parado' || (e.observacoes && e.observacoes.toLowerCase().includes('atraso')));
+    }, [entregas]);
+
+    if (role.toLowerCase().includes('comercial')) {
+      return (
+        <div className="bg-[#121212] border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+            <div className="flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-[#FFD600]" />
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">Relatório Comercial Estratégico (Alexandre)</h3>
+                <p className="text-[10px] text-zinc-500 font-mono uppercase">Análise de Receita de Frete Empresa & Seguro de Cargas Monitoradas</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-[#FFD600]/10 text-[#FFD600] ring-1 ring-[#FFD600]/20 rounded px-2 py-0.5 font-mono uppercase">DIRETORIA COMERCIAL</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-mono text-zinc-400">Total Garantido sob Gestão</span>
+              <p className="text-lg font-black text-white mt-1">R$ {commercialSummary.totalCargoValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <span className="text-[9px] text-[#FFD600] font-mono mt-1">✓ Seguro Ativo Rodovar</span>
+            </div>
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-mono text-zinc-400 font-bold text-[#FFD600]">Faturamento de Frete Empresa</span>
+              <p className="text-lg font-black text-[#FFD600] mt-1">R$ {commercialSummary.totalFreight.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Receita bruta operacional</span>
+            </div>
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-mono text-zinc-400">Concentração de Clientes</span>
+              <p className="text-xs font-bold text-gray-300 mt-2">
+                Top 1: {commercialSummary.topClients[0]?.[0] || 'Nenhum'} - R$ {(commercialSummary.topClients[0]?.[1] || 0).toLocaleString('pt-BR')}
+              </p>
+              <p className="text-[10px] text-zinc-500 font-mono mt-1">Total de contas ativas: {Object.keys(commercialSummary.topClients).length}</p>
+            </div>
+          </div>
+
+          <div className="bg-zinc-950/60 p-3.5 rounded-lg border border-zinc-900 flex items-center gap-3">
+            <Sparkles className="w-4 h-4 text-[#FFD600] shrink-0" />
+            <p className="text-xs text-zinc-400 leading-normal font-sans">
+              <strong>Painel Comercial Atualizado:</strong> Toda inclusão ou modificação de cargas altera estas projeções em tempo real. A exclusão de cargas está restrita aos Operadores para integridade comercial.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (role.toLowerCase().includes('financeiro') || name.toLowerCase() === 'petrônio') {
+      return (
+        <div className="bg-[#121212] border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+            <div className="flex items-center gap-2">
+              <Coins className="w-5 h-5 text-emerald-400" />
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white font-sans">Controle de Margem de Lucro & Repasses (Petrônio)</h3>
+                <p className="text-[10px] text-zinc-500 font-mono uppercase">Diferencial entre frete empresa faturado contra frete repassado ao motorista</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-emerald-950/40 text-emerald-400 ring-1 ring-emerald-500/20 rounded px-2 py-0.5 font-mono uppercase">FINANCEIRO</span>
+          </div>
+
+          {/* Key Finance Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900">
+              <span className="text-[10px] uppercase font-mono text-zinc-400">Faturamento Bruto</span>
+              <p className="text-lg font-black text-white mt-1">R$ {financeSummary.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900">
+              <span className="text-[10px] uppercase font-mono text-zinc-400">Total Pago a Terceiros</span>
+              <p className="text-lg font-black text-zinc-400 mt-1">R$ {financeSummary.expense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className="bg-zinc-950 p-4 rounded-xl border border-emerald-950">
+              <span className="text-[10px] uppercase font-mono text-emerald-400 font-bold">Margem Líquida</span>
+              <p className="text-lg font-black text-emerald-400 mt-1">R$ {financeSummary.profit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900">
+              <span className="text-[10px] uppercase font-mono text-zinc-400">Lucratividade Média</span>
+              <div className="flex items-center gap-1.5 mt-1">
+                <p className="text-lg font-black text-white">{financeSummary.marginPct.toFixed(1)}%</p>
+                {financeSummary.marginPct > 15 ? (
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 text-red-400" />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Ledger of Critical Low Margin Routes */}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-1.5 border-b border-zinc-900 pb-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-[#FFD600]" />
+              <span className="text-[10px] uppercase tracking-wider font-mono text-zinc-300 font-bold block">
+                Auditoria de Rotas Críticas ou Sem Margem Operacional ({financeSummary.criticalRoutes.length})
+              </span>
+            </div>
+
+            {financeSummary.criticalRoutes.length === 0 ? (
+              <p className="text-[11px] text-zinc-550 font-mono py-2">✅ Nenhuma rota com prejuízo operacional ou margem irregular identificada!</p>
+            ) : (
+              <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                {financeSummary.criticalRoutes.map(route => {
+                  const itemMargin = (route.frete_empresa || 0) - (route.frete_motorista || 0);
+                  return (
+                    <div key={route.id} className="p-2.5 rounded bg-zinc-900/40 border border-zinc-900 flex justify-between items-center text-xs">
+                      <div>
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-gray-200">{route.origem} ➔ {route.destino}</span>
+                          <span className="text-[9px] font-mono text-zinc-500">Mtr: {route.motorista}</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 mt-1">Empresa: <strong className="text-zinc-400 font-medium">R$ {route.frete_empresa}</strong> | Motorista: <strong className="text-zinc-400 font-medium font-mono">R$ {route.frete_motorista}</strong></p>
+                      </div>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-black ${itemMargin < 0 ? 'bg-red-950/40 text-red-400 border border-red-900/20' : 'bg-yellow-950/40 text-yellow-500 border border-yellow-900/20'}`}>
+                        {itemMargin < 0 ? `PREJUÍZO: R$ ${Math.abs(itemMargin)}` : `MARGEM ZERO`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (role.toLowerCase().includes('gerente') || name.toLowerCase() === 'genivaldo') {
+      return (
+        <div className="bg-[#121212] border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-yellow-500 animate-pulse" />
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">Central de Incidentes Gerenciais (Genivaldo)</h3>
+                <p className="text-[10px] text-zinc-500 font-mono uppercase">Foco em mitigar riscos operacionais, atrasos e veículos bloqueados na estrada</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-yellow-950/40 text-yellow-400 ring-1 ring-yellow-500/20 rounded px-2 py-0.5 font-mono uppercase">GERÊNCIA OPERACIONAL</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* Escalated list */}
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900 space-y-2">
+              <div className="flex justify-between items-center border-b border-zinc-900 pb-1.5">
+                <span className="text-[10.5px] uppercase font-mono font-bold text-[#FFD600]">Anomalias Críticas Ativas</span>
+                <span className="text-[9px] bg-red-950/30 text-red-400 px-1.5 rounded font-mono font-bold">{paradasEscalated.length} Alertas</span>
+              </div>
+
+              {paradasEscalated.length === 0 ? (
+                <div className="p-6 text-center text-zinc-500 font-mono text-[11px]">✅ Nenhuma anomalia crítica relatada! Estrada sob controle perfeito.</div>
+              ) : (
+                <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                  {paradasEscalated.map(es => (
+                    <div key={es.id} className="p-2 bg-[#121212] rounded border border-zinc-900 text-xs">
+                      <div className="flex justify-between items-start gap-1">
+                        <strong className="text-gray-300 block">{es.motorista}</strong>
+                        <span className="bg-red-950/30 text-red-500 font-mono px-1 py-0.2 rounded text-[8px] font-bold uppercase">Escalado</span>
+                      </div>
+                      <p className="text-[10px] text-zinc-400 mt-1">Rota: {es.origem} ➔ {es.destino}</p>
+                      {es.observacoes && (
+                        <p className="text-[10.5px] italic text-zinc-500 mt-1 bg-zinc-950 p-1.5 rounded border border-dashed border-zinc-900">"{es.observacoes}"</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Support Protocols Checklist */}
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900 space-y-3 flex flex-col justify-between">
+              <div>
+                <span className="text-[10.5px] uppercase font-mono font-bold text-gray-400 block border-b border-zinc-900 pb-1.5">Ações Rápidas de Resolução</span>
+                <p className="text-[11px] text-zinc-400 mt-2 font-sans leading-normal">
+                  Como Gerente, você carrega autonomia para coordenar frentes de contingência de seguros se algum veículo permanecer parado por mais de 3 horas. Use o Agente Rodovar para disparar avisos integrados.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (window.falarRodovar) {
+                    window.falarRodovar("Entendido, Gerente Genivaldo. Rodando análise de rota de suporte rápida para disparar ações de contingência.");
+                  }
+                }}
+                className="w-full py-2 bg-zinc-900 hover:bg-[#FFD600] border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-black rounded text-[10px] font-mono font-bold uppercase transition"
+              >
+                Disparar Alinhamento Geral
+              </button>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    if (role.toLowerCase().includes('operações') || role.toLowerCase().includes('operacoes') || name.toLowerCase() === 'vitor') {
+      return (
+        <div className="bg-[#121212] border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-indigo-400" />
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">SLA Logístico & Dispersão de Viagem (Vitor)</h3>
+                <p className="text-[10px] text-zinc-500 font-mono uppercase">Indicizadores táticos de rota ativa, velocidade operacional e transit conformance</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-indigo-950/40 text-indigo-400 ring-1 ring-indigo-500/20 rounded px-2 py-0.5 font-mono uppercase">DIRETORIA OPERACIONAL</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-sans">
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900">
+              <span className="text-[10px] font-mono uppercase text-zinc-500">Transit SLA Conformance</span>
+              <p className="text-xl font-black text-white mt-1">96.8%</p>
+              <div className="w-full bg-zinc-900 rounded-full h-1 mt-2">
+                <div className="bg-emerald-500 h-1 rounded-full" style={{ width: '96.8%' }} />
+              </div>
+            </div>
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900">
+              <span className="text-[10px] font-mono uppercase text-zinc-500">Rastreabilidade Integrada</span>
+              <p className="text-xl font-black text-[#FFD600] mt-1">
+                {entregas.length > 0 ? ((entregas.filter(e => e.link_localizacao).length / entregas.length) * 100).toFixed(0) : '0'}%
+              </p>
+              <div className="w-full bg-zinc-900 rounded-full h-1 mt-2">
+                <div className="bg-[#FFD600] h-1 rounded-full" style={{ width: `${entregas.length > 0 ? (entregas.filter(e => e.link_localizacao).length / entregas.length) * 100 : 0}%` }} />
+              </div>
+            </div>
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900">
+              <span className="text-[10px] font-mono uppercase text-zinc-500">Cargas em Carregamento Inicial</span>
+              <p className="text-xl font-black text-indigo-400 mt-1">{entregas.filter(e => e.status === 'coletando').length} Cargas</p>
+              <span className="text-[9px] text-zinc-550 block font-mono mt-2">Fase de Coleta</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default Operador dashboard
+    return (
+      <div className="bg-[#121212] border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
+        <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+          <div className="flex items-center gap-2">
+            <Info className="w-5 h-5 text-[#FFD600]" />
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-white">Fila de Atividades de WhatsApp (Jairo)</h3>
+              <p className="text-[10px] text-zinc-500 font-mono uppercase">Sequência recomendada de checagem de motoristas ativos no sistema</p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-zinc-900 border border-zinc-800 text-zinc-400 rounded px-2 py-0.5 font-mono uppercase">PAINEL OPERADOR</span>
+        </div>
+
+        <p className="text-xs text-zinc-400 font-sans leading-normal m-0 select-none">
+          Olá, <strong>{name}</strong>! Como operador, você possui liberdade irrestrita para cadastrar, editar, excluir e configurar trajetos de mapa. Seu microfone de comando está pronto para receber auditoria.
+        </p>
+
+        <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-900 text-[11px] font-mono text-[#FFD600]/80">
+          📍 DICA DE VOZ: Fale <strong>"onde está [Nome do Motorista]?"</strong> para o Agente Rodovar abrir o formulário ou ler os dados dele!
+        </div>
+      </div>
+    );
   };
 
   const handleTriggerWhatsAppDirect = (phone: string, text: string) => {
@@ -501,6 +832,11 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
 
           </div>
         </div>
+      </div>
+
+      {/* Role-Specific Custom Board */}
+      <div className="mt-2 text-left">
+        {renderRoleSpecificBoard()}
       </div>
     </div>
   );

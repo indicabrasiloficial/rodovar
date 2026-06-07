@@ -23,56 +23,54 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       return;
     }
 
-    // Load custom passwords list
-    const defaults: Record<string, string> = {
-      'jairobahia': 'Danone01',
-      'genivaldo': 'rodovar2026',
-      'alexandre': 'rodovar2026',
-      'vitor': 'rodovar2026',
-      'petronio': 'rodovar2026',
-      'petrônio': 'rodovar2026'
-    };
-    
-    let currentPasswords = defaults;
-    const stored = localStorage.getItem('rodovar_user_passwords_v2');
-    if (stored) {
+    // Load custom registered employees
+    const DEFAULT_EMPLOYEES_LOCAL = [
+      { name: 'Jairo Bahia', username: 'jairobahia', role: 'Operador', passwordHash: 'Danone01' },
+      { name: 'Genivaldo', username: 'genivaldo', role: 'Gerente', passwordHash: 'rodovar2026' },
+      { name: 'Alexandre', username: 'alexandre', role: 'Diretor Comercial', passwordHash: 'rodovar2026' },
+      { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
+      { name: 'Petrônio', username: 'petronio', role: 'Financeiro', passwordHash: 'rodovar2026' }
+    ];
+
+    let currentEmployees = DEFAULT_EMPLOYEES_LOCAL;
+    const storedEmployees = localStorage.getItem('rodovar_registered_employees_v2');
+    if (storedEmployees) {
       try {
-        currentPasswords = { ...defaults, ...JSON.parse(stored) };
+        currentEmployees = JSON.parse(storedEmployees);
       } catch {
-        currentPasswords = defaults;
+        currentEmployees = DEFAULT_EMPLOYEES_LOCAL;
       }
     }
 
-    const isValidUser = Object.prototype.hasOwnProperty.call(currentPasswords, cleanUser);
-    const correctPass = currentPasswords[cleanUser];
-
-    if (isValidUser && correctPass === cleanPass) {
-      let displayName = 'Operador';
-      let role = 'Operador Rodovar';
-
-      if (cleanUser === 'jairobahia') {
-        displayName = 'Jairo Bahia';
-        role = 'Operador Rodovar';
-      } else if (cleanUser === 'genivaldo') {
-        displayName = 'Genivaldo';
-        role = 'Gerente Genivaldo';
-      } else if (cleanUser === 'alexandre') {
-        displayName = 'Alexandre';
-        role = 'Diretor comercial';
-      } else if (cleanUser === 'vitor') {
-        displayName = 'Vitor';
-        role = 'Diretor de Operações';
-      } else if (cleanUser === 'petronio' || cleanUser === 'petrônio') {
-        displayName = 'Petrônio';
-        role = 'Financeiro';
+    // Support handle for 'petrônio' accent variation typing
+    const queryUser = cleanUser === 'petrônio' ? 'petronio' : cleanUser;
+    
+    // Direct Master profile validation
+    if (queryUser === 'master') {
+      if (cleanPass === 'txhfpb6xcj') {
+        const sessionData = {
+          username: 'master',
+          displayName: 'Administrador Master',
+          role: 'Master'
+        };
+        localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
+        onLoginSuccess(sessionData);
+        return;
+      } else {
+        setError('Usuário ou senha incorretos.');
+        return;
       }
-      
-      const sessionData = {
-        username: cleanUser,
-        displayName,
-        role
-      };
+    }
+    
+    const matchedEmployee = currentEmployees.find(emp => emp.username === queryUser);
 
+    if (matchedEmployee && matchedEmployee.passwordHash === cleanPass) {
+      const sessionData = {
+        username: matchedEmployee.username,
+        displayName: matchedEmployee.name,
+        role: matchedEmployee.role
+      };
+      
       localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
       onLoginSuccess(sessionData);
     } else {
