@@ -442,6 +442,7 @@ export default function DeliveryList({
 
   // Scrolling & Virtualization viewport hooks
   const containerRef = useRef<HTMLDivElement>(null);
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
 
@@ -522,17 +523,19 @@ export default function DeliveryList({
 
   // Virtualization slicing parameters for extreme performance with zero overhead
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-  const rowHeight = isMobile ? 190 : 76; 
+  const rowHeight = isMobile ? 260 : 76; 
   const totalItems = loadedEntregas.length;
 
   // Track coordinates of container relative to page top dynamically
   const [offsetTop, setOffsetTop] = useState(0);
   useEffect(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      setOffsetTop(rect.top + window.scrollY);
+    const activeRef = isMobile ? containerRef : tbodyRef;
+    if (activeRef.current) {
+      const rect = activeRef.current.getBoundingClientRect();
+      const documentOffset = rect.top + window.scrollY;
+      setOffsetTop(documentOffset);
     }
-  }, [loadedEntregas.length, scrollTop]);
+  }, [loadedEntregas, isMobile, viewportHeight]);
 
   const relativeScrollTop = Math.max(0, scrollTop - offsetTop);
   
@@ -1221,7 +1224,7 @@ export default function DeliveryList({
                     <th className="py-3 px-4 text-right">Ação</th>
                   </tr>
                 </thead>
-                <tbody ref={containerRef} className="divide-y divide-zinc-900 font-sans relative">
+                <tbody ref={tbodyRef} className="divide-y divide-zinc-900 font-sans relative">
                   {topSpacerHeight > 0 && (
                     <tr style={{ height: topSpacerHeight }}>
                       <td colSpan={9} style={{ height: topSpacerHeight, padding: 0, border: 'none' }} />
