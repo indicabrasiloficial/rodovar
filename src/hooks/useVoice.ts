@@ -228,7 +228,7 @@ export function useVoice(
         let friendlyMessage = `Erro de voz: ${event.error || 'Não reconhecido'}`;
         
         if (event.error === 'not-allowed') {
-          friendlyMessage = 'Permissão ao microfone negada. Clique no ícone de cadeado na barra de endereços do seu navegador, permita o microfone e recarregue, ou abra o aplicativo em uma nova aba para poder interagir por voz.';
+          friendlyMessage = 'Microfone restrito pelo visualizador integrado. Navegadores bloqueiam reconhecimento de voz dentro de iframes. Clicando no botão "Abrir aplicativo" (ícone com seta saindo da página) no topo direito para interagir diretamente pelo site original!';
         } else if (event.error === 'no-speech') {
           friendlyMessage = 'Nenhuma fala detectada. Tente falar novamente em um ambiente mais silencioso ou ajuste o microfone.';
         } else if (event.error === 'network') {
