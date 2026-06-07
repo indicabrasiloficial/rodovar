@@ -29,6 +29,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       { name: 'Genivaldo', username: 'genivaldo', role: 'Gerente', passwordHash: 'rodovar2026' },
       { name: 'Alexandre', username: 'alexandre', role: 'Diretor Comercial', passwordHash: 'rodovar2026' },
       { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
+      { name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
       { name: 'Petrônio', username: 'petronio', role: 'Financeiro', passwordHash: 'rodovar2026' }
     ];
 
@@ -37,6 +38,10 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     if (storedEmployees) {
       try {
         currentEmployees = JSON.parse(storedEmployees);
+        // Ensure Ricardo exists in loaded custom employees as well
+        if (!currentEmployees.some((emp: any) => emp.username === 'ricardo')) {
+          currentEmployees.push({ name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações', passwordHash: 'rodovar2026' });
+        }
       } catch {
         currentEmployees = DEFAULT_EMPLOYEES_LOCAL;
       }

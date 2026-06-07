@@ -361,6 +361,8 @@ export default function App() {
               greeting = `Olá, Diretor Alexandre! Painel de faturamento e carteira comercial ativo. Deseja analisar o valor total das cargas monitoradas no sistema?`;
             } else if (lowerUser === 'petronio' || lowerRole.includes('financeiro')) {
               greeting = `Olá, Petrônio! Painel financeiro carregado com sucesso. Como estão as conciliações de frete e aprovação de repasses hoje?`;
+            } else if (lowerUser === 'ricardo') {
+              greeting = `Olá, Diretor Ricardo! Painel operacional carregado com sucesso. Como estão o monitoramento de rotas e o desempenho de entrega do sistema Rodovar hoje?`;
             } else if (lowerUser === 'vitor' || lowerRole.includes('operações') || lowerRole.includes('operacoes')) {
               greeting = `Olá, Diretor Vitor! Painel geral carregado. O índice de pontualidade operacional e monitoramento geográfico segue cem por cento atualizado.`;
             }

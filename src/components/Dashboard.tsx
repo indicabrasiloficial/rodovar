@@ -408,14 +408,14 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
       );
     }
 
-    if (role.toLowerCase().includes('operações') || role.toLowerCase().includes('operacoes') || name.toLowerCase() === 'vitor') {
+    if (role.toLowerCase().includes('operações') || role.toLowerCase().includes('operacoes') || name.toLowerCase() === 'vitor' || name.toLowerCase() === 'ricardo') {
       return (
         <div className="bg-[#121212] border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl animate-fade-in">
           <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
             <div className="flex items-center gap-2">
               <Layers className="w-5 h-5 text-indigo-400" />
               <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-white">SLA Logístico & Dispersão de Viagem (Vitor)</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">SLA Logístico & Dispersão de Viagem ({name})</h3>
                 <p className="text-[10px] text-zinc-500 font-mono uppercase">Indicizadores táticos de rota ativa, velocidade operacional e transit conformance</p>
               </div>
             </div>

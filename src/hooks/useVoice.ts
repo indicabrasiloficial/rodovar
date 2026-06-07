@@ -384,6 +384,12 @@ export function useVoice(
             diagnostic += `Se a viagem de ${paradas[0].motorista} atrasar, podemos ter cobranças adicionais de diárias. `;
           }
           diagnostic += `Deseja monitorar os repasses ou prefere que eu auxilie na cobrança desses recibos?`;
+        } else if (rName.toLowerCase().includes('ricardo')) {
+          diagnostic += `Diretor de operações Ricardo, monitoramento logístico tático ativo! Temos ${coletando.length} coletas em andamento, ${entregas.filter(e => e.status === 'em_transito').length} em trânsito e ${paradas.length} paradas críticas. `;
+          if (paradas.length > 0) {
+            diagnostic += `Temos também ${semLocalizacao.length} veículos em trânsito sem rastreamento de mapa ativo, o que prejudica nosso SLA de operações da Rodovar. `;
+          }
+          diagnostic += `Gostaria de rodar uma varredura geral para regularizar estes trajetos agora?`;
         } else if (rRole.includes('operações') || rRole.includes('operacoes') || rName.toLowerCase() === 'vitor') {
           diagnostic += `Diretor de operações Vitor, monitoramento logístico tático ativo! Temos ${coletando.length} coletas em andamento, ${entregas.filter(e => e.status === 'em_transito').length} em trânsito e ${paradas.length} paradas críticas. `;
           if (paradas.length > 0) {

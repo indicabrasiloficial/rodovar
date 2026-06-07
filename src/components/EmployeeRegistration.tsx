@@ -16,6 +16,7 @@ const DEFAULT_PASSWORDS: Record<string, string> = {
   'genivaldo': 'rodovar2026',
   'alexandre': 'rodovar2026',
   'vitor': 'rodovar2026',
+  'ricardo': 'rodovar2026',
   'petronio': 'rodovar2026',
   'petrônio': 'rodovar2026'
 };
@@ -54,6 +55,14 @@ const DEFAULT_EMPLOYEES: Employee[] = [
     created_at: '2026-01-01'
   },
   {
+    id: 'emp-ricardo',
+    name: 'Ricardo',
+    username: 'ricardo',
+    role: 'Diretor de Operações',
+    passwordHash: 'rodovar2026',
+    created_at: '2026-01-01'
+  },
+  {
     id: 'emp-petronio',
     name: 'Petrônio',
     username: 'petronio',
@@ -65,14 +74,29 @@ const DEFAULT_EMPLOYEES: Employee[] = [
 
 export function getRegisteredEmployees(): Employee[] {
   const stored = localStorage.getItem('rodovar_registered_employees_v2');
-  let list = DEFAULT_EMPLOYEES;
+  let list = [...DEFAULT_EMPLOYEES];
   if (stored) {
     try {
       list = JSON.parse(stored);
     } catch {
-      list = DEFAULT_EMPLOYEES;
+      list = [...DEFAULT_EMPLOYEES];
     }
   }
+
+  // Guarantee Ricardo is present (Diretor de Operações)
+  const hasRicardo = list.some(emp => emp.username === 'ricardo');
+  if (!hasRicardo) {
+    list.push({
+      id: 'emp-ricardo',
+      name: 'Ricardo',
+      username: 'ricardo',
+      role: 'Diretor de Operações',
+      passwordHash: 'rodovar2026',
+      created_at: '2026-01-01'
+    });
+    localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
+  }
+
   // Guarantee master user is always filtered out and never listed
   return list.filter(emp => emp.username !== 'master');
 }
