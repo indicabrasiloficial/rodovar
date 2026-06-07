@@ -174,6 +174,12 @@ export function useVoice(
   });
 
   const recognitionRef = useRef<any>(null);
+  const processSpeechRef = useRef<(text: string) => void>();
+
+  // Keep the ref updated with the latest processSpeech closure
+  useEffect(() => {
+    processSpeechRef.current = processSpeech;
+  });
 
   useEffect(() => {
     // Check if SpeechRecognition is supported
@@ -214,7 +220,9 @@ export function useVoice(
       recognition.onresult = (event: any) => {
         const text = event.results[0][0].transcript;
         setState((prev) => ({ ...prev, transcript: text }));
-        processSpeech(text);
+        if (processSpeechRef.current) {
+          processSpeechRef.current(text);
+        }
       };
 
       recognitionRef.current = recognition;
@@ -282,170 +290,212 @@ export function useVoice(
 
   // Process the text input (works for typed prompts as well!)
   const processSpeech = (text: string) => {
-    const query = text.toLowerCase().trim();
-    const entregas = getEntregas();
+    try {
+      const query = text.toLowerCase().trim();
+      const entregas = getEntregas();
 
-    // Check if replying to the pending prompt
-    if (state.showConfirmPrompt) {
-      if (query === 'sim' || query.includes('quero') || query.includes('abrir') || query.includes('pode')) {
-        confirmPendingAction(true);
-        return;
-      } else if (query === 'não' || query === 'nao' || query.includes('cancelar')) {
-        confirmPendingAction(false);
-        return;
-      }
-    }
-
-    // 1. Proactive Fleet Analysis / "Agente Rodovar" audit command
-    if (
-      query.includes('analisar') || 
-      query.includes('análise') || 
-      query.includes('analise') || 
-      query.includes('auditoria') || 
-      query.includes('rodovar') || 
-      query.includes('tempo') || 
-      query.includes('relatório') ||
-      query.includes('alerta')
-    ) {
-      const paradas = entregas.filter(e => e.status === 'parado');
-      const semLocalizacao = entregas.filter(e => e.status === 'em_transito' && !e.link_localizacao);
-      const coletando = entregas.filter(e => e.status === 'coletando');
-
-      let diagnostic = `Fala, ${getActiveUserName()}! Rodovar na escuta. Analisei a frota ativa agora. `;
-
-      if (paradas.length === 0 && semLocalizacao.length === 0) {
-        diagnostic += 'Tudo rodando liso na rota ou entregue com sucesso! Nenhuma pendência crítica.';
-      } else {
-        diagnostic += 'Achei só uns detalhes na rodovia. ';
-        if (paradas.length > 0) {
-          const mNames = paradas.map(p => p.motorista).join(' e ');
-          diagnostic += `O motorista ${mNames} tá parado na estrada. Precisa pedir localização. `;
+      // Check if replying to the pending prompt
+      if (state.showConfirmPrompt) {
+        if (query === 'sim' || query.includes('quero') || query.includes('abrir') || query.includes('pode')) {
+          confirmPendingAction(true);
+          return;
+        } else if (query === 'não' || query === 'nao' || query.includes('cancelar')) {
+          confirmPendingAction(false);
+          return;
         }
-        if (semLocalizacao.length > 0) {
-          const slNames = semLocalizacao.map(p => p.motorista).join(' e ');
-          diagnostic += `Temos também a viagem de ${slNames} em trânsito sem rastreamento de mapa ativo. `;
-        }
-        diagnostic += 'Quer que eu abra o zap dele para cobrar?';
       }
 
-      // If we have any parados, set them as pending confirmation to help speed up Jairo's workflow
-      const firstTarget = paradas[0] || semLocalizacao[0] || coletando[0];
-      if (firstTarget) {
-        setState(prev => ({
+      // 0. Generic trigger for searching without details so we guide the user instead of doing empty searches
+      if (
+        query === 'buscar carga' ||
+        query === 'busca por carga' ||
+        query === 'busca de carga' ||
+        query === 'buscar' ||
+        query === 'pesquisar carga' ||
+        query === 'procurar carga' ||
+        query === 'filtrar carga' ||
+        query === 'filtrar cargas' ||
+        query === 'onde está a carga' ||
+        query === 'onde esta a carga' ||
+        query === 'onde estão as cargas' ||
+        query === 'cargas' ||
+        query === 'carga'
+      ) {
+        speak(`Qual carga você deseja buscar, ${getActiveUserName()}? Pode me dizer o nome do motorista ou a cidade de destino.`);
+        return;
+      }
+
+      // 1. Proactive Fleet Analysis / "Agente Rodovar" audit command
+      if (
+        query.includes('analisar') || 
+        query.includes('análise') || 
+        query.includes('analise') || 
+        query.includes('auditoria') || 
+        query.includes('rodovar') || 
+        query.includes('tempo') || 
+        query.includes('relatório') ||
+        query.includes('alerta')
+      ) {
+        const paradas = entregas.filter(e => e.status === 'parado');
+        const semLocalizacao = entregas.filter(e => e.status === 'em_transito' && !e.link_localizacao);
+        const coletando = entregas.filter(e => e.status === 'coletando');
+
+        let diagnostic = `Fala, ${getActiveUserName()}! Rodovar na escuta. Analisei a frota ativa agora. `;
+
+        if (paradas.length === 0 && semLocalizacao.length === 0) {
+          diagnostic += 'Tudo rodando liso na rota ou entregue com sucesso! Nenhuma pendência crítica.';
+        } else {
+          diagnostic += 'Achei só uns detalhes na rodovia. ';
+          if (paradas.length > 0) {
+            const mNames = paradas.map(p => p.motorista || 'Sem Name').join(' e ');
+            diagnostic += `O motorista ${mNames} tá parado na estrada. Precisa pedir localização. `;
+          }
+          if (semLocalizacao.length > 0) {
+            const slNames = semLocalizacao.map(p => p.motorista || 'Sem Name').join(' e ');
+            diagnostic += `Temos também a viagem de ${slNames} em trânsito sem rastreamento de mapa ativo. `;
+          }
+          diagnostic += 'Quer que eu abra o zap dele para cobrar?';
+        }
+
+        // If we have any parados, set them as pending confirmation to help speed up user's workflow
+        const firstTarget = paradas[0] || semLocalizacao[0] || coletando[0];
+        if (firstTarget) {
+          setState(prev => ({
+            ...prev,
+            showConfirmPrompt: true,
+            pendingActionDeliveryId: firstTarget.id,
+            pendingActionType: 'motorista'
+          }));
+        }
+
+        speak(diagnostic);
+        return;
+      }
+
+      // 2. "Mostre as cargas paradas" / "cargas em transito" / "coletando"
+      if (query.includes('parada') || query.includes('parado') || query.includes('parados')) {
+        onFilterStatus('parado');
+        onSearchQuery('');
+        const count = entregas.filter((e) => e.status === 'parado').length;
+        const resp = `Na tela, ${getActiveUserName()}! Filtrei aqui, são ${count} ${count === 1 ? 'carga parada' : 'cargas paradas atualmente'}.`;
+        speak(resp);
+        return;
+      }
+
+      if (query.includes('trânsito') || query.includes('transito') || query.includes('viajando')) {
+        onFilterStatus('em_transito');
+        onSearchQuery('');
+        const count = entregas.filter((e) => e.status === 'em_transito').length;
+        const resp = `Prontinho, ${getActiveUserName()}! Temos ${count} ${count === 1 ? 'carga acelerando' : 'cargas ativas em trânsito'} agora.`;
+        speak(resp);
+        return;
+      }
+
+      if (query.includes('coletando') || query.includes('coleta')) {
+        onFilterStatus('coletando');
+        onSearchQuery('');
+        const count = entregas.filter((e) => e.status === 'coletando').length;
+        const resp = `Fala, ${getActiveUserName()}. Temos ${count} ${count === 1 ? 'carga carregando' : 'cargas em fase de coleta'} agora.`;
+        speak(resp);
+        return;
+      }
+
+      if (query.includes('entregue') || query.includes('entregues') || query.includes('concluída') || query.includes('concluidas')) {
+        onFilterStatus('entregue');
+        onSearchQuery('');
+        const count = entregas.filter((e) => e.status === 'entregue').length;
+        const resp = `Show de bola! Temos ${count} ${count === 1 ? 'carga entregue com sucesso' : 'entregas concluídas'}!`;
+        speak(resp);
+        return;
+      }
+
+      if (query.includes('todas') || query.includes('limpar') || query.includes('todos')) {
+        onFilterStatus('all');
+        onSearchQuery('');
+        speak(`Feito, ${getActiveUserName()}! Painel com o total das ${entregas.length} cargas limpo.`);
+        return;
+      }
+
+      // 3. Search by Driver or Destination
+      // Look for matching driver or destination, safely handling undefined properties
+      let bestMatch: Entrega | null = null;
+      let matchType: 'motorista' | 'destino' | 'cliente' = 'motorista';
+
+      for (const e of entregas) {
+        const motName = (e.motorista || '').toLowerCase();
+        const destName = (e.destino || '').toLowerCase();
+        const cliName = (e.cliente || '').toLowerCase();
+
+        if (motName && (query.includes(motName) || motName.split(' ').some((word) => word.length > 2 && query.includes(word)))) {
+          bestMatch = e;
+          matchType = 'motorista';
+          break;
+        }
+        if (destName && (query.includes(destName) || destName.split('-')[0].toLowerCase().split(' ').some((word) => word.length > 2 && query.includes(word)))) {
+          bestMatch = e;
+          matchType = 'destino';
+          break;
+        }
+        if (cliName && (query.includes(cliName) || cliName.split(' ').some((word) => word.length > 2 && query.includes(word)))) {
+          bestMatch = e;
+          matchType = 'cliente';
+          break;
+        }
+      }
+
+      if (bestMatch) {
+        onSelectDelivery(bestMatch.id);
+        
+        const statusLabel =
+          bestMatch.status === 'em_transito'
+            ? 'está em trânsito acelerando'
+            : bestMatch.status === 'coletando'
+            ? 'está carregando agora'
+            : bestMatch.status === 'parado'
+            ? 'está parada no momento'
+            : 'já foi entregue';
+
+        const destValue = bestMatch.destino || 'destino desconhecido';
+        const motValue = bestMatch.motorista || 'Motorista';
+        const origValue = bestMatch.origem || 'origem desconhecida';
+        const prazoValue = bestMatch.prazo || 'prazo indefinido';
+
+        const resp = `Achei aqui, ${getActiveUserName()}! A viagem do ${motValue} com destino a ${destValue} ${statusLabel}. Saiu de ${origValue} com prazo de chegada para ${prazoValue}. Deseja abrir o WhatsApp dele?`;
+
+        setState((prev) => ({
           ...prev,
           showConfirmPrompt: true,
-          pendingActionDeliveryId: firstTarget.id,
-          pendingActionType: 'motorista'
+          pendingActionDeliveryId: bestMatch?.id,
+          pendingActionType: 'motorista',
         }));
-      }
 
-      speak(diagnostic);
-      return;
-    }
-
-    // 2. "Mostre as cargas paradas" / "cargas em transito" / "coletando"
-    if (query.includes('parada') || query.includes('parado') || query.includes('parados')) {
-      onFilterStatus('parado');
-      onSearchQuery('');
-      const count = entregas.filter((e) => e.status === 'parado').length;
-      const resp = `Na tela, ${getActiveUserName()}! Filtrei aqui, são ${count} ${count === 1 ? 'carga parada' : 'cargas paradas atualmente'}.`;
-      speak(resp);
-      return;
-    }
-
-    if (query.includes('trânsito') || query.includes('transito') || query.includes('viajando')) {
-      onFilterStatus('em_transito');
-      onSearchQuery('');
-      const count = entregas.filter((e) => e.status === 'em_transito').length;
-      const resp = `Prontinho, ${getActiveUserName()}! Temos ${count} ${count === 1 ? 'carga acelerando' : 'cargas ativas em trânsito'} agora.`;
-      speak(resp);
-      return;
-    }
-
-    if (query.includes('coletando') || query.includes('coleta')) {
-      onFilterStatus('coletando');
-      onSearchQuery('');
-      const count = entregas.filter((e) => e.status === 'coletando').length;
-      const resp = `Fala, ${getActiveUserName()}. Temos ${count} ${count === 1 ? 'carga carregando' : 'cargas em fase de coleta'} agora.`;
-      speak(resp);
-      return;
-    }
-
-    if (query.includes('entregue') || query.includes('entregues') || query.includes('concluída') || query.includes('concluidas')) {
-      onFilterStatus('entregue');
-      onSearchQuery('');
-      const count = entregas.filter((e) => e.status === 'entregue').length;
-      const resp = `Show de bola! Temos ${count} ${count === 1 ? 'carga entregue com sucesso' : 'entregas concluídas'}!`;
-      speak(resp);
-      return;
-    }
-
-    if (query.includes('todas') || query.includes('limpar') || query.includes('todos')) {
-      onFilterStatus('all');
-      onSearchQuery('');
-      speak(`Feito, ${getActiveUserName()}! Painel com o total das ${entregas.length} cargas limpo.`);
-      return;
-    }
-
-    // 3. Search by Driver or Destination
-    // Look for matching driver or destination
-    let bestMatch: Entrega | null = null;
-    let matchType: 'motorista' | 'destino' | 'cliente' = 'motorista';
-
-    for (const e of entregas) {
-      const motName = e.motorista.toLowerCase();
-      const destName = e.destino.toLowerCase();
-      const cliName = e.cliente.toLowerCase();
-
-      if (query.includes(motName) || motName.split(' ').some((word) => word.length > 2 && query.includes(word))) {
-        bestMatch = e;
-        matchType = 'motorista';
-        break;
-      }
-      if (query.includes(destName) || destName.split('-')[0].toLowerCase().split(' ').some((word) => word.length > 2 && query.includes(word))) {
-        bestMatch = e;
-        matchType = 'destino';
-        break;
-      }
-      if (query.includes(cliName) || cliName.split(' ').some((word) => word.length > 2 && query.includes(word))) {
-        bestMatch = e;
-        matchType = 'cliente';
-        break;
-      }
-    }
-
-    if (bestMatch) {
-      onSelectDelivery(bestMatch.id);
-      
-      const statusLabel =
-        bestMatch.status === 'em_transito'
-          ? 'está em trânsito acelerando'
-          : bestMatch.status === 'coletando'
-          ? 'está carregando agora'
-          : bestMatch.status === 'parado'
-          ? 'está parada no momento'
-          : 'já foi entregue';
-
-      const resp = `Achei aqui, ${getActiveUserName()}! A viagem do ${bestMatch.motorista} com destino a ${bestMatch.destino} ${statusLabel}. Saiu de ${bestMatch.origem} com prazo de chegada para ${bestMatch.prazo}. Deseja abrir o WhatsApp dele?`;
-
-      setState((prev) => ({
-        ...prev,
-        showConfirmPrompt: true,
-        pendingActionDeliveryId: bestMatch?.id,
-        pendingActionType: 'motorista',
-      }));
-
-      speak(resp);
-    } else {
-      // General fallbacks
-      const matchedSearchWords = query.replace('onde está', '').replace('cade', '').replace('buscar', '').trim();
-      if (matchedSearchWords.length > 2) {
-        onSearchQuery(matchedSearchWords);
-        onFilterStatus('all');
-        speak(`${getActiveUserName()}, não achei exato para "${matchedSearchWords}", mas ordenei a aproximação na tela.`);
+        speak(resp);
       } else {
-        speak(`Não entendi bem, ${getActiveUserName()}. Me peça para analisar a frota, filtrar cargas paradas ou buscar motorista.`);
+        // General fallbacks
+        const matchedSearchWords = query
+          .replace('onde está', '')
+          .replace('onde esta', '')
+          .replace('cade', '')
+          .replace('buscar', '')
+          .replace('busca por', '')
+          .replace('busca de', '')
+          .replace('procurar', '')
+          .replace('carga de', '')
+          .replace('carga do', '')
+          .replace('carga da', '')
+          .trim();
+
+        if (matchedSearchWords.length > 2) {
+          onSearchQuery(matchedSearchWords);
+          onFilterStatus('all');
+          speak(`${getActiveUserName()}, não achei exato para "${matchedSearchWords}", mas ordenei a aproximação na tela.`);
+        } else {
+          speak(`Não entendi bem, ${getActiveUserName()}. Me peça para analisar a frota, filtrar cargas paradas ou buscar por nome de motorista ou cidade.`);
+        }
       }
+    } catch (error) {
+      console.error('Error during voice command processing:', error);
+      speak(`Opa, ${getActiveUserName()}! Desculpe, tive uma falha técnica ao processar o áudio. Tente novamente.`);
     }
   };
 
