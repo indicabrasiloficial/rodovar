@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { getEntregas, deleteEntrega, subscribeToRealtime, saveEntrega } from './db/storage';
 import { auth } from './db/firebase';
 import { Entrega } from './types';
@@ -198,6 +198,61 @@ export default function App() {
     }
   );
 
+  // Greeting trigger on login with automatic voice listening activation
+  const hasGreetedRef = useRef<string | null>(null);
+  const voiceSpeakRef = useRef<any>(null);
+  const voiceStartRef = useRef<any>(null);
+  const voiceSetCtxRef = useRef<any>(null);
+
+  // Keep references to voice helper methods up-to-date in refs
+  useEffect(() => {
+    voiceSpeakRef.current = voice?.speak;
+    voiceStartRef.current = voice?.startListening;
+    voiceSetCtxRef.current = voice?.setContext;
+  });
+
+  const activeUserId = user?.username || '';
+
+  useEffect(() => {
+    if (activeUserId && hasGreetedRef.current !== activeUserId) {
+      hasGreetedRef.current = activeUserId;
+      
+      let greeting = `Seja bem vindo ao sistema Rodovar Monitora, ${user?.displayName || 'colaborador'}! Painel ativado.`;
+      const lowerRole = (user?.role || '').toLowerCase();
+      const lowerUser = activeUserId.toLowerCase();
+      
+      if (lowerUser === 'master') {
+        greeting = `Olá, Administrador Mestre! O sistema Rodovar está totalmente liberado. O painel de controle e cadastro de funcionários foi desbloqueado com segurança.`;
+      } else if (lowerUser === 'jairobahia' || lowerRole.includes('operador')) {
+        greeting = `Seja bem vindo ao sistema Rodovar Monitora, Jairo Bahia! Painel de controle operacional ativo. Como estão as coletas e os envios de WhatsApp hoje?`;
+      } else if (lowerUser === 'genivaldo' || lowerRole.includes('gerente')) {
+        greeting = `Olá, Gerente Genivaldo! O painel gerencial da Rodovar está pronto. Notei alguns veículos parados na rota, deseja iniciar uma varredura?`;
+      } else if (lowerUser === 'alexandre' || lowerRole.includes('comercial')) {
+        greeting = `Olá, Diretor Alexandre! Painel de faturamento e carteira comercial ativo. Deseja analisar o valor total das cargas monitoradas no sistema?`;
+      } else if (lowerUser === 'petronio' || lowerRole.includes('financeiro')) {
+        greeting = `Olá, Petrônio! Painel financeiro carregado com sucesso. Como estão as conciliações de frete e aprovação de repasses hoje?`;
+      } else if (lowerUser === 'ricardo') {
+        greeting = `Olá, Diretor Ricardo! Painel operacional carregado com sucesso. Como estão o monitoramento de rotas e o desempenho de entrega do sistema Rodovar hoje?`;
+      } else if (lowerUser === 'vitor' || lowerRole.includes('operações') || lowerRole.includes('operacoes')) {
+        greeting = `Olá, Diretor Vitor! Painel geral carregado. O índice de pontualidade operacional e monitoramento geográfico segue cem por cento atualizado.`;
+      }
+
+      setTimeout(() => {
+        if (voiceSpeakRef.current && voiceSetCtxRef.current) {
+          // Set context to 'greeting' before speaking so the response is listened to under the greeting flow
+          voiceSetCtxRef.current('greeting');
+          voiceSpeakRef.current(greeting, () => {
+            if (voiceStartRef.current) {
+              voiceStartRef.current();
+            }
+          });
+        }
+      }, 1200); // Soft layout breathing space
+    } else if (!activeUserId) {
+      hasGreetedRef.current = null;
+    }
+  }, [activeUserId]);
+
   // Actions
   const handleEditDelivery = (id: string) => {
     setEditingEntregaId(id);
@@ -345,30 +400,6 @@ export default function App() {
       <Login 
         onLoginSuccess={(userData) => {
           setUser(userData);
-          // Personalized vocal greeting on successful login based on role
-          if ((window as any).falarRodovar) {
-            let greeting = `Seja bem vindo ao sistema Rodovar Monitora, ${userData.displayName}! Painel ativado.`;
-            const lowerRole = (userData.role || '').toLowerCase();
-            const lowerUser = (userData.username || '').toLowerCase();
-            
-            if (lowerUser === 'master') {
-              greeting = `Olá, Administrador Mestre! O sistema Rodovar está totalmente liberado. O painel de controle e cadastro de funcionários foi desbloqueado com segurança.`;
-            } else if (lowerUser === 'jairobahia' || lowerRole.includes('operador')) {
-              greeting = `Seja bem vindo ao sistema Rodovar Monitora, Jairo Bahia! Painel de controle operacional ativo. Como estão as coletas e os envios de WhatsApp hoje?`;
-            } else if (lowerUser === 'genivaldo' || lowerRole.includes('gerente')) {
-              greeting = `Olá, Gerente Genivaldo! O painel gerencial da Rodovar está pronto. Notei alguns veículos parados na rota, deseja iniciar uma varredura?`;
-            } else if (lowerUser === 'alexandre' || lowerRole.includes('comercial')) {
-              greeting = `Olá, Diretor Alexandre! Painel de faturamento e carteira comercial ativo. Deseja analisar o valor total das cargas monitoradas no sistema?`;
-            } else if (lowerUser === 'petronio' || lowerRole.includes('financeiro')) {
-              greeting = `Olá, Petrônio! Painel financeiro carregado com sucesso. Como estão as conciliações de frete e aprovação de repasses hoje?`;
-            } else if (lowerUser === 'ricardo') {
-              greeting = `Olá, Diretor Ricardo! Painel operacional carregado com sucesso. Como estão o monitoramento de rotas e o desempenho de entrega do sistema Rodovar hoje?`;
-            } else if (lowerUser === 'vitor' || lowerRole.includes('operações') || lowerRole.includes('operacoes')) {
-              greeting = `Olá, Diretor Vitor! Painel geral carregado. O índice de pontualidade operacional e monitoramento geográfico segue cem por cento atualizado.`;
-            }
-            
-            (window as any).falarRodovar(greeting);
-          }
         }} 
       />
     );
