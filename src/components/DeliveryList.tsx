@@ -440,31 +440,7 @@ export default function DeliveryList({
   const [dataColetaFilter, setDataColetaFilter] = useState('');
   const [clienteFilter, setClienteFilter] = useState('');
 
-  // Scrolling & Virtualization viewport hooks
-  const containerRef = useRef<HTMLDivElement>(null);
-  const tbodyRef = useRef<HTMLTableSectionElement>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(600);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrollTop(window.scrollY);
-    };
-    const handleResize = () => {
-      setViewportHeight(window.innerHeight);
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleResize);
-    
-    // Set initial calculations safely
-    setScrollTop(window.scrollY);
-    setViewportHeight(window.innerHeight);
-    
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
+  // (Scrolling & Virtualization hooks removed for steady, tremor-free native layout scrolling)
 
   // Initialize the pagination, search, and real-time slice synchronizer hook
   const {
@@ -521,31 +497,7 @@ export default function DeliveryList({
     return () => window.removeEventListener('scroll', handleInfiniteScroll);
   }, [hasMore, loadingMore, loading, loadMore]);
 
-  // Virtualization slicing parameters for extreme performance with zero overhead
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-  const rowHeight = isMobile ? 260 : 76; 
-  const totalItems = loadedEntregas.length;
-
-  // Track coordinates of container relative to page top dynamically
-  const [offsetTop, setOffsetTop] = useState(0);
-  useEffect(() => {
-    const activeRef = isMobile ? containerRef : tbodyRef;
-    if (activeRef.current) {
-      const rect = activeRef.current.getBoundingClientRect();
-      const documentOffset = rect.top + window.scrollY;
-      setOffsetTop(documentOffset);
-    }
-  }, [loadedEntregas, isMobile, viewportHeight]);
-
-  const relativeScrollTop = Math.max(0, scrollTop - offsetTop);
-  
-  // Render buffer of 6 rows above and below to ensure natural and pristine scrolling
-  const startIndex = Math.max(0, Math.floor(relativeScrollTop / rowHeight) - 6);
-  const endIndex = Math.min(totalItems, Math.ceil((relativeScrollTop + viewportHeight) / rowHeight) + 6);
-
-  const visibleEntregas = loadedEntregas.slice(startIndex, endIndex);
-  const topSpacerHeight = startIndex * rowHeight;
-  const bottomSpacerHeight = Math.max(0, (totalItems - endIndex) * rowHeight);
+  // (Virtualization slicing calculations removed for tremor-free rendering)
 
   // States for bulk select and deletion
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -1047,9 +999,8 @@ export default function DeliveryList({
                 )}
               </div>
 
-              <div ref={containerRef} className="divide-y divide-zinc-900 bg-zinc-950/30 relative">
-                {topSpacerHeight > 0 && <div style={{ height: topSpacerHeight }} />}
-                {visibleEntregas.map(e => {
+              <div className="divide-y divide-zinc-900 bg-zinc-950/30 relative">
+                {loadedEntregas.map(e => {
                   const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
                   const BadgeIcon = badge.icon;
 
@@ -1196,7 +1147,6 @@ export default function DeliveryList({
                   </div>
                 );
               })}
-                {bottomSpacerHeight > 0 && <div style={{ height: bottomSpacerHeight }} />}
               </div>
             </div>
 
@@ -1224,13 +1174,8 @@ export default function DeliveryList({
                     <th className="py-3 px-4 text-right">Ação</th>
                   </tr>
                 </thead>
-                <tbody ref={tbodyRef} className="divide-y divide-zinc-900 font-sans relative">
-                  {topSpacerHeight > 0 && (
-                    <tr style={{ height: topSpacerHeight }}>
-                      <td colSpan={9} style={{ height: topSpacerHeight, padding: 0, border: 'none' }} />
-                    </tr>
-                  )}
-                  {visibleEntregas.map(e => {
+                <tbody className="divide-y divide-zinc-900 font-sans relative">
+                  {loadedEntregas.map(e => {
                     const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
                     const BadgeIcon = badge.icon;
 
@@ -1391,11 +1336,6 @@ export default function DeliveryList({
                       </tr>
                     );
                   })}
-                  {bottomSpacerHeight > 0 && (
-                    <tr style={{ height: bottomSpacerHeight }}>
-                      <td colSpan={9} style={{ height: bottomSpacerHeight, padding: 0, border: 'none' }} />
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>

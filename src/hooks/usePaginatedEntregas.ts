@@ -87,30 +87,17 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
   // Compute number of actually loaded items
   const loadedCount = loadedEntregas.length;
 
-  // Compile active query constraints based on filter values
+  // Compile active query constraints based on filter values (safe, exact equality matches only)
   const buildQueryBase = () => {
     let q = query(collection(db, ENTREGAS_COLLECTION));
     
-    // Exact match filters (Server-side optimized)
+    // exact match status
     if (filters.status && filters.status !== 'all') {
       q = query(q, where('status', '==', filters.status));
     }
+    // exact match collection date
     if (filters.dataColeta) {
       q = query(q, where('data_coleta', '==', filters.dataColeta));
-    }
-
-    // Range search options - Priority-route prefix matching
-    const searchOrigem = filters.origem.toLowerCase().trim();
-    const searchDestino = filters.destino.toLowerCase().trim();
-    const searchCliente = filters.cliente.toLowerCase().trim();
-
-    if (searchOrigem) {
-      // Direct prefix query on helper field
-      q = query(q, where('search_origem', '>=', searchOrigem), where('search_origem', '<=', searchOrigem + '\uf8ff'));
-    } else if (searchDestino) {
-      q = query(q, where('search_destino', '>=', searchDestino), where('search_destino', '<=', searchDestino + '\uf8ff'));
-    } else if (searchCliente) {
-      q = query(q, where('search_cliente', '>=', searchCliente), where('search_cliente', '<=', searchCliente + '\uf8ff'));
     }
 
     return q;
@@ -118,7 +105,7 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
 
   // Re-run whenever filters change
   useEffect(() => {
-    // 1. Unsubscribe from all previous pages
+    // 1. Unsubscribe from all previous snapshots
     unsubscribesRef.current.forEach(unsub => unsub());
     unsubscribesRef.current = [];
     
@@ -130,87 +117,114 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
     setLoading(true);
     setIndexWarning(null);
 
+    const hasSearchFilters = !!(
+      filters.search.trim() || 
+      filters.origem.trim() || 
+      filters.destino.trim() || 
+      filters.cliente.trim()
+    );
+
     const loadInitialPage = async () => {
       try {
         const queryBase = buildQueryBase();
-        
-        // Fetch total count matching this query in real-time (Server-Side optimized!)
-        try {
-          const countSnap = await getCountFromServer(queryBase);
-          setTotalCount(countSnap.data().count);
-        } catch (err) {
-          console.warn('Error fetching server-side matches count. Might require compound indexes:', err);
-          // Fallback of total count is null
-          setTotalCount(null);
-        }
 
-        // Standard sorted dynamic query
-        const initialQuery = query(
-          queryBase, 
-          orderBy('created_at', 'desc'), 
-          limit(PAGE_SIZE)
-        );
+        if (hasSearchFilters) {
+          // If advanced filters are active, query up to 500 entries of the specific status/date category,
+          // and apply advanced in-memory compound filters to circumvent Firestore indexing constraints.
+          const searchQuery = query(
+            queryBase,
+            orderBy('created_at', 'desc'),
+            limit(500)
+          );
 
-        // Attach snapshot listener (Requirement 9: Realtime slice updates!)
-        const unsubscribe = onSnapshot(initialQuery, (snapshot) => {
-          const items = snapshot.docs.map(parseFirestoreDocToEntrega);
-          
-          setPages(prev => ({ ...prev, [0]: items }));
-          setLoading(false);
-          setLoadingMore(false);
-
-          if (snapshot.docs.length > 0) {
-            lastVisibleDocsRef.current[0] = snapshot.docs[snapshot.docs.length - 1];
-          }
-          
-          if (snapshot.docs.length < PAGE_SIZE) {
-            setHasMore(false);
-          } else {
-            setHasMore(true);
-          }
-        }, (error) => {
-          console.error("Firestore page 1 snapshot error:", error);
-          
-          // DETECT MISSING INDEX (FAILED_PRECONDITION or is missing indices link in errors)
-          if (error.message.includes('index') || error.message.includes('FAILED_PRECONDITION')) {
-            setIndexWarning("O Firebase está se preparando para criar os índices necessários para sua combinação de filtros. Carregando em modo de segurança...");
+          const unsubscribe = onSnapshot(searchQuery, (snapshot) => {
+            const rawItems = snapshot.docs.map(parseFirestoreDocToEntrega);
             
-            // Auto Fallback without compound sorting: query by creation sorted natively
-            const fallbackQuery = query(
-              collection(db, ENTREGAS_COLLECTION),
-              orderBy('created_at', 'desc'),
-              limit(100) // retrieve a healthy subset
-            );
-
-            const unsubFallback = onSnapshot(fallbackQuery, (snapshot) => {
-              let items = snapshot.docs.map(parseFirestoreDocToEntrega);
-              
-              // Apply combined filters manually in memory to prevent complete white screen
-              items = items.filter(e => {
-                if (filters.status && filters.status !== 'all' && e.status !== filters.status) return false;
-                if (filters.dataColeta && e.data_coleta !== filters.dataColeta) return false;
-                if (filters.origem && !e.origem.toLowerCase().includes(filters.origem.toLowerCase())) return false;
-                if (filters.destino && !e.destino.toLowerCase().includes(filters.destino.toLowerCase())) return false;
-                if (filters.cliente && !e.cliente.toLowerCase().includes(filters.cliente.toLowerCase())) return false;
-                return true;
-              });
-
-              setPages({ 0: items });
-              setTotalCount(items.length);
-              setHasMore(false);
-              setLoading(false);
-              setLoadingMore(false);
+            // Apply all filters in-memory
+            const filtered = rawItems.filter(e => {
+              // Origin filter
+              if (filters.origem.trim()) {
+                const o = filters.origem.toLowerCase().trim();
+                if (!(e.origem || '').toLowerCase().includes(o)) return false;
+              }
+              // Destino filter
+              if (filters.destino.trim()) {
+                const d = filters.destino.toLowerCase().trim();
+                if (!(e.destino || '').toLowerCase().includes(d)) return false;
+              }
+              // Cliente filter
+              if (filters.cliente.trim()) {
+                const c = filters.cliente.toLowerCase().trim();
+                if (!(e.cliente || '').toLowerCase().includes(c)) return false;
+              }
+              // Text Search filter (vendedor, cliente, motorista, origem, destino, observacoes, id)
+              if (filters.search.trim()) {
+                const s = filters.search.toLowerCase().trim();
+                const matches = 
+                  (e.motorista || '').toLowerCase().includes(s) ||
+                  (e.vendedor || '').toLowerCase().includes(s) ||
+                  (e.cliente || '').toLowerCase().includes(s) ||
+                  (e.origem || '').toLowerCase().includes(s) ||
+                  (e.destino || '').toLowerCase().includes(s) ||
+                  (e.observacoes || '').toLowerCase().includes(s) ||
+                  (e.id || '').toLowerCase().includes(s);
+                if (!matches) return false;
+              }
+              return true;
             });
-            unsubscribesRef.current.push(unsubFallback);
-          } else {
-            // Standard error handler
+
+            setPages({ 0: filtered });
+            setTotalCount(filtered.length);
+            setHasMore(false);
+            setLoading(false);
+            setLoadingMore(false);
+          }, (error) => {
+            console.error("Firestore advanced search error:", error);
             handleFirestoreError(error, OperationType.LIST, ENTREGAS_COLLECTION);
             setLoading(false);
+          });
+
+          unsubscribesRef.current.push(unsubscribe);
+        } else {
+          // No search filters active: Standard cursor paging
+          try {
+            const countSnap = await getCountFromServer(queryBase);
+            setTotalCount(countSnap.data().count);
+          } catch (err) {
+            console.warn('Error fetching server-side matches count:', err);
+            setTotalCount(null);
           }
-        });
 
-        unsubscribesRef.current.push(unsubscribe);
+          const initialQuery = query(
+            queryBase, 
+            orderBy('created_at', 'desc'), 
+            limit(PAGE_SIZE)
+          );
 
+          const unsubscribe = onSnapshot(initialQuery, (snapshot) => {
+            const items = snapshot.docs.map(parseFirestoreDocToEntrega);
+            
+            setPages(prev => ({ ...prev, [0]: items }));
+            setLoading(false);
+            setLoadingMore(false);
+
+            if (snapshot.docs.length > 0) {
+              lastVisibleDocsRef.current[0] = snapshot.docs[snapshot.docs.length - 1];
+            }
+            
+            if (snapshot.docs.length < PAGE_SIZE) {
+              setHasMore(false);
+            } else {
+              setHasMore(true);
+            }
+          }, (error) => {
+            console.error("Firestore page 1 snapshot error:", error);
+            handleFirestoreError(error, OperationType.LIST, ENTREGAS_COLLECTION);
+            setLoading(false);
+          });
+
+          unsubscribesRef.current.push(unsubscribe);
+        }
       } catch (err) {
         console.error("Error setting up paginated data fetch:", err);
         setLoading(false);
@@ -224,9 +238,16 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
     };
   }, [filters]);
 
-  // Load next page function
+  // Load next page function (only applicable when search filters are empty)
   const loadMore = () => {
-    if (loading || loadingMore || !hasMore || indexWarning) return;
+    const hasSearchFilters = !!(
+      filters.search.trim() || 
+      filters.origem.trim() || 
+      filters.destino.trim() || 
+      filters.cliente.trim()
+    );
+
+    if (loading || loadingMore || !hasMore || indexWarning || hasSearchFilters) return;
     
     const nextPageIndex = activePageIndexRef.current + 1;
     const lastVisibleDoc = lastVisibleDocsRef.current[nextPageIndex - 1];
