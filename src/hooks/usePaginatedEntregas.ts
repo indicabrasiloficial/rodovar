@@ -59,6 +59,7 @@ export interface PaginatedFilters {
   dataColeta: string;
   cliente: string;
   search: string;
+  vendedor?: string;
 }
 
 export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
@@ -121,7 +122,8 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
       filters.search.trim() || 
       filters.origem.trim() || 
       filters.destino.trim() || 
-      filters.cliente.trim()
+      filters.cliente.trim() ||
+      filters.vendedor?.trim()
     );
 
     const loadInitialPage = async () => {
@@ -142,6 +144,11 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
             
             // Apply all filters in-memory
             const filtered = rawItems.filter(e => {
+              // Vendedor filter
+              if (filters.vendedor?.trim()) {
+                const v = filters.vendedor.toLowerCase().trim();
+                if (!(e.vendedor || '').toLowerCase().includes(v)) return false;
+              }
               // Origin filter
               if (filters.origem.trim()) {
                 const o = filters.origem.toLowerCase().trim();

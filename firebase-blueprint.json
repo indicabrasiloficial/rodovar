@@ -101,6 +101,22 @@
         "userId": { "type": "string" }
       },
       "required": ["seeded", "userId"]
+    },
+    "BlacklistMotorista": {
+      "title": "BlacklistMotorista",
+      "description": "Blacklisted drivers who are forbidden from being registered in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "cpf": { "type": "string" },
+        "telefone": { "type": "string" },
+        "observacao": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "usuarioNome": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["nome", "cpf", "telefone", "observacao", "created_at"]
     }
   },
   "firestore": {
@@ -115,6 +131,10 @@
     "/scheduled_messages/{messageId}": {
       "schema": "ScheduledMessage",
       "description": "Scheduled WhatsApp reminders for monitored deliveries"
+    },
+    "/blacklist_motoristas/{blacklistId}": {
+      "schema": "BlacklistMotorista",
+      "description": "Motoristas bloqueados e proibidos de trabalhar na frota Rodovar"
     }
   }
 }

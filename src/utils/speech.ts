@@ -115,6 +115,12 @@ export function normalizeTextForSpeech(text: string): string {
 export function falarRodovar(texto: string, onEndCallback?: () => void) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
 
+  // Check if speech is temporarily deactivated (muted) as requested by user
+  if (localStorage.getItem('rodovar_mute_speech') === 'true') {
+    if (onEndCallback) onEndCallback();
+    return;
+  }
+
   // Cancel prior speech
   window.speechSynthesis.cancel();
 

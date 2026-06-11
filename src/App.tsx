@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { getEntregas, deleteEntrega, subscribeToRealtime, saveEntrega } from './db/storage';
 import { auth } from './db/firebase';
 import { Entrega } from './types';
@@ -15,6 +15,7 @@ import Login from './components/Login';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import EmployeeRegistration from './components/EmployeeRegistration';
 import AgentManual from './components/AgentManual';
+import BlacklistManager from './components/BlacklistManager';
 
 import { 
   Truck, 
@@ -22,6 +23,7 @@ import {
   ListFilter, 
   User, 
   Volume2, 
+  VolumeX,
   AlertCircle,
   HelpCircle,
   TrendingUp,
@@ -33,11 +35,12 @@ import {
   Lock,
   Shield,
   Users,
-  BookOpen
+  BookOpen,
+  UserX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist';
 
 
 export default function App() {
@@ -47,7 +50,7 @@ export default function App() {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const [entregas, setEntregas] = useState<Entrega[]>([]);
-  const [selectedView, setSelectedView] = useState<ViewMode>('dashboard');
+  const [selectedView, setSelectedView] = useState<ViewMode>('list');
   const [selectedEntregaId, setSelectedEntregaId] = useState<string | undefined>(undefined);
   const [editingEntregaId, setEditingEntregaId] = useState<string | undefined>(undefined);
 
@@ -55,6 +58,19 @@ export default function App() {
   const [searchFilter, setSearchFilter] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState('all');
+
+  const [isSpeechMuted, setIsSpeechMuted] = useState(() => {
+    return localStorage.getItem('rodovar_mute_speech') === 'true';
+  });
+
+  const toggleMuteSpeech = () => {
+    const newValue = !isSpeechMuted;
+    setIsSpeechMuted(newValue);
+    localStorage.setItem('rodovar_mute_speech', String(newValue));
+    if (newValue && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  };
 
   // Load user session on start
   useEffect(() => {
@@ -198,61 +214,6 @@ export default function App() {
     }
   );
 
-  // Greeting trigger on login with automatic voice listening activation
-  const hasGreetedRef = useRef<string | null>(null);
-  const voiceSpeakRef = useRef<any>(null);
-  const voiceStartRef = useRef<any>(null);
-  const voiceSetCtxRef = useRef<any>(null);
-
-  // Keep references to voice helper methods up-to-date in refs
-  useEffect(() => {
-    voiceSpeakRef.current = voice?.speak;
-    voiceStartRef.current = voice?.startListening;
-    voiceSetCtxRef.current = voice?.setContext;
-  });
-
-  const activeUserId = user?.username || '';
-
-  useEffect(() => {
-    if (activeUserId && hasGreetedRef.current !== activeUserId) {
-      hasGreetedRef.current = activeUserId;
-      
-      let greeting = `Seja bem vindo ao sistema Rodovar Monitora, ${user?.displayName || 'colaborador'}! Painel ativado.`;
-      const lowerRole = (user?.role || '').toLowerCase();
-      const lowerUser = activeUserId.toLowerCase();
-      
-      if (lowerUser === 'master') {
-        greeting = `Olá, Administrador Mestre! O sistema Rodovar está totalmente liberado. O painel de controle e cadastro de funcionários foi desbloqueado com segurança.`;
-      } else if (lowerUser === 'jairobahia' || lowerRole.includes('operador')) {
-        greeting = `Seja bem vindo ao sistema Rodovar Monitora, Jairo Bahia! Painel de controle operacional ativo. Como estão as coletas e os envios de WhatsApp hoje?`;
-      } else if (lowerUser === 'genivaldo' || lowerRole.includes('gerente')) {
-        greeting = `Olá, Gerente Genivaldo! O painel gerencial da Rodovar está pronto. Notei alguns veículos parados na rota, deseja iniciar uma varredura?`;
-      } else if (lowerUser === 'alexandre' || lowerRole.includes('comercial')) {
-        greeting = `Olá, Diretor Alexandre! Painel de faturamento e carteira comercial ativo. Deseja analisar o valor total das cargas monitoradas no sistema?`;
-      } else if (lowerUser === 'petronio' || lowerRole.includes('financeiro')) {
-        greeting = `Olá, Petrônio! Painel financeiro carregado com sucesso. Como estão as conciliações de frete e aprovação de repasses hoje?`;
-      } else if (lowerUser === 'ricardo') {
-        greeting = `Olá, Diretor Ricardo! Painel operacional carregado com sucesso. Como estão o monitoramento de rotas e o desempenho de entrega do sistema Rodovar hoje?`;
-      } else if (lowerUser === 'vitor' || lowerRole.includes('operações') || lowerRole.includes('operacoes')) {
-        greeting = `Olá, Diretor Vitor! Painel geral carregado. O índice de pontualidade operacional e monitoramento geográfico segue cem por cento atualizado.`;
-      }
-
-      setTimeout(() => {
-        if (voiceSpeakRef.current && voiceSetCtxRef.current) {
-          // Set context to 'greeting' before speaking so the response is listened to under the greeting flow
-          voiceSetCtxRef.current('greeting');
-          voiceSpeakRef.current(greeting, () => {
-            if (voiceStartRef.current) {
-              voiceStartRef.current();
-            }
-          });
-        }
-      }, 1200); // Soft layout breathing space
-    } else if (!activeUserId) {
-      hasGreetedRef.current = null;
-    }
-  }, [activeUserId]);
-
   // Actions
   const handleEditDelivery = (id: string) => {
     setEditingEntregaId(id);
@@ -377,6 +338,10 @@ export default function App() {
             onClose={() => setSelectedView('dashboard')}
           />
         );
+      case 'blacklist':
+        return (
+          <BlacklistManager currentUser={user} />
+        );
       default:
         return <div className="text-center p-12 text-gray-500">Selecione uma opção válida.</div>;
     }
@@ -400,6 +365,30 @@ export default function App() {
       <Login 
         onLoginSuccess={(userData) => {
           setUser(userData);
+          // Personalized vocal greeting on successful login based on role
+          if ((window as any).falarRodovar) {
+            let greeting = `Seja bem vindo ao sistema Rodovar Monitora, ${userData.displayName}! Painel ativado.`;
+            const lowerRole = (userData.role || '').toLowerCase();
+            const lowerUser = (userData.username || '').toLowerCase();
+            
+            if (lowerUser === 'master') {
+              greeting = `Olá, Administrador Mestre! O sistema Rodovar está totalmente liberado. O painel de controle e cadastro de funcionários foi desbloqueado com segurança.`;
+            } else if (lowerUser === 'jairobahia' || lowerRole.includes('operador')) {
+              greeting = `Seja bem vindo ao sistema Rodovar Monitora, Jairo Bahia! Painel de controle operacional ativo. Como estão as coletas e os envios de WhatsApp hoje?`;
+            } else if (lowerUser === 'genivaldo' || lowerRole.includes('gerente')) {
+              greeting = `Olá, Gerente Genivaldo! O painel gerencial da Rodovar está pronto. Notei alguns veículos parados na rota, deseja iniciar uma varredura?`;
+            } else if (lowerUser === 'alexandre' || lowerRole.includes('comercial')) {
+              greeting = `Olá, Diretor Alexandre! Painel de faturamento e carteira comercial ativo. Deseja analisar o valor total das cargas monitoradas no sistema?`;
+            } else if (lowerUser === 'petronio' || lowerRole.includes('financeiro')) {
+              greeting = `Olá, Petrônio! Painel financeiro carregado com sucesso. Como estão as conciliações de frete e aprovação de repasses hoje?`;
+            } else if (lowerUser === 'ricardo') {
+              greeting = `Olá, Diretor Ricardo! Painel operacional carregado com sucesso. Como estão o monitoramento de rotas e o desempenho de entrega do sistema Rodovar hoje?`;
+            } else if (lowerUser === 'vitor' || lowerRole.includes('operações') || lowerRole.includes('operacoes')) {
+              greeting = `Olá, Diretor Vitor! Painel geral carregado. O índice de pontualidade operacional e monitoramento geográfico segue cem por cento atualizado.`;
+            }
+            
+            (window as any).falarRodovar(greeting);
+          }
         }} 
       />
     );
@@ -410,47 +399,32 @@ export default function App() {
       
       {/* Top Header Rail bar structure (High Density Theme) */}
       <header className="border-b border-zinc-800 bg-[#0a0a0a] sticky top-0 z-[1010] backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 py-2 flex flex-col md:flex-row items-center justify-between gap-4 h-auto md:h-16">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col lg:flex-row items-center justify-between gap-4 h-auto lg:h-16">
           
           {/* Logo and Branding exactly from design specifications */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setSelectedView('dashboard')}>
+          <div className="flex items-center gap-3.5 cursor-pointer select-none" onClick={() => setSelectedView('dashboard')}>
             <img 
               src="https://rodovar.com.br/wp-content/uploads/2026/02/logo.png" 
               alt="Rodovar" 
-              className="h-8 md:h-10 w-auto transition-transform hover:scale-105 object-contain" 
+              className="h-8 lg:h-10 w-auto transition-transform hover:scale-105 object-contain" 
               referrerPolicy="no-referrer"
             />
-            <div>
-              <h1 className="text-lg font-black tracking-tighter text-[#FFD600] flex items-center gap-2 m-0 leading-none">
+            <div className="hidden sm:block">
+              <h1 className="text-base lg:text-lg font-black tracking-tighter text-[#FFD600] flex items-center gap-2 m-0 leading-none">
                 RODOVAR MONITORA
               </h1>
             </div>
           </div>
 
-          {/* Navigation with High Density spacing */}
-          <nav className="flex items-center flex-wrap justify-center gap-1 md:gap-1.5">
+          {/* Navigation with High Density spacing and optimized compact sizing */}
+          <nav className="flex items-center flex-wrap justify-center gap-1.5 md:gap-1">
             
-            {/* Nav Dashboard */}
-            <button
-              onClick={() => setSelectedView('dashboard')}
-              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
-                selectedView === 'dashboard' 
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
-              }`}
-              id="nav-dashboard"
-            >
-              <Volume2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">Painel Geral</span>
-              <span className="inline sm:hidden">Painel</span>
-            </button>
-
             {/* Nav List */}
             <button
               onClick={() => setSelectedView('list')}
-              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
+              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
                 selectedView === 'list' || selectedView === 'details'
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
+                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-list"
@@ -462,9 +436,9 @@ export default function App() {
             {/* Nav Stats */}
             <button
               onClick={() => setSelectedView('statistics')}
-              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
+              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
                 selectedView === 'statistics' 
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
+                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-stats"
@@ -477,14 +451,14 @@ export default function App() {
             {/* Nav WhatsApp */}
             <button
               onClick={() => setSelectedView('whatsapp')}
-              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
+              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
                 selectedView === 'whatsapp' 
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
+                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
                 : 'text-[#0a0a0a]-400 text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-whatsapp"
             >
-              <MessageSquare className="w-3.5 h-3.5 " />
+              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
               <span className="hidden sm:inline">Agenda Zap</span>
               <span className="inline sm:hidden">Zap</span>
             </button>
@@ -492,9 +466,9 @@ export default function App() {
             {/* Nav Manager */}
             <button
               onClick={() => setSelectedView('manager')}
-              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
+              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
                 selectedView === 'manager' 
-                ? 'bg-red-650 text-white font-extrabold shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
+                ? 'bg-red-650 text-white font-extrabold shadow-[0_0_12px_rgba(239,68,68,0.2)]' 
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-manager"
@@ -504,12 +478,27 @@ export default function App() {
               <span className="inline sm:hidden">Suporte</span>
             </button>
 
+            {/* Nav Blacklist */}
+            <button
+              onClick={() => setSelectedView('blacklist')}
+              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
+                selectedView === 'blacklist' 
+                ? 'bg-red-650 text-white font-extrabold shadow-[0_0_12px_rgba(239,68,68,0.2)]' 
+                : 'text-zinc-400 hover:text-white hover:bg-[#181010]/60'
+              }`}
+              id="nav-blacklist"
+            >
+              <UserX className="w-3.5 h-3.5 text-red-500 shrink-0" />
+              <span className="hidden sm:inline">Lista Negra</span>
+              <span className="inline sm:hidden">Negra</span>
+            </button>
+
             {/* Nav Manual */}
             <button
               onClick={() => setSelectedView('manual')}
-              className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
+              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
                 selectedView === 'manual' 
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
+                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
               id="nav-manual"
@@ -523,9 +512,9 @@ export default function App() {
             {user && (user.username === 'master' || user.role === 'Master') && (
               <button
                 onClick={() => setSelectedView('registration')}
-                className={`px-2 md:px-3 py-1.5 rounded text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 md:gap-1.5 ${
+                className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
                   selectedView === 'registration' 
-                  ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_15px_rgba(255,214,0,0.2)]' 
+                  ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
                 }`}
                 id="nav-registration"
@@ -541,7 +530,22 @@ export default function App() {
           </nav>
 
           {/* High Density Right Side Info Items */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3.5">
+            {/* Mute Speech Button */}
+            <button
+              onClick={toggleMuteSpeech}
+              className={`p-1.5 px-3 border rounded transition-all cursor-pointer h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold ${
+                isSpeechMuted 
+                  ? 'bg-red-950/20 text-red-400 border-red-900/60 hover:text-red-305' 
+                  : 'bg-emerald-950/15 text-emerald-400 border-emerald-900/60 hover:text-emerald-305'
+              }`}
+              title={isSpeechMuted ? "Fala desativada temporariamente. Clique para reativar." : "Fala ativa. Clique para desativar temporariamente."}
+              id="mute-speech-toggle-btn"
+            >
+              {isSpeechMuted ? <VolumeX className="w-3.5 h-3.5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+              <span className="hidden md:inline">{isSpeechMuted ? "FALA DESATIVADA" : "FALA ATIVA"}</span>
+            </button>
+
             {/* Cadastrar Carga Button */}
             <button
               onClick={handleAddNewDelivery}

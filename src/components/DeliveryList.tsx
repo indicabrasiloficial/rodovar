@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
-import { saveEntrega, deleteEntregasBulk, deleteEntrega } from '../db/storage';
+import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores } from '../db/storage';
 import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
 import { getDeliveryKm } from '../utils/distance';
 import { motion, AnimatePresence } from 'motion/react';
@@ -439,6 +439,25 @@ export default function DeliveryList({
   const [destinoFilter, setDestinoFilter] = useState('');
   const [dataColetaFilter, setDataColetaFilter] = useState('');
   const [clienteFilter, setClienteFilter] = useState('');
+  const [vendedorFilter, setVendedorFilter] = useState('');
+  const [isComercialOpen, setIsComercialOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Dynamically populate vendedor names from our central DB sync cache
+  const vendedoresList = useMemo(() => {
+    return getUniqueVendedores().filter(Boolean).sort();
+  }, [entregas]);
+
+  // Handle click outside event to automatically collapse dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsComercialOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // (Scrolling & Virtualization hooks removed for steady, tremor-free native layout scrolling)
 
@@ -459,7 +478,8 @@ export default function DeliveryList({
     destino: destinoFilter,
     dataColeta: dataColetaFilter,
     cliente: clienteFilter,
-    search: searchFilter
+    search: searchFilter,
+    vendedor: vendedorFilter
   });
 
   // Debouncing filters to prevent excess Firebase reads during active keystrokes
@@ -471,12 +491,13 @@ export default function DeliveryList({
         destino: destinoFilter,
         dataColeta: dataColetaFilter,
         cliente: clienteFilter,
-        search: searchFilter
+        search: searchFilter,
+        vendedor: vendedorFilter
       });
     }, 450);
 
     return () => clearTimeout(timer);
-  }, [statusFilter, origemFilter, destinoFilter, dataColetaFilter, clienteFilter, searchFilter]);
+  }, [statusFilter, origemFilter, destinoFilter, dataColetaFilter, clienteFilter, searchFilter, vendedorFilter]);
 
   // Handle auto infinite scrolling when nearing bottom of page
   useEffect(() => {
@@ -653,6 +674,7 @@ export default function DeliveryList({
     setDataColetaFilter('');
     setClienteFilter('');
     setStatusFilter('all');
+    setVendedorFilter('');
   };
 
   // Filter Logic grounded on high performance secure cursor paginated lists
@@ -778,25 +800,89 @@ export default function DeliveryList({
         </div>
       </div>
 
-      {/* Tabs navigation */}
-      <div className="border-b border-zinc-800 flex overflow-x-auto whitespace-nowrap scrollbar-thin">
-        {tabs.map(tab => {
-          const isActive = statusFilter === tab.value;
-          return (
+      {/* Tabs and Comercial Team filter combined */}
+      <div className="border-b border-zinc-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pb-1 md:pb-0">
+        <div className="flex overflow-x-auto whitespace-nowrap scrollbar-thin">
+          {tabs.map(tab => {
+            const isActive = statusFilter === tab.value;
+            return (
+              <button
+                key={tab.value}
+                onClick={() => setStatusFilter(tab.value)}
+                className={`px-5 py-3 text-xs font-bold font-sans transition-all border-b-2 cursor-pointer ${
+                  isActive 
+                  ? 'border-[#FFD600] text-[#FFD600] bg-zinc-900/30' 
+                  : 'border-transparent text-gray-400 hover:text-white'
+                }`}
+                id={`list-tab-${tab.value}`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Dropdown for Equipe Comercial */}
+        <div className="flex items-center gap-2 self-end md:self-center pr-2" ref={dropdownRef}>
+          <div className="relative inline-block text-left">
             <button
-              key={tab.value}
-              onClick={() => setStatusFilter(tab.value)}
-              className={`px-5 py-3 text-xs font-bold font-sans transition-all border-b-2 cursor-pointer ${
-                isActive 
-                ? 'border-[#FFD600] text-[#FFD600] bg-zinc-900/30' 
-                : 'border-transparent text-gray-400 hover:text-white'
+              type="button"
+              onClick={() => setIsComercialOpen(!isComercialOpen)}
+              className={`inline-flex justify-center items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-mono font-bold tracking-wider border uppercase transition-all cursor-pointer h-9 ${
+                vendedorFilter 
+                ? 'bg-zinc-900 text-[#FFD600] border-[#FFD600] shadow-[0_0_10px_rgba(255,214,0,0.1)]'
+                : 'bg-zinc-900/40 text-gray-400 border-zinc-800/80 hover:text-white hover:border-zinc-700/80'
               }`}
-              id={`list-tab-${tab.value}`}
+              id="comercial-team-dropdown-btn"
             >
-              {tab.label}
+              <span>💼 Equipe Comercial{vendedorFilter ? `: ${vendedorFilter}` : ''}</span>
+              <svg className={`w-3.5 h-3.5 transition-transform ${isComercialOpen ? 'rotate-180 text-[#FFD600]' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-          );
-        })}
+            
+            {isComercialOpen && (
+              <div className="absolute right-0 mt-1.5 w-64 rounded-xl shadow-2xl bg-zinc-950 border border-zinc-800/90 focus:outline-none z-[1050] overflow-hidden">
+                <div className="p-1 max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800">
+                  <button
+                    onClick={() => {
+                      setVendedorFilter('');
+                      setIsComercialOpen(false);
+                    }}
+                    className="flex items-center gap-1.5 text-left w-full px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-900 border-b border-zinc-900/40 rounded-lg hover:text-[#FFD600] transition-colors"
+                  >
+                    <span>👥</span>
+                    <span className="font-sans font-semibold">Mostrar Todos os Vendedores</span>
+                  </button>
+                  <div className="my-1"></div>
+                  {vendedoresList.length === 0 ? (
+                    <div className="px-3 py-2 text-[11px] text-zinc-500 font-mono italic text-center">
+                      Nenhum vendedor registrado no sistema de cargas.
+                    </div>
+                  ) : (
+                    vendedoresList.map((vend) => (
+                      <button
+                        key={vend}
+                        onClick={() => {
+                          setVendedorFilter(vend);
+                          setIsComercialOpen(false);
+                        }}
+                        className={`flex items-center justify-between text-left w-full px-3 py-1.5 my-0.5 text-xs font-mono truncate rounded-lg hover:bg-zinc-900 transition-colors ${
+                          vendedorFilter === vend 
+                          ? 'text-[#FFD600] font-extrabold bg-[#FFD600]/5' 
+                          : 'text-zinc-300 hover:text-white'
+                        }`}
+                      >
+                        <span className="truncate pr-2">👤 {vend}</span>
+                        {vendedorFilter === vend && <span className="text-[#FFD600] text-[10px] font-bold">●</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Structured Filters board */}
@@ -872,7 +958,7 @@ export default function DeliveryList({
           </div>
         </div>
 
-        {(searchFilter || origemFilter || destinoFilter || dataColetaFilter || clienteFilter || statusFilter !== 'all') && (
+        {(searchFilter || origemFilter || destinoFilter || dataColetaFilter || clienteFilter || statusFilter !== 'all' || vendedorFilter) && (
           <div className="flex justify-end">
             <button 
               onClick={handleClearFilters}

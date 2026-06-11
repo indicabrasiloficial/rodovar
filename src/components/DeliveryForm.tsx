@@ -8,7 +8,10 @@ import {
   saveEntrega,
   getEntregaById,
   setEditLock,
-  clearEditLock
+  clearEditLock,
+  getBlacklist,
+  subscribeToBlacklistRealtime,
+  getEntregas
 } from '../db/storage';
 import { geocodeCity } from '../db/geocoder';
 import { 
@@ -47,6 +50,7 @@ interface FormInputs {
   tel_cliente: string;
   motorista: string;
   tel_motorista: string;
+  cpf_motorista: string;
   origem: string;
   destino: string;
   frete_empresa: number;
@@ -136,6 +140,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
       tel_cliente: '',
       motorista: '',
       tel_motorista: '',
+      cpf_motorista: '',
       origem: '',
       destino: '',
       frete_empresa: 0,
@@ -149,10 +154,54 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
     }
   });
 
+  const [blacklist, setBlacklist] = useState<any[]>([]);
+  useEffect(() => {
+    setBlacklist(getBlacklist());
+    const unsub = subscribeToBlacklistRealtime(() => {
+      setBlacklist(getBlacklist());
+    });
+    return unsub;
+  }, []);
+
   const watchVendedor = watch('vendedor') || '';
   const watchCliente = watch('cliente') || '';
   const watchMotorista = watch('motorista') || '';
   const watchValorCarga = watch('valor_carga') || 0;
+  const watchCpf = watch('cpf_motorista') || '';
+  const watchTel = watch('tel_motorista') || '';
+
+  const matchedBlockedDriver = useMemo(() => {
+    const cleanWatchCpf = watchCpf.replace(/\D/g, '').trim();
+    const cleanWatchTel = watchTel.replace(/\D/g, '').trim();
+    
+    if (!cleanWatchCpf && !cleanWatchTel) return null;
+    
+    return blacklist.find(b => {
+      const bCpf = b.cpf ? b.cpf.replace(/\D/g, '').trim() : '';
+      const bTel = b.telefone ? b.telefone.replace(/\D/g, '').trim() : '';
+      
+      const cpfMatch = cleanWatchCpf && bCpf && bCpf === cleanWatchCpf;
+      const telMatch = cleanWatchTel && bTel && bTel === cleanWatchTel;
+      
+      return cpfMatch || telMatch;
+    });
+  }, [watchCpf, watchTel, blacklist]);
+
+  // Helpers for CPF styling
+  const formatCPF = (value: string) => {
+    const rawVal = value.replace(/\D/g, '');
+    let formatted = rawVal;
+    if (rawVal.length > 3) {
+      formatted = `${rawVal.slice(0, 3)}.${rawVal.slice(3)}`;
+    }
+    if (rawVal.length > 6) {
+      formatted = `${formatted.slice(0, 7)}.${rawVal.slice(6)}`;
+    }
+    if (rawVal.length > 9) {
+      formatted = `${formatted.slice(0, 11)}-${rawVal.slice(9, 11)}`;
+    }
+    return formatted.slice(0, 14);
+  };
 
   const getRiskCategoryDetailsByVal = (val: number) => {
     if (val >= 1000000) {
@@ -211,6 +260,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
           tel_cliente: data.tel_cliente,
           motorista: data.motorista,
           tel_motorista: data.tel_motorista,
+          cpf_motorista: data.cpf_motorista || '',
           origem: data.origem,
           destino: data.destino,
           frete_empresa: data.frete_empresa,
@@ -241,11 +291,22 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
   const selectMotorista = (nome: string, tel: string) => {
     setValue('motorista', nome);
     setValue('tel_motorista', tel);
+    const pastDelivery = getEntregas().find(e => e.motorista === nome && e.cpf_motorista);
+    if (pastDelivery && pastDelivery.cpf_motorista) {
+      setValue('cpf_motorista', pastDelivery.cpf_motorista);
+    }
     setShowMotoristaSuggestions(false);
   };
 
   // Main Form Submit handler
   const onSubmit = async (data: FormInputs) => {
+    if (matchedBlockedDriver) {
+      if (window.falarRodovar) {
+        window.falarRodovar("Cadastro recusado! Este operador de caminhão foi listado no sistema de segurança.");
+      }
+      return;
+    }
+
     setIsGeocoding(true);
     let coords = { lat: -23.5505, lng: -46.6333 }; // Default SPM SP
 
@@ -454,66 +515,150 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
 
             {/* Secao 2: Parceiros Envolvidos */}
             <div className="pt-2">
-              <h3 className="text-xs uppercase tracking-wider font-mono text-[#FFD600] mb-4 font-bold border-b border-zinc-950 pb-2">
-                2. Pessoal Envolvido (Motorista, Cliente e Comitente)
+              <h3 className="text-xs uppercase tracking-wider font-mono text-[#FFD600] mb-4 font-bold border-b border-zinc-950 pb-2 flex items-center gap-2">
+                👤 2. Agentes da Viagem (Motorista e Contratantes)
               </h3>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
-                {/* Motorista input with dropdown autocomplete suggestions */}
-                <div className="space-y-1.5 relative">
-                  <label className="text-xs text-gray-400 font-medium flex items-center justify-between">
-                    Nome Completo do Motorista
-                    <span className="text-[9px] text-[#FFD600] font-mono">Autocomplete ligado</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="João Silva"
-                    {...register('motorista', { required: 'Motorista é obrigatório' })}
-                    onFocus={() => setShowMotoristaSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowMotoristaSuggestions(false), 200)}
-                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none placeholder-gray-700 font-sans"
-                    id="form-input-motorista"
-                  />
-                  {errors.motorista && <p className="text-[10px] text-red-400 font-mono">{errors.motorista.message}</p>}
-                  
-                  {/* Predictive panel options */}
-                  {showMotoristaSuggestions && motoristasList.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-[#18181b] border border-zinc-800 rounded-lg max-h-36 overflow-y-auto shadow-2xl z-50 font-sans text-xs">
-                      {motoristasList
-                        .filter(m => m.nome.toLowerCase().includes(watchMotorista.toLowerCase()))
-                        .map((m, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onMouseDown={() => selectMotorista(m.nome, m.tel)}
-                            className="w-full text-left p-2 hover:bg-zinc-850 hover:text-[#FFD600] border-b border-zinc-900 transition-colors text-gray-300 flex justify-between font-mono text-[11px]"
-                          >
-                            <span>👤 {m.nome}</span>
-                            <span className="text-gray-500">+{m.tel}</span>
-                          </button>
-                        ))
-                      }
-                    </div>
+              {/* Box de detalhe do Motorista - com CPF e barreira de segurança de Lista Negra */}
+              <div className="p-4 bg-zinc-900/30 border border-zinc-900 rounded-xl space-y-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-mono tracking-wider font-black text-[#FFD600]">
+                    Identificação do Motorista
+                  </span>
+                  {matchedBlockedDriver && (
+                    <span className="text-[10px] uppercase font-mono font-bold text-red-500 animate-pulse">
+                      🛑 BLOQUEIO ATIVO
+                    </span>
                   )}
                 </div>
 
-                {/* Telefone Motorista */}
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-400 font-medium">DDD + WhatsApp Motorista (Numérico)</label>
-                  <input
-                    type="text"
-                    placeholder="99991223344"
-                    {...register('tel_motorista', { 
-                      required: 'Telefone do motorista é obrigatório',
-                      pattern: { value: /^[0-9]+$/, message: 'Apenas números sem espaços ou parênteses' }
-                    })}
-                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none font-mono placeholder-gray-700"
-                    id="form-input-telmotorista"
-                  />
-                  {errors.tel_motorista && <p className="text-[10px] text-red-400 font-mono">{errors.tel_motorista.message}</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  
+                  {/* Motorista input */}
+                  <div className="space-y-1.5 relative">
+                    <label className="text-xs text-gray-400 font-medium flex items-center justify-between">
+                      Nome do Motorista
+                      <span className="text-[8px] text-zinc-550 font-mono">Autocomplete</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: João da Silva"
+                      {...register('motorista', { required: 'Nome do motorista é obrigatório' })}
+                      onFocus={() => setShowMotoristaSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowMotoristaSuggestions(false), 200)}
+                      className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none placeholder-gray-700 font-sans"
+                      id="form-input-motorista"
+                    />
+                    {errors.motorista && <p className="text-[10px] text-red-400 font-mono">{errors.motorista.message}</p>}
+                    
+                    {showMotoristaSuggestions && motoristasList.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-[#18181b] border border-zinc-800 rounded-lg max-h-36 overflow-y-auto shadow-2xl z-50 font-sans text-xs">
+                        {motoristasList
+                          .filter(m => m.nome.toLowerCase().includes(watchMotorista.toLowerCase()))
+                          .map((m, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onMouseDown={() => selectMotorista(m.nome, m.tel)}
+                              className="w-full text-left p-2 hover:bg-zinc-850 hover:text-[#FFD600] border-b border-zinc-900 transition-colors text-gray-300 flex justify-between font-mono text-[11px]"
+                            >
+                              <span>👤 {m.nome}</span>
+                              <span className="text-gray-500">+{m.tel}</span>
+                            </button>
+                          ))
+                        }
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CPF do Motorista */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-400 font-medium">CPF do Motorista (Cadastro e Chave)</label>
+                    <input
+                      type="text"
+                      placeholder="000.000.000-00"
+                      {...register('cpf_motorista', { 
+                        required: 'CPF do motorista é requerido para faturamento de seguros',
+                        onChange: (e) => {
+                          setValue('cpf_motorista', formatCPF(e.target.value));
+                        }
+                      })}
+                      className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none font-mono placeholder-gray-700"
+                      id="form-input-cpfmotorista"
+                    />
+                    {errors.cpf_motorista && <p className="text-[10px] text-red-400 font-mono">{errors.cpf_motorista.message}</p>}
+                  </div>
+
+                  {/* Telefone do Motorista */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-400 font-medium">WhatsApp Motorista (DDD + Números)</label>
+                    <input
+                      type="text"
+                      placeholder="99991223344"
+                      {...register('tel_motorista', { 
+                        required: 'Telefone do motorista é obrigatório',
+                        pattern: { value: /^[0-9]+$/, message: 'Digite apenas números sem caracteres especiais' }
+                      })}
+                      className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none font-mono placeholder-gray-700"
+                      id="form-input-telmotorista"
+                    />
+                    {errors.tel_motorista && <p className="text-[10px] text-red-400 font-mono">{errors.tel_motorista.message}</p>}
+                  </div>
+
                 </div>
 
+                {/* VISUAL BLACKLIST DETECTED PANEL !!! Model especial bonito pra Rodovar */}
+                {matchedBlockedDriver && (
+                  <div className="p-4 bg-red-950/40 border-2 border-red-600/70 rounded-xl space-y-3.5 text-red-100 animate-fadeIn shadow-[0_0_20px_rgba(220,38,38,0.15)]">
+                    <div className="flex items-center gap-2 text-red-400 font-sans font-black tracking-widest text-xs border-b border-red-900/60 pb-2">
+                      <ShieldAlert className="w-5 h-5 animate-pulse" />
+                      <span>🚨 CENTRAL DE SEGURANÇA: MOTORISTA BLOQUEADO DETECTADO!</span>
+                    </div>
+                    
+                    <div className="text-xs space-y-3">
+                      <p className="font-sans leading-relaxed text-zinc-300">
+                        O motorista identificado por coincidência de <strong className="text-[#FFD600]">CPF</strong> ou <strong className="text-[#FFD600]">WhatsApp</strong> está inserido na <strong className="text-red-400">LISTA NEGRA</strong> oficial da empresa. O faturamento e escalonamento deste processo foram bloqueados e nenhuma carga poderá ser salva para este operador.
+                      </p>
+                      
+                      <div className="bg-[#0b0707] rounded-lg p-3.5 border border-red-950/70 font-mono text-[11px] space-y-2 text-zinc-300 shadow-inner">
+                        <div className="flex flex-col sm:flex-row justify-between border-b border-red-950/30 pb-1.5 gap-1">
+                          <span>👤 NOME DO BLOQUEADO:</span>
+                          <strong className="text-white uppercase font-sans">{matchedBlockedDriver.nome}</strong>
+                        </div>
+                        <div className="flex flex-col sm:flex-row justify-between border-b border-red-950/30 pb-1.5 gap-1">
+                          <span>💳 DOCUMENTO CPF:</span>
+                          <strong className="text-red-400">{matchedBlockedDriver.cpf}</strong>
+                        </div>
+                        <div className="flex flex-col sm:flex-row justify-between border-b border-red-950/30 pb-1.5 gap-1">
+                          <span>📱 ZAP DE CONTATO:</span>
+                          <span className="text-gray-300 font-bold">{matchedBlockedDriver.telefone}</span>
+                        </div>
+                        <div className="flex flex-col sm:flex-row justify-between border-b border-red-950/30 pb-1.5 gap-1">
+                          <span>📅 DATA DA OCORRÊNCIA:</span>
+                          <span className="text-zinc-400">{new Date(matchedBlockedDriver.created_at).toLocaleString('pt-BR')}</span>
+                        </div>
+                        {matchedBlockedDriver.usuarioNome && (
+                          <div className="flex flex-col sm:flex-row justify-between border-b border-red-950/30 pb-1.5 gap-1">
+                            <span>👤 AUDITOR DO REGISTRO:</span>
+                            <span className="text-zinc-400 font-sans font-bold">{matchedBlockedDriver.usuarioNome}</span>
+                          </div>
+                        )}
+                        <div className="pt-1.5">
+                          <span className="text-red-400 font-bold block uppercase text-[9px] mb-1">MOTIVOS E OBSERVAÇÕES REPORTADAS:</span>
+                          <p className="font-sans text-zinc-300 text-xs bg-red-950/15 p-2 rounded-md border border-red-950/40 whitespace-pre-line leading-relaxed">
+                            {matchedBlockedDriver.observacao}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Box de Clientes e Vendededores */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                
                 {/* Cliente comitente input with autocomplete options */}
                 <div className="space-y-1.5 relative">
                   <label className="text-xs text-gray-400 font-medium flex items-center justify-between">
@@ -792,14 +937,23 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
           
           <button
             type="submit"
-            disabled={isGeocoding}
-            className="w-full sm:w-auto px-6 py-2.5 bg-[#FFD600] hover:bg-[#ffe23b] text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            disabled={isGeocoding || !!matchedBlockedDriver}
+            className={`w-full sm:w-auto px-6 py-2.5 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+              matchedBlockedDriver 
+                ? 'bg-[#180a0a] border border-red-500/20 text-red-400 cursor-not-allowed opacity-60' 
+                : 'bg-[#FFD600] hover:bg-[#ffe23b] text-black cursor-pointer'
+            }`}
             id="form-submit-btn"
           >
             {isGeocoding ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin text-black" />
                 Deteccionando CEP...
+              </>
+            ) : matchedBlockedDriver ? (
+              <>
+                <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+                GRAVAÇÃO BLOQUEADA (LISTA NEGRA)
               </>
             ) : (
               <>

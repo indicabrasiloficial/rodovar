@@ -1,4 +1,4 @@
-import { Entrega } from '../types';
+import { Entrega, BlacklistMotorista } from '../types';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
 import { 
@@ -15,14 +15,17 @@ import {
 
 const ENTREGAS_COLLECTION = 'entregas';
 const MESSAGES_COLLECTION = 'scheduled_messages';
+const BLACKLIST_COLLECTION = 'blacklist_motoristas';
 
 // Memory caches
 let cachedEntregas: Entrega[] = [];
 let cachedScheduledMessages: any[] = [];
+let cachedBlacklist: BlacklistMotorista[] = [];
 
 // Custom events matching original design
 const REALTIME_EVENT = 'rodovar_realtime_event';
 const SCHEDULED_REALTIME_EVENT = 'rodovar_scheduled_realtime_event';
+const BLACKLIST_REALTIME_EVENT = 'rodovar_blacklist_realtime_event';
 
 // SEED DATA
 const SEED_ENTREGAS: Omit<Entrega, 'userId'>[] = [];
@@ -117,6 +120,24 @@ onSnapshot(messagesQuery, (snapshot) => {
   window.dispatchEvent(new CustomEvent(SCHEDULED_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
 }, (error) => {
   handleFirestoreError(error, OperationType.GET, MESSAGES_COLLECTION);
+});
+
+// Listen to blacklist motoristas
+const blacklistQuery = collection(db, BLACKLIST_COLLECTION);
+onSnapshot(blacklistQuery, (snapshot) => {
+  cachedBlacklist = [];
+  snapshot.forEach(docSnap => {
+    cachedBlacklist.push({
+      id: docSnap.id,
+      ...docSnap.data()
+    } as BlacklistMotorista);
+  });
+  // Sort by created_at descending
+  cachedBlacklist.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  // Trigger standard local Custom Event
+  window.dispatchEvent(new CustomEvent(BLACKLIST_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+}, (error) => {
+  handleFirestoreError(error, OperationType.GET, BLACKLIST_COLLECTION);
 });
 
 // Sync data retrievers
@@ -357,10 +378,14 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     descricao: desc
   }));
 
+  const rawHistoryList = [...(basePayload.historico || []), ...newEvents];
+  // Limit history messages to a standard safe threshold of 40 entries to prevent unbounded storage
+  const limitedHistoryList = rawHistoryList.slice(-40);
+
   const payload: any = {
     ...basePayload,
     ...entrega,
-    historico: [...(basePayload.historico || []), ...newEvents],
+    historico: limitedHistoryList,
     updated_at: new Date().toISOString()
   };
 
@@ -607,4 +632,93 @@ export function clearEditLock(id: string): void {
       editando_por: null
     });
   }
+}
+
+export function getBlacklist(): BlacklistMotorista[] {
+  return cachedBlacklist;
+}
+
+export function saveToBlacklist(driver: Omit<BlacklistMotorista, 'id'> & { id?: string }): BlacklistMotorista {
+  const uid = auth.currentUser?.uid || 'system_operator';
+  const cleanId = driver.id || 'bl-' + Math.random().toString(36).substring(2, 11);
+  const existingItem = cachedBlacklist.find(b => b.id === cleanId);
+
+  const payload: BlacklistMotorista = {
+    id: cleanId,
+    nome: driver.nome || '',
+    cpf: driver.cpf || '',
+    telefone: driver.telefone || '',
+    observacao: driver.observacao || '',
+    created_at: existingItem?.created_at || driver.created_at || new Date().toISOString(),
+    usuarioNome: driver.usuarioNome || '',
+    userId: uid
+  };
+
+  // Optimistic update
+  const index = cachedBlacklist.findIndex(b => b.id === cleanId);
+  if (index !== -1) {
+    cachedBlacklist[index] = payload;
+  } else {
+    cachedBlacklist.push(payload);
+  }
+  window.dispatchEvent(new CustomEvent(BLACKLIST_REALTIME_EVENT, { detail: { action: 'UPSERT', payload } }));
+
+  // Firestore update
+  setDoc(doc(db, BLACKLIST_COLLECTION, cleanId), payload).catch((error) => {
+    handleFirestoreError(error, OperationType.WRITE, `${BLACKLIST_COLLECTION}/${cleanId}`);
+  });
+
+  return payload;
+}
+
+export function removeFromBlacklist(id: string): boolean {
+  const index = cachedBlacklist.findIndex(b => b.id === id);
+  if (index !== -1) {
+    cachedBlacklist.splice(index, 1);
+    window.dispatchEvent(new CustomEvent(BLACKLIST_REALTIME_EVENT, { detail: { action: 'DELETE', payload: { id } } }));
+
+    // Firestore deletion
+    deleteDoc(doc(db, BLACKLIST_COLLECTION, id)).catch((error) => {
+      handleFirestoreError(error, OperationType.DELETE, `${BLACKLIST_COLLECTION}/${id}`);
+    });
+    return true;
+  }
+  return false;
+}
+
+export function subscribeToBlacklistRealtime(callback: (payload: { action: string; payload: any }) => void) {
+  const handler = (event: Event) => {
+    const customEvent = event as CustomEvent;
+    callback(customEvent.detail);
+  };
+  window.addEventListener(BLACKLIST_REALTIME_EVENT, handler);
+  return () => {
+    window.removeEventListener(BLACKLIST_REALTIME_EVENT, handler);
+  };
+}
+
+export interface DriverRatingStats {
+  boas: number;
+  ruins: number;
+  total: number;
+  indice: number; // 0 to 100 percentage
+}
+
+export function getDriverRatingStats(driverName: string): DriverRatingStats {
+  if (!driverName) {
+    return { boas: 0, ruins: 0, total: 0, indice: 100 };
+  }
+  const nameNorm = driverName.toLowerCase().trim();
+  const driverDeliveries = cachedEntregas.filter(e => e.motorista && e.motorista.toLowerCase().trim() === nameNorm);
+  
+  let boas = 0;
+  let ruins = 0;
+  driverDeliveries.forEach(e => {
+    if (e.avaliacao_viagem === 'boa') boas++;
+    else if (e.avaliacao_viagem === 'ruim') ruins++;
+  });
+  
+  const total = boas + ruins;
+  const indice = total > 0 ? Math.round((boas / total) * 100) : 100; // Default to 100% positive if no ratings
+  return { boas, ruins, total, indice };
 }

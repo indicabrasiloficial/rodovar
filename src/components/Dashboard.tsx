@@ -21,7 +21,8 @@ import {
   Layers,
   ChevronRight,
   Sparkles,
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import DeliveryMap from './DeliveryMap';
@@ -48,6 +49,25 @@ const statusLabelMap: Record<string, string> = {
 };
 export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: DashboardProps) {
   const [voiceQueryInput, setVoiceQueryInput] = useState('');
+
+  // Handle storing dismissed alert identifiers
+  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('rodovar_dismissed_alerts');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismissAlert = (id: string) => {
+    const updated = [...dismissedAlerts, id];
+    setDismissedAlerts(updated);
+    localStorage.setItem('rodovar_dismissed_alerts', JSON.stringify(updated));
+    if (window.falarRodovar) {
+      window.falarRodovar('Alerta de anomalia dispensado.');
+    }
+  };
 
   // Calculate Metrics
   const metrics = useMemo(() => {
@@ -118,8 +138,8 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
       }
     });
 
-    return alerts;
-  }, [entregas]);
+    return alerts.filter(a => !dismissedAlerts.includes(a.id));
+  }, [entregas, dismissedAlerts]);
 
   // Chart Data preparation
   const chartData = useMemo(() => {
@@ -517,15 +537,8 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
             </div>
           </div>
 
-          {/* Core action controls: Listen button + Quick analyzer button */}
+          {/* Core action controls: Listen button */}
           <div className="flex flex-row items-center gap-4 shrink-0 mx-auto md:mx-0">
-            <button
-              onClick={() => voiceHook.processSpeech('analisar frota')}
-              className="px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-[#FFD600] rounded-xl text-xs font-mono font-bold tracking-tight uppercase flex items-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
-              title="Solicitar auditoria acústica de frota"
-            >
-              📊 Auditoria de Voz
-            </button>
 
             <div className="flex flex-col items-center gap-1">
               <button
@@ -794,10 +807,10 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
                 rodovarAlerts.map(alert => (
                   <div 
                     key={alert.id} 
-                    className="p-2.5 rounded-lg border text-xs flex flex-col gap-2 transition bg-zinc-900/30 border-zinc-850 hover:border-zinc-800"
+                    className="p-2.5 rounded-lg border text-xs flex flex-col gap-2 transition bg-zinc-900/30 border-zinc-850 hover:border-zinc-805"
                   >
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="space-y-0.5">
+                    <div className="flex justify-between items-start gap-2 relative">
+                      <div className="space-y-0.5 max-w-[88%]">
                         <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold uppercase inline-block ${
                           alert.type === 'parado'
                             ? 'bg-red-950/40 text-red-400 border border-red-900/20'
@@ -808,8 +821,17 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
                           {alert.type === 'parado' ? 'Parado 🛑' : alert.type === 'gps' ? 'Sem GPS 📍' : 'Pendente 📋'}
                         </span>
                         <h4 className="font-bold text-gray-200 mt-1">{alert.title}</h4>
-                        <p className="text-[11px] text-zinc-400 leading-normal">{alert.desc}</p>
+                        <p className="text-[11.5px] text-zinc-400 leading-relaxed font-sans">{alert.desc}</p>
                       </div>
+
+                      <button
+                        onClick={() => handleDismissAlert(alert.id)}
+                        className="text-zinc-600 hover:text-red-400 p-1.5 rounded-md hover:bg-zinc-900 transition-colors cursor-pointer shrink-5 shrink-0"
+                        title="Dispensar este alerta"
+                        id={`btn-dismiss-alert-${alert.id}`}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
 
                     <div className="flex items-center justify-between border-t border-zinc-900 pt-2 text-[10px] font-mono">

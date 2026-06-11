@@ -39,6 +39,19 @@ export interface Entrega {
     usuario: string;
     timestamp: string;
   } | null;
+  avaliacao_viagem?: 'boa' | 'ruim' | null;
+  cpf_motorista?: string;
+}
+
+export interface BlacklistMotorista {
+  id: string;
+  nome: string;
+  cpf: string;
+  telefone: string;
+  observacao: string;
+  created_at: string;
+  usuarioNome?: string;
+  userId?: string;
 }
 
 export interface SupabaseConfig {

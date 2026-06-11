@@ -15,7 +15,6 @@ export interface VoiceState {
   showConfirmPrompt: boolean;
   pendingActionDeliveryId?: string;
   pendingActionType?: 'motorista' | 'cliente';
-  conversationContext?: 'greeting' | 'confirm_whatsapp' | 'idle';
 }
 
 const monthNamesSpeak: Record<string, string> = {
@@ -189,7 +188,6 @@ export function useVoice(
     assistantResponse: '',
     error: '',
     showConfirmPrompt: false,
-    conversationContext: 'idle',
   });
 
   const recognitionRef = useRef<any>(null);
@@ -225,20 +223,10 @@ export function useVoice(
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error', event);
-        let friendlyMessage = `Erro de voz: ${event.error || 'Não reconhecido'}`;
-        
-        if (event.error === 'not-allowed') {
-          friendlyMessage = 'Microfone restrito pelo visualizador integrado. Navegadores bloqueiam reconhecimento de voz dentro de iframes. Clicando no botão "Abrir aplicativo" (ícone com seta saindo da página) no topo direito para interagir diretamente pelo site original!';
-        } else if (event.error === 'no-speech') {
-          friendlyMessage = 'Nenhuma fala detectada. Tente falar novamente em um ambiente mais silencioso ou ajuste o microfone.';
-        } else if (event.error === 'network') {
-          friendlyMessage = 'Erro de rede. Conexão lenta ou indisponível dificultando o reconhecimento de fala.';
-        }
-        
         setState((prev) => ({
           ...prev,
           isListening: false,
-          error: friendlyMessage,
+          error: `Erro de voz: ${event.error || 'Não reconhecido'}`,
         }));
       };
 
@@ -266,6 +254,8 @@ export function useVoice(
     setState((prev) => ({ ...prev, assistantResponse: text }));
   };
 
+  // STRICTOR CONSTRAINTS enforcement: NEVER activate the microphone automatically (Requirement #3).
+  // The microphone listening process MUST be initiated strictly and exclusively after a direct, deliberate user click action.
   const startListening = () => {
     if (recognitionRef.current) {
       try {
@@ -323,126 +313,12 @@ export function useVoice(
       const query = text.toLowerCase().trim();
       const entregas = getEntregas();
 
-      // Check if we are in greeting context for conversational follow-ups
-      if (state.conversationContext === 'greeting') {
-        const lowerUser = getActiveUserName().toLowerCase();
-        let handled = false;
-        let responseSpeech = '';
-
-        // Logical conditions for user responses
-        const isPositive = 
-          query === 'sim' ||
-          query === 'quero' ||
-          query === 'com certeza' ||
-          query === 'maravilha' ||
-          query === 'claro' ||
-          query === 'com certeza' ||
-          query.includes('que bom') ||
-          query.includes('ótimo') ||
-          query.includes('otimo') ||
-          query.includes('bom trabalho') ||
-          query.includes('bom') ||
-          query.includes('tudo bem') ||
-          query.includes('excelente') ||
-          query.includes('tudo ótimo') ||
-          query.includes('tudo otimo') ||
-          query.includes('perfeito') ||
-          query.includes('tudo certo') ||
-          query.includes('sob controle');
-
-        const isNegativeOrConcerned =
-          query.includes('ruim') ||
-          query.includes('problema') ||
-          query.includes('atraso') ||
-          query.includes('parado') ||
-          query.includes('complicado') ||
-          query.includes('mais ou menos') ||
-          query.includes('não') ||
-          query.includes('nao') ||
-          query.includes('difícil') ||
-          query.includes('dificil') ||
-          query.includes('preocupado');
-
-        if (lowerUser.includes('ricardo')) {
-          handled = true;
-          if (isPositive) {
-            responseSpeech = `Excelente, Diretor Ricardo! Isso mostra que o monitoramento tático e o desempenho operacional da Rodovar seguem no melhor caminho sob sua liderança. Gostaria de rodar uma auditoria geral de frota por áudio agora ou prefere focar em algum veículo em trânsito?`;
-          } else if (isNegativeOrConcerned) {
-            responseSpeech = `Compreendo, Ricardo. A operação diária é dinâmica e exige pulso firme. Notei que temos veículos sem sinal de localização há mais de quatro horas. Gostaria de filtrar as cargas paradas na tela para tomarmos providências?`;
-          } else {
-            responseSpeech = `Entendido, Ricardo. Sigo totalmente a postos no monitoramento. Se quiser consolidar dados de rota com os motoristas, diga 'analisar frota' ou clique na auditoria.`;
-          }
-        } else if (lowerUser.includes('genivaldo')) {
-          handled = true;
-          if (isPositive) {
-            onFilterStatus('parado');
-            onSearchQuery('');
-            responseSpeech = `Excelente! Varredura tática concluída, Genivaldo. Filtrei todas as cargas paradas na tela. O motorista Valdemir está com o caminhão parado atualmente. Quer que eu prepare o contato rápido de WhatsApp de suporte para você coordenar com ele?`;
-          } else if (isNegativeOrConcerned) {
-            responseSpeech = `Entendido, Gerente Genivaldo. O monitoramento de rota e dispersão segue em segundo plano. Basta me chamar se desejar fazer auditoria ou despachar nova carga.`;
-          } else {
-            responseSpeech = `Tudo bem, Genivaldo. Sigo acompanhando a equipe. Qualquer anomalia crítica nas entregas, te aviso de imediato.`;
-          }
-        } else if (lowerUser.includes('alexandre')) {
-          handled = true;
-          if (isPositive) {
-            responseSpeech = `Maravilha, Diretor Alexandre! Nossos fretes ativos acumulam excelentes resultados este mês e a carteira está saudável. Gostaria de filtrar por cliente ou prefere auditar as cargas pendentes do porto?`;
-          } else if (isNegativeOrConcerned) {
-            responseSpeech = `Entendido, Alexandre. Risco comercial contido. O faturamento e os prazos contratuais estão projetados na tela. Conte comigo para reverter gargalos de frete empresa.`;
-          } else {
-            responseSpeech = `Certo, Alexandre. Permaneço monitorando os faturamentos. Desejando verificar qualquer valor de carga, basta me chamar.`;
-          }
-        } else if (lowerUser.includes('petronio')) {
-          handled = true;
-          if (isPositive) {
-            responseSpeech = `Que ótima notícia, Petrônio! Conciliação e fluxo financeiro em perfeita conformidade. Quer detalhar os repasses pendentes de frete motorista ou prefere manter a visualização geral do painel?`;
-          } else if (isNegativeOrConcerned) {
-            responseSpeech = `Entendido, Petrônio. Vamos agir com rigidez contra despesas extras ou diárias decorrentes de atrasos na rota. Havendo motorista inativo, me acione para cobrarmos agilidade.`;
-          } else {
-            responseSpeech = `Perfeito, Petrônio! Mantendo a acurácia dos repasses em dia. Sigo de prontidão para novas consultas.`;
-          }
-        } else if (lowerUser.includes('jairo')) {
-          handled = true;
-          if (isPositive) {
-            responseSpeech = `Sensacional, Jairo Bahia! Produtividade máxima nos envios. Quer rodar uma conferência de entregas concluídas hoje ou precisa monitorar as coletas nos parceiros?`;
-          } else if (isNegativeOrConcerned) {
-            responseSpeech = `Sem problemas, Jairo! Foco nas coletas urgentes. Caso algum motorista demore a dar resposta no WhatsApp, me fale o nome dele que localizo rapidamente na base de dados.`;
-          } else {
-            responseSpeech = `Perfeito, Jairo! Continue com esse excelente trabalho operacional. Sigo acompanhando cada carga de perto.`;
-          }
-        } else if (lowerUser.includes('vitor')) {
-          handled = true;
-          if (isPositive) {
-            responseSpeech = `Excelente, Diretor Vitor! Nosso SLA de transporte segue no patamar planejado. Deseja rodar um diagnóstico de desvios geográficos ou prefere monitorar as paradas críticas da rota?`;
-          } else if (isNegativeOrConcerned) {
-            responseSpeech = `Compreendido, Vitor. A conformidade de rota exige atenção tática. Identifiquei alguns atrasos pontuais de tráfego. Deseja obter a lista condensada desses atrasos?`;
-          } else {
-            responseSpeech = `Perfeito, Vitor. SLA operacional sob absoluto controle. Estou atenta a cada trecho da rota.`;
-          }
-        }
-
-        if (handled) {
-          setState((prev) => ({ 
-            ...prev, 
-            conversationContext: 'idle' 
-          }));
-          
-          speak(responseSpeech, () => {
-            // Keep microphone listening active right after speaking to keep a fluid hands-free voice dialogue!
-            setTimeout(() => {
-              startListening();
-            }, 600);
-          });
-          return;
-        }
-      }
-
       // Check if replying to the pending prompt
       if (state.showConfirmPrompt) {
-        if (query === 'sim' || query.includes('quero') || query.includes('abrir') || query.includes('pode') || query.includes('manda') || query.includes('fazer')) {
+        if (query === 'sim' || query.includes('quero') || query.includes('abrir') || query.includes('pode')) {
           confirmPendingAction(true);
           return;
-        } else if (query === 'não' || query === 'nao' || query.includes('cancelar') || query.includes('deixa')) {
+        } else if (query === 'não' || query === 'nao' || query.includes('cancelar')) {
           confirmPendingAction(false);
           return;
         }
@@ -737,8 +613,5 @@ export function useVoice(
     processSpeech,
     confirmPendingAction,
     speak,
-    setContext: (ctx: 'greeting' | 'confirm_whatsapp' | 'idle') => {
-      setState((prev) => ({ ...prev, conversationContext: ctx }));
-    }
   };
 }

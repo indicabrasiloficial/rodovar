@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
-import { saveEntrega, getEntregaById } from '../db/storage';
+import { saveEntrega, getEntregaById, getDriverRatingStats } from '../db/storage';
 import { getDeliveryKm } from '../utils/distance';
 import { 
   ArrowLeft,
@@ -135,6 +135,27 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   const [isSavingLink, setIsSavingLink] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [clickedScripts, setClickedScripts] = useState<string[]>([]);
+
+  // Calculate driver travel rating score
+  const ratingStats = React.useMemo(() => {
+    return getDriverRatingStats(entrega?.motorista || '');
+  }, [entrega]);
+
+  const handleRateViagem = (rating: 'boa' | 'ruim') => {
+    if (!entrega) return;
+    try {
+      const updated = saveEntrega({
+        id: entrega.id,
+        avaliacao_viagem: rating
+      });
+      setEntrega(updated);
+      if (window.falarRodovar) {
+        window.falarRodovar(`Avaliação registrada com sucesso! Viagem classificada como ${rating === 'boa' ? 'boa' : 'ruim'}.`);
+      }
+    } catch (e: any) {
+      console.error('Error saving trip rating:', e);
+    }
+  };
 
   // Load latest values
   useEffect(() => {
@@ -406,18 +427,85 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               
               {/* Box Driver */}
-              <div className="bg-zinc-950/50 p-4 border border-zinc-900 rounded-xl space-y-3">
+              <div className="bg-zinc-950/50 p-4 border border-zinc-900 rounded-xl space-y-4">
                 <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] flex items-center gap-1.5 font-bold">
                   <User className="w-4 h-4" />
                   Motorista Credenciado
                 </span>
-                <div className="space-y-1 font-sans">
+                
+                <div className="space-y-1 font-sans pb-2 border-b border-zinc-900/40">
                   <p className="text-sm font-bold text-gray-200">{entrega.motorista}</p>
-                  <p className="text-xs text-gray-400 font-mono flex items-center gap-1">
+                  {entrega.cpf_motorista && (
+                    <p className="text-[10px] font-mono text-zinc-500">
+                      CPF: <span className="text-zinc-400">{entrega.cpf_motorista}</span>
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400 font-mono flex items-center gap-1 mt-1">
                     <Phone className="w-3.5 h-3.5 text-gray-500" />
                     +55 {entrega.tel_motorista}
                   </p>
                 </div>
+
+                {/* Índice de Competência do Motorista - Model Rodovar */}
+                <div className="space-y-2 font-sans pt-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-mono text-zinc-550 uppercase font-bold text-[9px]">Índice de Competência</span>
+                    <span className={`font-mono font-black ${
+                      ratingStats.indice >= 80 ? 'text-emerald-400' : ratingStats.indice >= 50 ? 'text-amber-400' : 'text-red-400'
+                    }`}>
+                      {ratingStats.total === 0 ? 'SEM HISTÓRICO' : `${ratingStats.indice}% BOA`}
+                    </span>
+                  </div>
+
+                  {/* Rating indicator progress bar */}
+                  <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-350 ${
+                        ratingStats.indice >= 80 ? 'bg-emerald-500' : ratingStats.indice >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${ratingStats.indice}%` }}
+                    />
+                  </div>
+
+                  {ratingStats.total > 0 && (
+                    <div className="text-[9px] text-zinc-500 font-mono flex justify-between">
+                      <span>{ratingStats.boas} viagem(ns) boa(s)</span>
+                      <span>{ratingStats.ruins} viagem(ns) ruim(ns)</span>
+                    </div>
+                  )}
+
+                  {/* Rating Selector buttons */}
+                  <div className="pt-2 space-y-1">
+                    <span className="text-[9px] uppercase font-mono font-extrabold text-zinc-500 block">Julgar Desempenho:</span>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleRateViagem('boa')}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold font-mono tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1 border ${
+                          entrega.avaliacao_viagem === 'boa'
+                            ? 'bg-emerald-950/40 border-emerald-500 text-emerald-400 font-black'
+                            : 'bg-zinc-900/35 border-zinc-850 text-zinc-400 hover:text-white hover:border-zinc-700'
+                        }`}
+                        id={`btn-rate-boa-${entrega.id}`}
+                      >
+                        👍 Viagem Boa
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRateViagem('ruim')}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold font-mono tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1 border ${
+                          entrega.avaliacao_viagem === 'ruim'
+                            ? 'bg-red-950/40 border-red-500 text-red-500 font-black'
+                            : 'bg-zinc-900/35 border-zinc-850 text-zinc-400 hover:text-white hover:border-zinc-700'
+                        }`}
+                        id={`btn-rate-ruim-${entrega.id}`}
+                      >
+                        👎 Viagem Ruim
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
               {/* Box Client */}
