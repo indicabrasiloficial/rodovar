@@ -400,7 +400,8 @@ export default function App() {
       
       {/* Top Header Rail bar structure (High Density Theme) */}
       <header className="border-b border-zinc-800 bg-[#0a0a0a] sticky top-0 z-[1010] backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4 h-auto md:h-16">
+        {/* Mobile and Tablet Header Container (lg:hidden) */}
+        <div className="lg:hidden max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4 h-auto md:h-16">
           
           {/* Logo and Branding exactly from design specifications */}
           <div className="flex items-center gap-3.5 cursor-pointer select-none" onClick={() => setSelectedView('list')}>
@@ -602,6 +603,206 @@ export default function App() {
 
           </div>
 
+        </div>
+
+        {/* Desktop Header Container (hidden lg:flex) */}
+        <div className="hidden lg:flex flex-col max-w-7xl mx-auto px-4 py-3 gap-3">
+          {/* Top Row: Logo & Profile */}
+          <div className="flex items-center justify-between">
+            {/* Logo and Branding exactly from design specifications */}
+            <div className="flex items-center gap-3.5 cursor-pointer select-none" onClick={() => setSelectedView('list')}>
+              <img 
+                src="https://rodovar.com.br/wp-content/uploads/2026/02/logo.png" 
+                alt="Rodovar" 
+                className="h-10 w-auto transition-transform hover:scale-105 object-contain" 
+                referrerPolicy="no-referrer"
+              />
+              <div>
+                <h1 className="text-lg font-black tracking-tighter text-[#FFD600] flex items-center gap-2 m-0 leading-none">
+                  RODOVAR MONITORA
+                </h1>
+              </div>
+            </div>
+
+            {/* High Density Right Side Info Items */}
+            <div className="flex items-center gap-3.5">
+              {/* Mute Speech Button */}
+              <button
+                onClick={toggleMuteSpeech}
+                className={`p-1.5 px-3 border rounded transition-all cursor-pointer h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold ${
+                  isSpeechMuted 
+                    ? 'bg-red-950/20 text-red-400 border-red-900/60 hover:text-red-305' 
+                    : 'bg-emerald-950/15 text-emerald-400 border-emerald-900/60 hover:text-emerald-305'
+                }`}
+                title={isSpeechMuted ? "Fala desativada temporariamente. Clique para reativar." : "Fala ativa. Clique para desativar temporariamente."}
+                id="desktop-mute-speech-toggle-btn"
+              >
+                {isSpeechMuted ? <VolumeX className="w-3.5 h-3.5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+                <span>{isSpeechMuted ? "FALA DESATIVADA" : "FALA ATIVA"}</span>
+              </button>
+
+              {/* Cadastrar Carga Button */}
+              <button
+                onClick={handleAddNewDelivery}
+                className="flex items-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-full px-4 py-1.5 gap-1.5 transition-all text-[10px] font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.15)] hover:scale-[1.02] active:scale-95"
+                id="desktop-global-cadastrar-btn"
+              >
+                <Truck className="w-3.5 h-3.5 text-black shrink-0" />
+                <span>Cadastrar Carga</span>
+              </button>
+
+              {/* User badge customized */}
+              <div className="flex items-center gap-2.5 border-l border-zinc-800 pl-4">
+                <div className="text-right">
+                  <p className="text-xs font-bold leading-none uppercase text-zinc-200 m-0">{user.displayName}</p>
+                  <p className="text-[9px] text-zinc-500 font-mono leading-none mt-1 mb-0">{user.role}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800 font-bold text-xs text-[#FFD600]" title={user.displayName}>
+                  {user.displayName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                </div>
+                
+                {/* Password Change Button */}
+                <button
+                  onClick={() => setIsChangePasswordOpen(true)}
+                  className="p-1 px-2.5 border border-zinc-800 hover:border-[#FFD600] text-zinc-400 hover:text-[#FFD600] bg-zinc-900/40 rounded transition-colors cursor-pointer ml-1 h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold"
+                  title="Alterar Senha"
+                >
+                  <Lock className="w-3 h-3 text-[#FFD600]" />
+                  <span>Senha</span>
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="p-1 px-2 border border-zinc-800 hover:border-red-900 text-zinc-400 hover:text-red-400 bg-zinc-900/40 rounded transition-colors cursor-pointer h-8 flex items-center"
+                  title="Sair do Sistema"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider line separating rows for sleek structural organization */}
+          <div className="border-t border-zinc-900 my-0.5" />
+
+          {/* Bottom Row: Navigation Buttons spanning horizontally with zero wrap risk and high density styling */}
+          <nav className="flex items-center justify-start gap-3 py-1">
+            {/* Nav List */}
+            <button
+              onClick={() => setSelectedView('list')}
+              className={`px-5 py-2 rounded-xl text-xs font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-md ${
+                selectedView === 'list' || selectedView === 'details'
+                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+              }`}
+              id="desktop-nav-list"
+            >
+              <Truck className="w-4 h-4 shrink-0 text-inherit" />
+              <span>Cargas</span>
+            </button>
+
+            {/* Nav Dashboard */}
+            <button
+              onClick={() => setSelectedView('dashboard')}
+              className={`px-5 py-2 rounded-xl text-xs font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-md ${
+                selectedView === 'dashboard'
+                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+              }`}
+              id="desktop-nav-dashboard"
+            >
+              <LayoutDashboard className="w-4 h-4 shrink-0 text-inherit" />
+              <span>Painel</span>
+            </button>
+
+            <span className="h-5 w-[1px] bg-zinc-800 mx-1" />
+
+            {/* Nav Stats */}
+            <button
+              onClick={() => setSelectedView('statistics')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
+                selectedView === 'statistics' 
+                ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.1)]' 
+                : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
+              }`}
+              id="desktop-nav-stats"
+            >
+              <BarChart3 className="w-4 h-4 text-[#FFD600] shrink-0" />
+              <span>Desempenho</span>
+            </button>
+
+            {/* Nav WhatsApp */}
+            <button
+              onClick={() => setSelectedView('whatsapp')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
+                selectedView === 'whatsapp' 
+                ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.1)]' 
+                : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
+              }`}
+              id="desktop-nav-whatsapp"
+            >
+              <MessageSquare className="w-4 h-4 text-[#FFD600] shrink-0" />
+              <span>Agenda Zap</span>
+            </button>
+
+            {/* Nav Manager */}
+            <button
+              onClick={() => setSelectedView('manager')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
+                selectedView === 'manager' 
+                ? 'bg-red-950/45 text-red-500 border-red-900/50 font-extrabold shadow-[0_0_12px_rgba(239,68,68,0.1)]' 
+                : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
+              }`}
+              id="desktop-nav-manager"
+            >
+              <Shield className="w-3.5 h-3.5 text-red-500 shrink-0" />
+              <span>Gerente Genivaldo</span>
+            </button>
+
+            {/* Nav Blacklist */}
+            <button
+              onClick={() => setSelectedView('blacklist')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
+                selectedView === 'blacklist' 
+                ? 'bg-red-950/45 text-red-500 border-red-900/50 font-extrabold shadow-[0_0_12px_rgba(239,68,68,0.1)]' 
+                : 'text-zinc-400 border-transparent hover:text-white hover:bg-[#181010]/60 hover:border-zinc-800'
+              }`}
+              id="desktop-nav-blacklist"
+            >
+              <UserX className="w-3.5 h-3.5 text-red-500 shrink-0" />
+              <span>Lista Negra</span>
+            </button>
+
+            {/* Nav Manual */}
+            <button
+              onClick={() => setSelectedView('manual')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
+                selectedView === 'manual' 
+                ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.1)]' 
+                : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
+              }`}
+              id="desktop-nav-manual"
+            >
+              <BookOpen className="w-4 h-4 text-[#FFD600] shrink-0" />
+              <span>Manual Agente</span>
+            </button>
+
+            {/* Nav Registration */}
+            {user && (user.username === 'master' || user.role === 'Master') && (
+              <button
+                onClick={() => setSelectedView('registration')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
+                  selectedView === 'registration' 
+                  ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.1)]' 
+                  : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
+                }`}
+                id="desktop-nav-registration"
+              >
+                <Users className="w-4 h-4 text-[#FFD600] shrink-0" />
+                <span>Cadastro</span>
+              </button>
+            )}
+          </nav>
         </div>
       </header>
 
