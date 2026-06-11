@@ -578,7 +578,6 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
                       type="text"
                       placeholder="000.000.000-00"
                       {...register('cpf_motorista', { 
-                        required: 'CPF do motorista é requerido para faturamento de seguros',
                         onChange: (e) => {
                           setValue('cpf_motorista', formatCPF(e.target.value));
                         }

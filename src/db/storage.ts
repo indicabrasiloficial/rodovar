@@ -1,4 +1,4 @@
-import { Entrega, BlacklistMotorista } from '../types';
+import { Entrega, BlacklistMotorista, BlacklistCliente } from '../types';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
 import { 
@@ -16,16 +16,19 @@ import {
 const ENTREGAS_COLLECTION = 'entregas';
 const MESSAGES_COLLECTION = 'scheduled_messages';
 const BLACKLIST_COLLECTION = 'blacklist_motoristas';
+const BLACKLIST_CLIENTS_COLLECTION = 'blacklist_clientes';
 
 // Memory caches
 let cachedEntregas: Entrega[] = [];
 let cachedScheduledMessages: any[] = [];
 let cachedBlacklist: BlacklistMotorista[] = [];
+let cachedBlacklistClientes: BlacklistCliente[] = [];
 
 // Custom events matching original design
 const REALTIME_EVENT = 'rodovar_realtime_event';
 const SCHEDULED_REALTIME_EVENT = 'rodovar_scheduled_realtime_event';
 const BLACKLIST_REALTIME_EVENT = 'rodovar_blacklist_realtime_event';
+const BLACKLIST_CLIENTS_REALTIME_EVENT = 'rodovar_blacklist_clientes_realtime_event';
 
 // SEED DATA
 const SEED_ENTREGAS: Omit<Entrega, 'userId'>[] = [];
@@ -138,6 +141,24 @@ onSnapshot(blacklistQuery, (snapshot) => {
   window.dispatchEvent(new CustomEvent(BLACKLIST_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
 }, (error) => {
   handleFirestoreError(error, OperationType.GET, BLACKLIST_COLLECTION);
+});
+
+// Listen to blacklist clientes
+const blacklistClientesQuery = collection(db, BLACKLIST_CLIENTS_COLLECTION);
+onSnapshot(blacklistClientesQuery, (snapshot) => {
+  cachedBlacklistClientes = [];
+  snapshot.forEach(docSnap => {
+    cachedBlacklistClientes.push({
+      id: docSnap.id,
+      ...docSnap.data()
+    } as BlacklistCliente);
+  });
+  // Sort by created_at descending
+  cachedBlacklistClientes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  // Trigger standard local Custom Event
+  window.dispatchEvent(new CustomEvent(BLACKLIST_CLIENTS_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+}, (error) => {
+  handleFirestoreError(error, OperationType.GET, BLACKLIST_CLIENTS_COLLECTION);
 });
 
 // Sync data retrievers
@@ -721,4 +742,85 @@ export function getDriverRatingStats(driverName: string): DriverRatingStats {
   const total = boas + ruins;
   const indice = total > 0 ? Math.round((boas / total) * 100) : 100; // Default to 100% positive if no ratings
   return { boas, ruins, total, indice };
+}
+
+export function getClientRatingStats(clientName: string): DriverRatingStats {
+  if (!clientName) {
+    return { boas: 0, ruins: 0, total: 0, indice: 100 };
+  }
+  const nameNorm = clientName.toLowerCase().trim();
+  const clientDeliveries = cachedEntregas.filter(e => e.cliente && e.cliente.toLowerCase().trim() === nameNorm);
+  
+  let boas = 0;
+  let ruins = 0;
+  clientDeliveries.forEach(e => {
+    if (e.avaliacao_cliente === 'boa') boas++;
+    else if (e.avaliacao_cliente === 'ruim') ruins++;
+  });
+  
+  const total = boas + ruins;
+  const indice = total > 0 ? Math.round((boas / total) * 100) : 100; // Default to 100% positive if no ratings
+  return { boas, ruins, total, indice };
+}
+
+export function getBlacklistClientes(): BlacklistCliente[] {
+  return cachedBlacklistClientes;
+}
+
+export function saveToBlacklistClientes(client: Omit<BlacklistCliente, 'id'> & { id?: string }): BlacklistCliente {
+  const uid = auth.currentUser?.uid || 'system_operator';
+  const cleanId = client.id || 'blc-' + Math.random().toString(36).substring(2, 11);
+  const existingItem = cachedBlacklistClientes.find(b => b.id === cleanId);
+
+  const payload: BlacklistCliente = {
+    id: cleanId,
+    nome: client.nome || '',
+    cpf_cnpj: client.cpf_cnpj || '',
+    telefone: client.telefone || '',
+    observacao: client.observacao || '',
+    created_at: existingItem?.created_at || client.created_at || new Date().toISOString(),
+    usuarioNome: client.usuarioNome || '',
+    userId: uid
+  };
+
+  // Optimistic update
+  const index = cachedBlacklistClientes.findIndex(b => b.id === cleanId);
+  if (index !== -1) {
+    cachedBlacklistClientes[index] = payload;
+  } else {
+    cachedBlacklistClientes.push(payload);
+  }
+  window.dispatchEvent(new CustomEvent(BLACKLIST_CLIENTS_REALTIME_EVENT, { detail: { action: 'UPSERT', payload } }));
+
+  // Firestore update
+  setDoc(doc(db, BLACKLIST_CLIENTS_COLLECTION, cleanId), payload).catch((error) => {
+    handleFirestoreError(error, OperationType.WRITE, `${BLACKLIST_CLIENTS_COLLECTION}/${cleanId}`);
+  });
+
+  return payload;
+}
+
+export function removeFromBlacklistClientes(id: string): boolean {
+  const index = cachedBlacklistClientes.findIndex(b => b.id === id);
+  if (index !== -1) {
+    cachedBlacklistClientes.splice(index, 1);
+    window.dispatchEvent(new CustomEvent(BLACKLIST_CLIENTS_REALTIME_EVENT, { detail: { action: 'DELETE', payload: { id } } }));
+
+    // Firestore deletion
+    deleteDoc(doc(db, BLACKLIST_CLIENTS_COLLECTION, id)).catch((error) => {
+      handleFirestoreError(error, OperationType.DELETE, `${BLACKLIST_CLIENTS_COLLECTION}/${id}`);
+    });
+    return true;
+  }
+  return false;
+}
+
+export function subscribeToBlacklistClientesRealtime(callback: (payload: { action: string; payload: any }) => void) {
+  const handler = (evt: Event) => {
+    callback((evt as CustomEvent).detail);
+  };
+  window.addEventListener(BLACKLIST_CLIENTS_REALTIME_EVENT, handler);
+  return () => {
+    window.removeEventListener(BLACKLIST_CLIENTS_REALTIME_EVENT, handler);
+  };
 }

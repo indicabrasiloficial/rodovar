@@ -36,7 +36,8 @@ import {
   Shield,
   Users,
   BookOpen,
-  UserX
+  UserX,
+  LayoutDashboard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -399,10 +400,10 @@ export default function App() {
       
       {/* Top Header Rail bar structure (High Density Theme) */}
       <header className="border-b border-zinc-800 bg-[#0a0a0a] sticky top-0 z-[1010] backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col lg:flex-row items-center justify-between gap-4 h-auto lg:h-16">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4 h-auto md:h-16">
           
           {/* Logo and Branding exactly from design specifications */}
-          <div className="flex items-center gap-3.5 cursor-pointer select-none" onClick={() => setSelectedView('dashboard')}>
+          <div className="flex items-center gap-3.5 cursor-pointer select-none" onClick={() => setSelectedView('list')}>
             <img 
               src="https://rodovar.com.br/wp-content/uploads/2026/02/logo.png" 
               alt="Rodovar" 
@@ -417,20 +418,34 @@ export default function App() {
           </div>
 
           {/* Navigation with High Density spacing and optimized compact sizing */}
-          <nav className="flex items-center flex-wrap justify-center gap-1.5 md:gap-1">
+          <nav className="flex items-center flex-wrap justify-center gap-2 md:gap-1.5">
             
-            {/* Nav List */}
+            {/* Nav List - Highly Prominent Premium Highlighted Operational Button */}
             <button
               onClick={() => setSelectedView('list')}
-              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
+              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
                 selectedView === 'list' || selectedView === 'details'
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
               }`}
               id="nav-list"
             >
-              <List className="w-3.5 h-3.5 shrink-0" />
+              <Truck className="w-4 h-4 shrink-0 text-inherit" />
               <span>Cargas</span>
+            </button>
+
+            {/* Nav Dashboard - Highly Prominent Premium Highlighted Operational Button */}
+            <button
+              onClick={() => setSelectedView('dashboard')}
+              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+                selectedView === 'dashboard'
+                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+              }`}
+              id="nav-dashboard"
+            >
+              <LayoutDashboard className="w-4 h-4 shrink-0 text-inherit" />
+              <span>Painel</span>
             </button>
 
             {/* Nav Stats */}

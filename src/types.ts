@@ -40,14 +40,27 @@ export interface Entrega {
     timestamp: string;
   } | null;
   avaliacao_viagem?: 'boa' | 'ruim' | null;
+  avaliacao_cliente?: 'boa' | 'ruim' | null;
   cpf_motorista?: string;
+  cpf_cnpj_cliente?: string;
 }
 
 export interface BlacklistMotorista {
   id: string;
   nome: string;
-  cpf: string;
-  telefone: string;
+  cpf?: string;
+  telefone?: string;
+  observacao: string;
+  created_at: string;
+  usuarioNome?: string;
+  userId?: string;
+}
+
+export interface BlacklistCliente {
+  id: string;
+  nome: string;
+  cpf_cnpj?: string;
+  telefone?: string;
   observacao: string;
   created_at: string;
   usuarioNome?: string;
