@@ -320,35 +320,7 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
           id="btn-toggle-add-blacklist"
         >
           {isAdding ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-          {isAdding ? 'Cancelar Cadastro' : activeTab === 'motoristas' ? 'Bloquear Motorista' : 'Bloquear Cliente'}
-        </button>
-      </div>
-
-      {/* Tabs Toggles */}
-      <div className="flex border-b border-zinc-800 gap-2 bg-[#09090b] p-1 rounded-lg">
-        <button 
-          onClick={() => switchTab('motoristas')}
-          className={`flex-1 py-2.5 rounded-md text-xs font-bold uppercase transition-all flex items-center justify-center gap-2 cursor-pointer ${
-            activeTab === 'motoristas'
-              ? 'bg-red-950/40 border border-red-900/50 text-red-400 font-black'
-              : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
-          }`}
-          id="tab-blacklist-drivers"
-        >
-          <User className="w-4 h-4 text-inherit" />
-          <span>Motoristas ({blacklist.length})</span>
-        </button>
-        <button 
-          onClick={() => switchTab('clientes')}
-          className={`flex-1 py-2.5 rounded-md text-xs font-bold uppercase transition-all flex items-center justify-center gap-2 cursor-pointer ${
-            activeTab === 'clientes'
-              ? 'bg-red-950/40 border border-red-900/50 text-red-400 font-black'
-              : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
-          }`}
-          id="tab-blacklist-clients"
-        >
-          <Building className="w-4 h-4 text-inherit" />
-          <span>Clientes Comercial ({blacklistClientes.length})</span>
+          {isAdding ? 'Cancelar Cadastro' : 'Bloquear Motorista'}
         </button>
       </div>
 
@@ -371,21 +343,21 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
       {isAdding && (
         <div className="p-4 rounded-xl border border-zinc-800 bg-[#0c0c0e] shadow-lg animate-fadeIn">
           <h3 className="text-xs font-extrabold uppercase font-sans tracking-wider text-red-500 mb-3.5 flex items-center gap-1.5">
-            <UserX className="w-4 h-4" /> Registrar Restrição para {activeTab === 'motoristas' ? 'Motorista' : 'Cliente'}
+            <UserX className="w-4 h-4" /> Registrar Restrição para Motorista
           </h3>
           
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
             
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-400 block font-bold">
-                {activeTab === 'motoristas' ? 'Nome Completo do Motorista *' : 'Razão Social ou Nome do Cliente *'}
+                Nome Completo do Motorista *
               </label>
               <input
                 type="text"
                 required
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
-                placeholder={activeTab === 'motoristas' ? "Ex: João Silva de Oliveira" : "Ex: Distribuidora de Bebidas Alfa Ltda"}
+                placeholder="Ex: João Silva de Oliveira"
                 className="w-full bg-[#121214] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-650 focus:border-red-600 focus:outline-none transition-colors"
                 id="blacklist-input-nome"
               />
@@ -393,13 +365,13 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
 
             <div className="space-y-1">
               <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-400 block font-bold">
-                {activeTab === 'motoristas' ? 'CPF do Motorista (Opcional)' : 'CPF ou CNPJ do Cliente (Opcional)'}
+                CPF do Motorista (Opcional)
               </label>
               <input
                 type="text"
                 value={cpfOrCnpj}
                 onChange={handleCpfCnpjChange}
-                placeholder={activeTab === 'motoristas' ? "000.000.000-00" : "00.000.000/0000-00"}
+                placeholder="000.000.000-00"
                 className="w-full bg-[#121214] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-650 focus:border-red-600 focus:outline-none transition-colors font-mono"
                 id="blacklist-input-cpf"
               />
@@ -474,150 +446,74 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
 
         {/* Counter */}
         <div className="flex justify-between items-center text-[10px] uppercase font-mono text-zinc-400 border-b border-zinc-900 pb-2">
-          {activeTab === 'motoristas' ? (
-            <>
-              <span>{filteredListDrivers.length} de {blacklist.length} motorista(s) listado(s)</span>
-              <span className="text-red-400 font-bold hidden sm:inline">Aviso: Cadastro no sistema é bloqueado se houver CPF coincidente</span>
-            </>
-          ) : (
-            <>
-              <span>{filteredListClientes.length} de {blacklistClientes.length} cliente(s) listado(s)</span>
-              <span className="text-red-400 font-bold hidden sm:inline">Aviso: Alertas ativos para faturamento de empresas na Lista Negra</span>
-            </>
-          )}
+          <span>{filteredListDrivers.length} de {blacklist.length} motorista(s) listado(s)</span>
+          <span className="text-red-400 font-bold hidden sm:inline">Aviso: Cadastro no sistema é bloqueado se houver CPF coincidente</span>
         </div>
 
         {/* Main Grid Card layout */}
-        {activeTab === 'motoristas' ? (
-          filteredListDrivers.length === 0 ? (
-            <div className="p-10 text-center font-mono border border-dashed border-zinc-850 rounded-lg text-zinc-600 text-xs">
-              {search ? '⚠️ Nenhum motorista corresponde à busca realizada.' : '✅ Nenhum motorista na Lista Negra no momento.'}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3.5">
-              {filteredListDrivers.map((driver) => (
-                <div 
-                  key={driver.id}
-                  className="p-4 rounded-lg bg-zinc-900/35 border border-red-950/30 hover:border-red-900/40 transition-all flex flex-col md:flex-row justify-between items-start gap-4 relative overflow-hidden"
-                >
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600"></div>
-
-                  <div className="space-y-2.5 pl-2 max-w-3xl flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-sm font-extrabold text-white sm:text-base leading-none">
-                        {driver.nome}
-                      </h4>
-                      {driver.cpf && (
-                        <span className="text-[9px] font-mono font-bold bg-red-950/60 text-red-400 border border-red-900/30 px-2 py-0.5 rounded-full uppercase shrink-0">
-                          CPF: {driver.cpf}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-zinc-400">
-                      {driver.telefone && (
-                        <span className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-zinc-550 shrink-0" />
-                          Contato/Zap: <strong className="text-gray-300 font-mono">{driver.telefone}</strong>
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-zinc-550 shrink-0" />
-                        Data Ocorrência: <strong className="text-gray-300 font-mono">{new Date(driver.created_at).toLocaleString('pt-BR')}</strong>
-                      </span>
-                      {driver.usuarioNome && (
-                        <span className="flex items-center gap-1.5 sm:col-span-2 text-[11px] text-zinc-500 font-mono">
-                          👤 Cadastrado por: <strong className="text-zinc-400 font-sans">{driver.usuarioNome}</strong>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-[#0e0a0a] border border-red-950/20 text-red-300/90 text-[11px] leading-relaxed flex gap-2">
-                      <FileText className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="text-[9px] uppercase font-bold text-red-400 font-mono block mb-1">MOTIVO DO BLOQUEIO:</span>
-                        <p className="whitespace-pre-line text-zinc-350 font-sans">{driver.observacao}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleRemoveMotorista(driver)}
-                    className="px-3.5 py-1.5 self-end md:self-center bg-zinc-950 hover:bg-green-600 hover:text-white border border-zinc-800 text-zinc-400 font-extrabold uppercase font-mono text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer hover:shadow-md shrink-0"
-                    id={`btn-remove-blacklist-${driver.id}`}
-                  >
-                    <UserCheck className="w-3.5 h-3.5 text-green-500" />
-                    Liberar Condutor
-                  </button>
-                </div>
-              ))}
-            </div>
-          )
+        {filteredListDrivers.length === 0 ? (
+          <div className="p-10 text-center font-mono border border-dashed border-zinc-850 rounded-lg text-zinc-600 text-xs">
+            {search ? '⚠️ Nenhum motorista corresponde à busca realizada.' : '✅ Nenhum motorista na Lista Negra no momento.'}
+          </div>
         ) : (
-          filteredListClientes.length === 0 ? (
-            <div className="p-10 text-center font-mono border border-dashed border-zinc-850 rounded-lg text-zinc-600 text-xs">
-              {search ? '⚠️ Nenhum cliente corresponde à busca realizada.' : '✅ Nenhum cliente na Lista Negra no momento.'}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3.5">
-              {filteredListClientes.map((client) => (
-                <div 
-                  key={client.id}
-                  className="p-4 rounded-lg bg-zinc-900/35 border border-red-950/30 hover:border-red-900/40 transition-all flex flex-col md:flex-row justify-between items-start gap-4 relative overflow-hidden"
-                >
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-650" style={{ backgroundColor: '#ef4444' }}></div>
+          <div className="grid grid-cols-1 gap-3.5">
+            {filteredListDrivers.map((driver) => (
+              <div 
+                key={driver.id}
+                className="p-4 rounded-lg bg-zinc-900/35 border border-red-950/30 hover:border-red-900/40 transition-all flex flex-col md:flex-row justify-between items-start gap-4 relative overflow-hidden"
+              >
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600"></div>
 
-                  <div className="space-y-2.5 pl-2 max-w-3xl flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-sm font-extrabold text-white sm:text-base leading-none">
-                        {client.nome}
-                      </h4>
-                      {client.cpf_cnpj && (
-                        <span className="text-[9px] font-mono font-bold bg-zinc-950 text-red-400 border border-red-900/30 px-2 py-0.5 rounded-full uppercase shrink-0">
-                          Identificador: {client.cpf_cnpj}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-zinc-400">
-                      {client.telefone && (
-                        <span className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-zinc-550 shrink-0" />
-                          Contato/Zap: <strong className="text-gray-300 font-mono">{client.telefone}</strong>
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-zinc-550 shrink-0" />
-                        Data Ocorrência: <strong className="text-gray-300 font-mono">{new Date(client.created_at).toLocaleString('pt-BR')}</strong>
+                <div className="space-y-2.5 pl-2 max-w-3xl flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-sm font-extrabold text-white sm:text-base leading-none">
+                      {driver.nome}
+                    </h4>
+                    {driver.cpf && (
+                      <span className="text-[9px] font-mono font-bold bg-red-950/60 text-red-400 border border-red-900/30 px-2 py-0.5 rounded-full uppercase shrink-0">
+                        CPF: {driver.cpf}
                       </span>
-                      {client.usuarioNome && (
-                        <span className="flex items-center gap-1.5 sm:col-span-2 text-[11px] text-zinc-500 font-mono">
-                          👤 Cadastrado por: <strong className="text-zinc-400 font-sans">{client.usuarioNome}</strong>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-[#0e0a0a] border border-red-950/20 text-red-300/90 text-[11px] leading-relaxed flex gap-2">
-                      <FileText className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="text-[9px] uppercase font-bold text-red-400 font-mono block mb-1">MOTIVO DA RESTRIÇÃO COMERCIAL:</span>
-                        <p className="whitespace-pre-line text-zinc-355 font-sans">{client.observacao}</p>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  <button
-                    onClick={() => handleRemoveCliente(client)}
-                    className="px-3.5 py-1.5 self-end md:self-center bg-zinc-950 hover:bg-green-600 hover:text-white border border-zinc-800 text-zinc-400 font-extrabold uppercase font-mono text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer hover:shadow-md shrink-0"
-                    id={`btn-remove-blacklist-client-${client.id}`}
-                  >
-                    <UserCheck className="w-3.5 h-3.5 text-green-500" />
-                    Liberar Cliente
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-zinc-400">
+                    {driver.telefone && (
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-zinc-550 shrink-0" />
+                        Contato/Zap: <strong className="text-gray-300 font-mono">{driver.telefone}</strong>
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-zinc-550 shrink-0" />
+                      Data Ocorrência: <strong className="text-gray-300 font-mono">{new Date(driver.created_at).toLocaleString('pt-BR')}</strong>
+                    </span>
+                    {driver.usuarioNome && (
+                      <span className="flex items-center gap-1.5 sm:col-span-2 text-[11px] text-zinc-500 font-mono">
+                        👤 Cadastrado por: <strong className="text-zinc-400 font-sans">{driver.usuarioNome}</strong>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-[#0e0a0a] border border-red-950/20 text-red-300/90 text-[11px] leading-relaxed flex gap-2">
+                    <FileText className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-[9px] uppercase font-bold text-red-400 font-mono block mb-1">MOTIVO DO BLOQUEIO:</span>
+                      <p className="whitespace-pre-line text-zinc-350 font-sans">{driver.observacao}</p>
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )
+
+                <button
+                  onClick={() => handleRemoveMotorista(driver)}
+                  className="px-3.5 py-1.5 self-end md:self-center bg-zinc-950 hover:bg-green-600 hover:text-white border border-zinc-800 text-zinc-400 font-extrabold uppercase font-mono text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer hover:shadow-md shrink-0"
+                  id={`btn-remove-blacklist-${driver.id}`}
+                >
+                  <UserCheck className="w-3.5 h-3.5 text-green-500" />
+                  Liberar Condutor
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
       </div>
