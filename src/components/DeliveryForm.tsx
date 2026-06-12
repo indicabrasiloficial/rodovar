@@ -311,18 +311,22 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
     let coords = { lat: -23.5505, lng: -46.6333 }; // Default SPM SP
 
     try {
-      if (data.destino) {
-        // Run OpenStreetMap geocoding query dynamically on destination
+      if (data.origem) {
+        // Run OpenStreetMap geocoding query dynamically on origin as requested
+        coords = await geocodeCity(data.origem);
+      } else if (data.destino) {
         coords = await geocodeCity(data.destino);
       }
     } catch (e) {
       console.warn('Geocoding error:', e);
     }
 
-    // Preserve existing coords in edit mode unless destination has changed
+    // Preserve existing coords in edit mode unless origin or destination has changed
     if (isEditMode && entregaId) {
       const existing = getEntregaById(entregaId);
-      if (existing && existing.destino.toLowerCase().trim() === data.destino.toLowerCase().trim()) {
+      if (existing && 
+          existing.origem.toLowerCase().trim() === data.origem.toLowerCase().trim() && 
+          existing.destino.toLowerCase().trim() === data.destino.toLowerCase().trim()) {
         coords.lat = existing.lat;
         coords.lng = existing.lng;
       }

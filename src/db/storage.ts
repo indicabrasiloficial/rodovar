@@ -62,15 +62,26 @@ onSnapshot(entregasQuery, async (snapshot) => {
       ? Number(data.km) 
       : calculateRealisticDistanceKm(data.origem || '', data.destino || '');
     
-    // Auto-heal coordinates if they were incorrectly reset/cleared or set to default São Paulo coordinates for other destinations
+    // Auto-heal coordinates if they were incorrectly reset/cleared or set to default São Paulo coordinates for other origins/destinations
     let latVal = data.lat !== undefined ? Number(data.lat) : 0;
     let lngVal = data.lng !== undefined ? Number(data.lng) : 0;
+    const orig = data.origem || '';
     const dest = data.destino || '';
 
-    if ((!latVal || !lngVal || (latVal === -23.5505 && lngVal === -46.6333)) && dest && !dest.toLowerCase().includes('são paulo') && !dest.toLowerCase().includes('sao paulo')) {
-      const cityCoords = findCityCoords(dest);
-      latVal = cityCoords.lat;
-      lngVal = cityCoords.lng;
+    if (!latVal || !lngVal || (latVal === -23.5505 && lngVal === -46.6333)) {
+      if (orig && !orig.toLowerCase().includes('são paulo') && !orig.toLowerCase().includes('sao paulo')) {
+        const cityCoords = findCityCoords(orig);
+        if (cityCoords) {
+          latVal = cityCoords.lat;
+          lngVal = cityCoords.lng;
+        }
+      } else if (dest && !dest.toLowerCase().includes('são paulo') && !dest.toLowerCase().includes('sao paulo')) {
+        const cityCoords = findCityCoords(dest);
+        if (cityCoords) {
+          latVal = cityCoords.lat;
+          lngVal = cityCoords.lng;
+        }
+      }
     }
 
     // Align with real registration inputs for freight and cargo values
@@ -421,8 +432,14 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     payload.km = Number(entrega.km) || calculateRealisticDistanceKm(payload.origem, payload.destino);
   }
 
-  // Ensure lat/lng are correct and updated if base values were default and they can be resolved based on destination
-  if (payload.destino && (payload.lat === -23.5505 && payload.lng === -46.6333) && !payload.destino.toLowerCase().includes('são paulo') && !payload.destino.toLowerCase().includes('sao paulo')) {
+  // Ensure lat/lng are correct and updated if base values were default and they can be resolved based on origin first
+  if (payload.origem && (payload.lat === -23.5505 && payload.lng === -46.6333) && !payload.origem.toLowerCase().includes('são paulo') && !payload.origem.toLowerCase().includes('sao paulo')) {
+    const cityCoords = findCityCoords(payload.origem);
+    if (cityCoords) {
+      payload.lat = cityCoords.lat;
+      payload.lng = cityCoords.lng;
+    }
+  } else if (payload.destino && (payload.lat === -23.5505 && payload.lng === -46.6333) && !payload.destino.toLowerCase().includes('são paulo') && !payload.destino.toLowerCase().includes('sao paulo')) {
     const cityCoords = findCityCoords(payload.destino);
     if (cityCoords) {
       payload.lat = cityCoords.lat;
