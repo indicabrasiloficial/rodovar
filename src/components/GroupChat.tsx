@@ -616,17 +616,112 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
           })
         };
 
-        const response = await fetch('/api/chat/ai', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(bodyData)
-        });
+        let data: any = null;
+        let triedClientFallback = false;
 
-        const data = await response.json();
+        try {
+          const response = await fetch('/api/chat/ai', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(bodyData)
+          });
 
-        if (data.success && data.text) {
+          const contentType = response.headers.get('content-type') || '';
+          if (response.ok && contentType.includes('application/json')) {
+            data = await response.json();
+          } else {
+            console.warn(`Server returned non-JSON response or error status ${response.status}. Attempting client-side fallback...`);
+          }
+        } catch (serverErr) {
+          console.warn("Express server endpoint is not reachable. Attempting client-side Gemini fallback...", serverErr);
+        }
+
+        // Client-side fallback if the Express server API failed (e.g., when hosted on Vercel static)
+        if (!data || !data.success) {
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (window as any).VITE_GEMINI_API_KEY;
+          if (apiKey) {
+            triedClientFallback = true;
+            try {
+              const systemInstruction = `
+Você é o "Agente Rodovar IA", o assistente de inteligência artificial de elite, de caráter realista e corporativo, da Rodovar Transportadora e Logística.
+Sua missão é atuar como uma central de multi-agentes inteligentes que servem a equipe comercial, expedição, monitoramento operacional e os diretores em tempo real com base nos dados do sistema.
+
+O usuário pode interagir diretamente chamando Comandos Específicos ou tirando dúvidas. Você DEVE processar os seguintes comandos especiais consultando a base de dados real fornecida no contexto (NUNCA invente ou simule resultados):
+
+1. AGENTE DE CÁLCULO DE ROTA (Acionado por: "/rota", "calcular rota", "rota de [Origem] para [Destino]"):
+   - Baseado na origem e destino, calcule de forma realista: Distância Estimada (em KM), Tempo Estimado de Trânsito (velocidade média 80km/h para veículos pesados), Consumo de Diesel (2.5 km/l), Custo do Combustível (R$ 6,20/litro), Pontos de Parada Segura (Mencione postos reais) e Classificação de Risco com horários recomendados para circulação diurna segura.
+   - Apresente um Painel de Rota visual usando os ícones (🚚, 📍, ⏱️, ⛽, 💸, 🛑).
+
+2. AGENTE DE CONSULTA DE CPF (Acionado por: "/cpf", "consultar cpf", "verificar cpf"):
+   - Pesquise no contexto em "blacklistMotoristas" e "allDeliveries". Limpe os caracteres especiais do CPF fornecido antes de buscar.
+   - Se o motorista constar na lista negra ("blacklistMotoristas"): exiba o alerta vermelho "🔴 ALERTA DE SEGURANÇA: MOTORISTA BLOQUEADO NA LISTA NEGRA RODOVAR!" com Nome, CPF e o Motivo de bloqueio cadastrado.
+   - Se o motorista possuir viagens pretéritas em "allDeliveries", liste o histórico concreto dos trajetos.
+   - Se não constar em nenhuma das listas, retorne de forma pragmática: "Cadastro de CPF não possui restrições internas registradas no banco de dados da Rodovar."
+
+3. AGENTE DE CONSULTA DE TELEFONE (Acionado por: "/telefone", "consultar telefone"):
+   - Limpe caracteres especiais do telefone e procure em "allDeliveries", "blacklistMotoristas", e "blacklistClientes".
+   - Se encontrar, detalhe o registro histórico. Se não encontrar, retorne: "O contato telefônico consultado não foi localizado em nosso banco de dados operacionais." (NÃO simule sinais ou varreduras).
+
+REGRAS DE ESCOPO:
+- A consulta de placa de veículo/Buonny/Sinesp foi removida por não possuirmos integração ativa externa governamental. Portanto, nunca tente simular consultas de placas.
+- Jamais invente ou insira dados falsos no sistema. Se perguntado sobre algo que não está presente no contexto de dados enviado, responda de forma profissional que os dados não estão nos registros atuais.
+- Por favor, seja extremamente formal, pragmático, ágil, e redija suas respostas em português de negócios de forma clara, amigável e técnica.
+`;
+
+              const contents = [
+                {
+                  parts: [
+                    {
+                      text: `${currentText}\n\nContexto operacional real do banco de dados (use estes dados de verdade): ${JSON.stringify(bodyData.context || {})}`
+                    }
+                  ]
+                }
+              ];
+
+              if (currentAttachment && currentAttachment.data && currentAttachment.mimeType) {
+                contents[0].parts.unshift({
+                  inlineData: {
+                    data: currentAttachment.data,
+                    mimeType: currentAttachment.mimeType
+                  }
+                } as any);
+              }
+
+              const clientResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  contents,
+                  systemInstruction: {
+                    parts: [{ text: systemInstruction }]
+                  },
+                  generationConfig: {
+                    temperature: 0.7
+                  }
+                })
+              });
+
+              if (clientResp.ok) {
+                const clientData = await clientResp.json();
+                const text = clientData.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                  data = {
+                    success: true,
+                    text
+                  };
+                }
+              }
+            } catch (fallbackErr) {
+              console.error("Client fallback also failed:", fallbackErr);
+            }
+          }
+        }
+
+        if (data && data.success && data.text) {
           const aiPayload: Omit<GroupChatMessage, 'id'> = {
             category: activeCategory,
             text: data.text,
@@ -646,6 +741,25 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
               .substring(0, 180);
             onSpeak(voiceClbkText);
           }
+        } else {
+          // If both methods failed, post a clean help instruction
+          const errorMsg = `⚠️ **[Serviço do Agente Rodovar Indisponível]** Não foi possível conectar ao motor real da Inteligência Artificial.
+
+**Como habilitar o funcionamento real agora mesmo:**
+1. **No ambiente de desenvolvimento/AI Studio:** Verifique se adicionou a chave \`GEMINI_API_KEY\` corretamente na aba lateral esquerda **"Settings > Secrets"** do editor e reiniciou o servidor.
+2. **Em sua hospedagem pública (ex: Vercel):** Como Vercel serve apenas arquivos estáticos por padrão e desvia chamadas \`/api/*\` para páginas HTML, você deve configurar a variável de ambiente \`VITE_GEMINI_API_KEY\` no painel administrativo do Vercel com a sua chave Gemini. O aplicativo detectará essa chave e acionará os agentes em tempo real direto do seu navegador!`;
+
+          const fallbackPayload: Omit<GroupChatMessage, 'id'> = {
+            category: activeCategory,
+            text: errorMsg,
+            userId: 'rodovar_ai',
+            userName: 'Agente Rodovar IA',
+            userRole: 'Sistemas Logísticos',
+            timestamp: new Date().toISOString(),
+            isAiTriggered: true
+          };
+
+          await sendGroupChatMessage(fallbackPayload);
         }
       } catch (err) {
         console.error('Falha ao acionar o Agente IA:', err);
@@ -1695,20 +1809,6 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
                     title="Consultar Telefone do Motorista"
                   >
                     <span>📞 Consultar Telefone</span>
-                    <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInputText('@rodovar consultar placa ABC1D23');
-                      const inp = document.getElementById('chat-input-text');
-                      if (inp) inp.focus();
-                    }}
-                    className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
-                    title="Consultar Placa do Veículo"
-                  >
-                    <span>🚘 Consultar Placa</span>
                     <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
                   </button>
                 </div>

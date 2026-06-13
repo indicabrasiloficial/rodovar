@@ -7,26 +7,20 @@ export default function AgentManual() {
     {
       phrase: "@rodovar calcular rota de [Origem] para [Destino]",
       alternative: "/rota [Origem] [Destino] ou 'calcular rota de...'",
-      effect: "Planeja o melhor percurso simulando quilometragem de rodovia, horas de viagem, consumo estimado de Diesel S10, custos de combustível, pontos de parada segura oficiais para descanço do motorista no percurso e classificação de risco da rota.",
+      effect: "Planeja o melhor percurso calculando a quilometragem de rodovia aproximada, horas de viagem, consumo estimado de Diesel S10, custos de combustível, pontos de parada segura oficiais para descanso do motorista no percurso e classificação de risco da rota.",
       category: "Agente de Rotas"
     },
     {
       phrase: "@rodovar consultar cpf [Número do CPF]",
       alternative: "/cpf [Número] ou 'verificar cpf...'",
-      effect: "Varre instantaneamente a Lista Negra da Central de Segurança Rodovar (blacklist) e de cargas ativas para assegurar que o motorista está com a documentação idônea e liberada pelas gerenciadoras Buonny e Pancary.",
+      effect: "Varre instantaneamente a Lista Negra da Central de Segurança Rodovar (blacklist) e de cargas ativas para assegurar a idoneidade cadastral do motorista.",
       category: "Agente de Segurança (CPF)"
     },
     {
       phrase: "@rodovar consultar telefone [Contato comercial]",
       alternative: "/telefone [Número] ou 'telefone do motorista...'",
-      effect: "Busca o contato telefônico nas bases de dados operacionais e de sinistros para validar se este telefone é ativo na central, listando detalhes cadastrados ou liberando o canal GSM de rastreamento.",
+      effect: "Busca o contato telefônico nas bases de dados operacionais e de restrições de crédito/incidentes para validar se este telefone é ativo na central, listando detalhes cadastrados.",
       category: "Agente de Contatos"
-    },
-    {
-      phrase: "@rodovar consultar placa [Letras e Números]",
-      alternative: "/placa [Placa] ou 'placa do veículo...'",
-      effect: "Realiza uma simulação integrada de consulta contra bancos de roubo/furto de veículos Sinesp, bloqueios governamentais, restrições cadastrais nas gerenciadoras de riscos e integridade operacional do caminhão.",
-      category: "Agente de Veículos (Placa)"
     },
     {
       phrase: "analisar frota",
