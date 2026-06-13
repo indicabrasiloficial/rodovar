@@ -16,6 +16,7 @@ import ChangePasswordModal from './components/ChangePasswordModal';
 import EmployeeRegistration from './components/EmployeeRegistration';
 import AgentManual from './components/AgentManual';
 import BlacklistManager from './components/BlacklistManager';
+import GroupChat from './components/GroupChat';
 
 import { 
   Truck, 
@@ -37,11 +38,12 @@ import {
   Users,
   BookOpen,
   UserX,
-  LayoutDashboard
+  LayoutDashboard,
+  Bot
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'group_chat';
 
 
 export default function App() {
@@ -343,6 +345,18 @@ export default function App() {
         return (
           <BlacklistManager currentUser={user} />
         );
+      case 'group_chat':
+        return (
+          <GroupChat 
+            user={user}
+            isSpeechMuted={isSpeechMuted}
+            onSpeak={(text) => {
+              if (window.falarRodovar) {
+                window.falarRodovar(text);
+              }
+            }}
+          />
+        );
       default:
         return <div className="text-center p-12 text-gray-500">Selecione uma opção válida.</div>;
     }
@@ -447,6 +461,20 @@ export default function App() {
             >
               <LayoutDashboard className="w-4 h-4 shrink-0 text-inherit" />
               <span>Painel</span>
+            </button>
+
+            {/* Nav Group Chat - Professional Group Chat as requested */}
+            <button
+              onClick={() => setSelectedView('group_chat')}
+              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+                selectedView === 'group_chat'
+                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+              }`}
+              id="nav-group_chat"
+            >
+              <Bot className="w-4 h-4 shrink-0 text-inherit" />
+              <span>Chat Grupo</span>
             </button>
 
             {/* Nav Stats */}
@@ -685,123 +713,154 @@ export default function App() {
           {/* Divider line separating rows for sleek structural organization */}
           <div className="border-t border-zinc-900 my-0.5" />
 
-          {/* Bottom Row: Navigation Buttons spanning horizontally with zero wrap risk and high density styling */}
-          <nav className="flex items-center justify-start gap-3 py-1">
-            {/* Nav List */}
-            <button
-              onClick={() => setSelectedView('list')}
-              className={`px-5 py-2 rounded-xl text-xs font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-md ${
-                selectedView === 'list' || selectedView === 'details'
-                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
-                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
-              }`}
-              id="desktop-nav-list"
-            >
-              <Truck className="w-4 h-4 shrink-0 text-inherit" />
-              <span>Cargas</span>
-            </button>
+          {/* Bottom Row: Navigation Redesigned in 3 Spatially Partitioned Modules to Prevent Overlap info */}
+          <nav className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 py-2 border-t border-zinc-900/85 mt-2">
+            
+            {/* Section 1: Core Operations */}
+            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60">
+              <span className="text-[10px] font-bold font-mono tracking-widest text-zinc-500 px-2 uppercase">Geral</span>
+              <div className="flex items-center gap-1">
+                {/* Nav List */}
+                <button
+                  onClick={() => setSelectedView('list')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'list' || selectedView === 'details'
+                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                    : 'bg-zinc-900/20 border-transparent text-zinc-400 hover:text-[#FFD600]'
+                  }`}
+                  id="desktop-nav-list"
+                >
+                  <Truck className="w-3.5 h-3.5 shrink-0" />
+                  <span>Cargas</span>
+                </button>
 
-            {/* Nav Dashboard */}
-            <button
-              onClick={() => setSelectedView('dashboard')}
-              className={`px-5 py-2 rounded-xl text-xs font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-md ${
-                selectedView === 'dashboard'
-                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
-                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
-              }`}
-              id="desktop-nav-dashboard"
-            >
-              <LayoutDashboard className="w-4 h-4 shrink-0 text-inherit" />
-              <span>Painel</span>
-            </button>
+                {/* Nav Dashboard */}
+                <button
+                  onClick={() => setSelectedView('dashboard')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'dashboard'
+                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                    : 'bg-zinc-900/20 border-transparent text-zinc-400 hover:text-[#FFD600]'
+                  }`}
+                  id="desktop-nav-dashboard"
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
+                  <span>Painel</span>
+                </button>
 
-            <span className="h-5 w-[1px] bg-zinc-800 mx-1" />
+                {/* Nav Group Chat */}
+                <button
+                  onClick={() => setSelectedView('group_chat')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'group_chat'
+                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                    : 'bg-zinc-900/20 border-transparent text-zinc-400 hover:text-[#FFD600]'
+                  }`}
+                  id="desktop-nav-group-chat"
+                >
+                  <Bot className="w-3.5 h-3.5 shrink-0" />
+                  <span>Chat Grupo</span>
+                </button>
+              </div>
+            </div>
 
-            {/* Nav Stats */}
-            <button
-              onClick={() => setSelectedView('statistics')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
-                selectedView === 'statistics' 
-                ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.1)]' 
-                : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
-              }`}
-              id="desktop-nav-stats"
-            >
-              <BarChart3 className="w-4 h-4 text-[#FFD600] shrink-0" />
-              <span>Desempenho</span>
-            </button>
+            {/* Section 2: Support & Tools */}
+            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60">
+              <span className="text-[10px] font-bold font-mono tracking-widest text-zinc-500 px-2 uppercase">Suporte</span>
+              <div className="flex items-center gap-1">
+                {/* Nav Stats */}
+                <button
+                  onClick={() => setSelectedView('statistics')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'statistics' 
+                    ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                    : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                  }`}
+                  id="desktop-nav-stats"
+                >
+                  <BarChart3 className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                  <span>Desempenho</span>
+                </button>
 
-            {/* Nav WhatsApp */}
-            <button
-              onClick={() => setSelectedView('whatsapp')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
-                selectedView === 'whatsapp' 
-                ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.1)]' 
-                : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
-              }`}
-              id="desktop-nav-whatsapp"
-            >
-              <MessageSquare className="w-4 h-4 text-[#FFD600] shrink-0" />
-              <span>Agenda Zap</span>
-            </button>
+                {/* Nav WhatsApp */}
+                <button
+                  onClick={() => setSelectedView('whatsapp')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'whatsapp' 
+                    ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                    : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                  }`}
+                  id="desktop-nav-whatsapp"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                  <span>Agenda Zap</span>
+                </button>
 
-            {/* Nav Manager */}
-            <button
-              onClick={() => setSelectedView('manager')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
-                selectedView === 'manager' 
-                ? 'bg-red-950/45 text-red-500 border-red-900/50 font-extrabold shadow-[0_0_12px_rgba(239,68,68,0.1)]' 
-                : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
-              }`}
-              id="desktop-nav-manager"
-            >
-              <Shield className="w-3.5 h-3.5 text-red-500 shrink-0" />
-              <span>Gerente Genivaldo</span>
-            </button>
+                {/* Nav Manager */}
+                <button
+                  onClick={() => setSelectedView('manager')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'manager' 
+                    ? 'bg-red-950/45 text-red-500 border-red-900/50 font-bold' 
+                    : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                  }`}
+                  id="desktop-nav-manager"
+                >
+                  <Shield className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  <span>Gerente Genivaldo</span>
+                </button>
+              </div>
+            </div>
 
-            {/* Nav Blacklist */}
-            <button
-              onClick={() => setSelectedView('blacklist')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
-                selectedView === 'blacklist' 
-                ? 'bg-red-950/45 text-red-500 border-red-900/50 font-extrabold shadow-[0_0_12px_rgba(239,68,68,0.1)]' 
-                : 'text-zinc-400 border-transparent hover:text-white hover:bg-[#181010]/60 hover:border-zinc-800'
-              }`}
-              id="desktop-nav-blacklist"
-            >
-              <UserX className="w-3.5 h-3.5 text-red-500 shrink-0" />
-              <span>Lista Negra</span>
-            </button>
+            {/* Section 3: Safety & Auditing */}
+            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60">
+              <span className="text-[10px] font-bold font-mono tracking-widest text-zinc-500 px-2 uppercase">Segurança</span>
+              <div className="flex items-center gap-1">
+                {/* Nav Blacklist */}
+                <button
+                  onClick={() => setSelectedView('blacklist')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'blacklist' 
+                    ? 'bg-red-950/45 text-red-500 border-red-900/50 font-bold' 
+                    : 'text-zinc-400 border-transparent hover:text-white hover:bg-[#181010]/60'
+                  }`}
+                  id="desktop-nav-blacklist"
+                >
+                  <UserX className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  <span>Lista Negra</span>
+                </button>
 
-            {/* Nav Manual */}
-            <button
-              onClick={() => setSelectedView('manual')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
-                selectedView === 'manual' 
-                ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.1)]' 
-                : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
-              }`}
-              id="desktop-nav-manual"
-            >
-              <BookOpen className="w-4 h-4 text-[#FFD600] shrink-0" />
-              <span>Manual Agente</span>
-            </button>
+                {/* Nav Manual */}
+                <button
+                  onClick={() => setSelectedView('manual')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'manual' 
+                    ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                    : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                  }`}
+                  id="desktop-nav-manual"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                  <span>Manual Agente</span>
+                </button>
 
-            {/* Nav Registration */}
-            {user && (user.username === 'master' || user.role === 'Master') && (
-              <button
-                onClick={() => setSelectedView('registration')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-2 border ${
-                  selectedView === 'registration' 
-                  ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.1)]' 
-                  : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/60 hover:border-zinc-800'
-                }`}
-                id="desktop-nav-registration"
-              >
-                <Users className="w-4 h-4 text-[#FFD600] shrink-0" />
-                <span>Cadastro</span>
-              </button>
-            )}
+                {/* Nav Registration */}
+                {user && (user.username === 'master' || user.role === 'Master') && (
+                  <button
+                    onClick={() => setSelectedView('registration')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      selectedView === 'registration' 
+                      ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                      : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                    }`}
+                    id="desktop-nav-registration"
+                  >
+                    <Users className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                    <span>Cadastro</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </nav>
         </div>
       </header>

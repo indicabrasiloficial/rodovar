@@ -1,4 +1,4 @@
-import { Entrega, BlacklistMotorista, BlacklistCliente } from '../types';
+import { Entrega, BlacklistMotorista, BlacklistCliente, GroupChatMessage } from '../types';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
 import { 
@@ -68,14 +68,14 @@ onSnapshot(entregasQuery, async (snapshot) => {
     const orig = data.origem || '';
     const dest = data.destino || '';
 
-    if (!latVal || !lngVal || (latVal === -23.5505 && lngVal === -46.6333)) {
-      if (orig && !orig.toLowerCase().includes('são paulo') && !orig.toLowerCase().includes('sao paulo')) {
+    if (!latVal || !lngVal || (latVal === -23.5504 && lngVal === -46.6334)) {
+      if (orig) {
         const cityCoords = findCityCoords(orig);
         if (cityCoords) {
           latVal = cityCoords.lat;
           lngVal = cityCoords.lng;
         }
-      } else if (dest && !dest.toLowerCase().includes('são paulo') && !dest.toLowerCase().includes('sao paulo')) {
+      } else if (dest) {
         const cityCoords = findCityCoords(dest);
         if (cityCoords) {
           latVal = cityCoords.lat;
@@ -410,14 +410,14 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     payload.km = Number(entrega.km) || calculateRealisticDistanceKm(payload.origem, payload.destino);
   }
 
-  // Ensure lat/lng are correct and updated if base values were default and they can be resolved based on origin first
-  if (payload.origem && (payload.lat === -23.5505 && payload.lng === -46.6333) && !payload.origem.toLowerCase().includes('são paulo') && !payload.origem.toLowerCase().includes('sao paulo')) {
+  // Default to origin coordinates as default location for new routes
+  if (payload.origem) {
     const cityCoords = findCityCoords(payload.origem);
     if (cityCoords) {
       payload.lat = cityCoords.lat;
       payload.lng = cityCoords.lng;
     }
-  } else if (payload.destino && (payload.lat === -23.5505 && payload.lng === -46.6333) && !payload.destino.toLowerCase().includes('são paulo') && !payload.destino.toLowerCase().includes('sao paulo')) {
+  } else if (payload.destino) {
     const cityCoords = findCityCoords(payload.destino);
     if (cityCoords) {
       payload.lat = cityCoords.lat;
@@ -819,3 +819,50 @@ export function subscribeToBlacklistClientesRealtime(callback: (payload: { actio
     window.removeEventListener(BLACKLIST_CLIENTS_REALTIME_EVENT, handler);
   };
 }
+
+// GROUP CHAT PERSISTENCE AND SYNC LOGIC
+const CHAT_COLLECTION = 'group_chat_messages';
+
+export async function sendGroupChatMessage(msg: Omit<GroupChatMessage, 'id'> & { id?: string }): Promise<GroupChatMessage> {
+  const cleanId = msg.id || 'msg-' + Math.random().toString(36).substring(2, 11);
+  const payload: GroupChatMessage = {
+    ...msg,
+    id: cleanId,
+    timestamp: msg.timestamp || new Date().toISOString()
+  };
+
+  // Immediate local write to firestore
+  await setDoc(doc(db, CHAT_COLLECTION, cleanId), payload).catch((error) => {
+    handleFirestoreError(error, OperationType.WRITE, `${CHAT_COLLECTION}/${cleanId}`);
+  });
+
+  return payload;
+}
+
+export function subscribeToGroupChatRealtime(
+  category: 'comercial' | 'operacional' | 'ai',
+  callback: (messages: GroupChatMessage[]) => void
+): () => void {
+  const chatQuery = collection(db, CHAT_COLLECTION);
+  
+  return onSnapshot(chatQuery, (snapshot) => {
+    const list: GroupChatMessage[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.category === category) {
+        list.push({
+          id: docSnap.id,
+          ...data
+        } as GroupChatMessage);
+      }
+    });
+
+    // Client-side sort by timestamp ascending to ensure perfect linear timelines
+    list.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    callback(list);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, CHAT_COLLECTION);
+  });
+}
+

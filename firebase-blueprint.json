@@ -117,6 +117,28 @@
         "userId": { "type": "string" }
       },
       "required": ["nome", "cpf", "telefone", "observacao", "created_at"]
+    },
+    "GroupChatMessage": {
+      "title": "GroupChatMessage",
+      "description": "Futuristic company-wide logs and group messaging for Rodovar Transportes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string", "enum": ["comercial", "operacional"] },
+        "text": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userRole": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "attachmentName": { "type": "string" },
+        "attachmentType": { "type": "string" },
+        "attachmentPreview": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "isVoiceNote": { "type": "boolean" },
+        "isAiTriggered": { "type": "boolean" },
+        "aiAgentResponse": { "type": "string" }
+      },
+      "required": ["category", "text", "userId", "userName", "userRole", "timestamp"]
     }
   },
   "firestore": {
@@ -135,6 +157,10 @@
     "/blacklist_motoristas/{blacklistId}": {
       "schema": "BlacklistMotorista",
       "description": "Motoristas bloqueados e proibidos de trabalhar na frota Rodovar"
+    },
+    "/group_chat_messages/{messageId}": {
+      "schema": "GroupChatMessage",
+      "description": "Real-time collaborative chat posts under Comercial and Operacional channels"
     }
   }
 }

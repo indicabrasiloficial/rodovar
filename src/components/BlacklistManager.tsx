@@ -3,13 +3,9 @@ import {
   getBlacklist, 
   saveToBlacklist, 
   removeFromBlacklist, 
-  subscribeToBlacklistRealtime,
-  getBlacklistClientes,
-  saveToBlacklistClientes,
-  removeFromBlacklistClientes,
-  subscribeToBlacklistClientesRealtime 
+  subscribeToBlacklistRealtime
 } from '../db/storage';
-import { BlacklistMotorista, BlacklistCliente } from '../types';
+import { BlacklistMotorista } from '../types';
 import { 
   UserX, 
   Trash2, 
@@ -35,9 +31,7 @@ interface BlacklistManagerProps {
 }
 
 export default function BlacklistManager({ currentUser }: BlacklistManagerProps) {
-  const [activeTab, setActiveTab] = useState<'motoristas' | 'clientes'>('motoristas');
   const [blacklist, setBlacklist] = useState<BlacklistMotorista[]>([]);
-  const [blacklistClientes, setBlacklistClientes] = useState<BlacklistCliente[]>([]);
   const [search, setSearch] = useState('');
   
   // Form State
@@ -51,7 +45,6 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
   const [isAdding, setIsAdding] = useState(false);
   
   const [confirmingDriver, setConfirmingDriver] = useState<BlacklistMotorista | null>(null);
-  const [confirmingCliente, setConfirmingCliente] = useState<BlacklistCliente | null>(null);
 
   // Sync with Firestore Real-time listeners
   useEffect(() => {
@@ -60,14 +53,8 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
       setBlacklist(getBlacklist());
     });
 
-    setBlacklistClientes(getBlacklistClientes());
-    const unsubscribeC = subscribeToBlacklistClientesRealtime(() => {
-      setBlacklistClientes(getBlacklistClientes());
-    });
-
     return () => {
       unsubscribeM();
-      unsubscribeC();
     };
   }, []);
 
@@ -137,15 +124,15 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
     setSuccessMsg('');
 
     if (!nome.trim()) {
-      setErrorMsg(`O nome do ${activeTab === 'motoristas' ? 'motorista' : 'cliente'} é obrigatório.`);
+      setErrorMsg('O nome do motorista é obrigatório.');
       return;
     }
 
     // CPF/CNPJ is completely optional! If filled, validate lengths
     const cleanDoc = cpfOrCnpj.replace(/\D/g, '');
     if (cleanDoc) {
-      if (cleanDoc.length !== 11 && cleanDoc.length !== 14) {
-        setErrorMsg('Por favor, informe um CPF/CNPJ válido (11 ou 14 dígitos) ou deixe o campo em branco.');
+      if (cleanDoc.length !== 11) {
+        setErrorMsg('Por favor, informe um CPF válido (11 dígitos) ou deixe o campo em branco.');
         return;
       }
     }
@@ -166,67 +153,37 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
     const operatorName = currentUser?.nome || currentUser?.username || 'Operador Rodovar';
 
     try {
-      if (activeTab === 'motoristas') {
-        // Enforce uniqueness only if optional field is informed
-        if (cleanDoc) {
-          const duplicateCPF = blacklist.find(b => b.cpf && b.cpf.replace(/\D/g, '') === cleanDoc);
-          if (duplicateCPF) {
-            setErrorMsg(`Este CPF já está listado na Lista Negra de Motoristas (Cadastrado como: ${duplicateCPF.nome}).`);
-            return;
-          }
+      // Enforce uniqueness only if optional field is informed
+      if (cleanDoc) {
+        const duplicateCPF = blacklist.find(b => b.cpf && b.cpf.replace(/\D/g, '') === cleanDoc);
+        if (duplicateCPF) {
+          setErrorMsg(`Este CPF já está listado na Lista Negra de Motoristas (Cadastrado como: ${duplicateCPF.nome}).`);
+          return;
         }
-
-        if (cleanPhone) {
-          const duplicatePhone = blacklist.find(b => b.telefone && b.telefone.replace(/\D/g, '') === cleanPhone);
-          if (duplicatePhone) {
-            setErrorMsg(`Este telefone já está listado na Lista Negra de Motoristas (Cadastrado como: ${duplicatePhone.nome}).`);
-            return;
-          }
-        }
-
-        saveToBlacklist({
-          nome: nome.trim(),
-          cpf: cpfOrCnpj.trim(),
-          telefone: telefone.trim(),
-          observacao: observacao.trim(),
-          created_at: new Date().toISOString(),
-          usuarioNome: operatorName
-        });
-
-        setSuccessMsg('Motorista bloqueado e adicionado à Lista Negra com sucesso!');
-      } else {
-        // Clientes tab block
-        if (cleanDoc) {
-          const duplicateCPF = blacklistClientes.find(b => b.cpf_cnpj && b.cpf_cnpj.replace(/\D/g, '') === cleanDoc);
-          if (duplicateCPF) {
-            setErrorMsg(`Este CPF/CNPJ já está listado na Lista Negra de Clientes (Cadastrado como: ${duplicateCPF.nome}).`);
-            return;
-          }
-        }
-
-        if (cleanPhone) {
-          const duplicatePhone = blacklistClientes.find(b => b.telefone && b.telefone.replace(/\D/g, '') === cleanPhone);
-          if (duplicatePhone) {
-            setErrorMsg(`Este telefone já está listado na Lista Negra de Clientes (Cadastrado como: ${duplicatePhone.nome}).`);
-            return;
-          }
-        }
-
-        saveToBlacklistClientes({
-          nome: nome.trim(),
-          cpf_cnpj: cpfOrCnpj.trim(),
-          telefone: telefone.trim(),
-          observacao: observacao.trim(),
-          created_at: new Date().toISOString(),
-          usuarioNome: operatorName
-        });
-
-        setSuccessMsg('Cliente bloqueado e adicionado à Lista Negra com sucesso!');
       }
+
+      if (cleanPhone) {
+        const duplicatePhone = blacklist.find(b => b.telefone && b.telefone.replace(/\D/g, '') === cleanPhone);
+        if (duplicatePhone) {
+          setErrorMsg(`Este telefone já está listado na Lista Negra de Motoristas (Cadastrado como: ${duplicatePhone.nome}).`);
+          return;
+        }
+      }
+
+      saveToBlacklist({
+        nome: nome.trim(),
+        cpf: cpfOrCnpj.trim(),
+        telefone: telefone.trim(),
+        observacao: observacao.trim(),
+        created_at: new Date().toISOString(),
+        usuarioNome: operatorName
+      });
+
+      setSuccessMsg('Motorista bloqueado e adicionado à Lista Negra com sucesso!');
 
       // Voice alert feedback
       if (window.falarRodovar) {
-        window.falarRodovar(`${activeTab === 'motoristas' ? 'Motorista' : 'Cliente'} adicionado ao controle de segurança.`);
+        window.falarRodovar('Motorista adicionado ao controle de segurança.');
       }
 
       // Clear Form state
@@ -247,20 +204,6 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
     setConfirmingDriver(driver);
   };
 
-  const handleRemoveCliente = (client: BlacklistCliente) => {
-    setConfirmingCliente(client);
-  };
-
-  const switchTab = (tab: 'motoristas' | 'clientes') => {
-    setActiveTab(tab);
-    setErrorMsg('');
-    setSuccessMsg('');
-    setNome('');
-    setCpfOrCnpj('');
-    setTelefone('');
-    setObservacao('');
-  };
-
   // Searching and Filtering lists
   const filteredListDrivers = blacklist.filter(item => {
     const q = search.toLowerCase().trim();
@@ -270,19 +213,6 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
     return (
       item.nome.toLowerCase().includes(q) ||
       itemCpf.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
-      itemPhone.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
-      item.observacao.toLowerCase().includes(q)
-    );
-  });
-
-  const filteredListClientes = blacklistClientes.filter(item => {
-    const q = search.toLowerCase().trim();
-    if (!q) return true;
-    const itemCpfCnpj = item.cpf_cnpj || '';
-    const itemPhone = item.telefone || '';
-    return (
-      item.nome.toLowerCase().includes(q) ||
-      itemCpfCnpj.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
       itemPhone.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
       item.observacao.toLowerCase().includes(q)
     );
@@ -573,70 +503,6 @@ export default function BlacklistManager({ currentUser }: BlacklistManagerProps)
                 }}
                 className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
                 id="confirm-liberar-motorista"
-              >
-                <UserCheck className="w-4 h-4" />
-                Confirmar Liberação
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Modal for Liberating Cliente */}
-      {confirmingCliente && (
-        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fadeIn" style={{ zIndex: 9999 }}>
-          <div className="w-full max-w-md p-6 rounded-2xl border border-zinc-800 bg-[#0e0e11] shadow-2xl space-y-4 font-sans text-left">
-            <div className="flex items-center gap-3 text-red-500 border-b border-zinc-900 pb-3">
-              <div className="p-2 bg-emerald-950/40 rounded-lg text-emerald-400 border border-emerald-900/30">
-                <UserCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black uppercase text-white tracking-tight">
-                  Liberar Cliente Comercial
-                </h3>
-                <p className="text-[10px] font-mono text-zinc-400">
-                  Validação de faturamento comercial Rodovar
-                </p>
-              </div>
-            </div>
-            
-            <div className="text-xs text-zinc-300 space-y-3">
-              <p className="leading-relaxed">
-                Você deseja remover o cliente <strong className="text-[#FFD600]">{confirmingCliente.nome}</strong> {confirmingCliente.cpf_cnpj && `(Identificação: ${confirmingCliente.cpf_cnpj})`} da Lista Negra?
-              </p>
-              
-              <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-900/40 font-mono text-[10.5px] text-zinc-400 leading-relaxed">
-                <strong className="text-red-400 uppercase text-[9px] block mb-1">Motivo do Bloqueio:</strong>
-                <p className="whitespace-pre-line bg-zinc-900/20 p-1.5 rounded border border-zinc-900/30 text-zinc-350">{confirmingCliente.observacao}</p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingCliente(null)}
-                className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-855 border border-zinc-800 text-zinc-400 text-xs font-bold uppercase rounded-lg cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    removeFromBlacklistClientes(confirmingCliente.id);
-                    setSuccessMsg(`Cliente "${confirmingCliente.nome}" removido do cadastro de restrições com sucesso.`);
-                    setConfirmingCliente(null);
-                    if (window.falarRodovar) {
-                      window.falarRodovar(`Cliente ${confirmingCliente.nome} liberado.`);
-                    }
-                    setTimeout(() => setSuccessMsg(''), 4000);
-                  } catch (err: any) {
-                    setErrorMsg('Erro ao remover cliente: ' + err.message);
-                    setConfirmingCliente(null);
-                  }
-                }}
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-lg shadow-md cursor-pointer flex items-center gap-1.5"
-                id="confirm-liberar-cliente"
               >
                 <UserCheck className="w-4 h-4" />
                 Confirmar Liberação

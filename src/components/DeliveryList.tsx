@@ -146,22 +146,27 @@ export function parsePastedTextToDeliveries(text: string) {
   if (containsKeyValue) {
     const parseKeyValueLine = (line: string) => {
       const cleanLine = line.trim();
+      const lowerLine = cleanLine.toLowerCase();
       
       // 1. TEL CLIENTE
       let match = cleanLine.match(/(?:TEL\s+CLIENTE|TELEFONE\s+CLIENTE|CONTATO\s+CLIENTE|TEL\s+CLI)[:\s]+(.*)/i);
       if (match) return { key: 'tel_cliente', val: match[1].trim() };
       
-      // 2. CLIENTE
-      match = cleanLine.match(/(?:CLIENTE)[:\s]+(.*)/i);
-      if (match) return { key: 'cliente', val: match[1].trim() };
+      // 2. CLIENTE (Ensure we don't accidentally match TEL CLIENTE line)
+      if (!lowerLine.includes('tel') && !lowerLine.includes('telefone') && !lowerLine.includes('contato')) {
+        match = cleanLine.match(/(?:CLIENTE)[:\s]+(.*)/i);
+        if (match) return { key: 'cliente', val: match[1].trim() };
+      }
       
       // 3. TEL MOTORISTA
       match = cleanLine.match(/(?:TEL\s+MOTORISTA|TELEFONE\s+MOTORISTA|CONTATO\s+MOTORISTA|TEL\s+MOT)[:\s]+(.*)/i);
       if (match) return { key: 'tel_motorista', val: match[1].trim() };
       
-      // 4. MOTORISTA
-      match = cleanLine.match(/(?:MOTORISTA|CONDUTOR)[:\s]+(.*)/i);
-      if (match) return { key: 'motorista', val: match[1].trim() };
+      // 4. MOTORISTA (Ensure we don't accidentally match TEL MOTORISTA line)
+      if (!lowerLine.includes('tel') && !lowerLine.includes('telefone') && !lowerLine.includes('contato')) {
+        match = cleanLine.match(/(?:MOTORISTA|CONDUTOR)[:\s]+(.*)/i);
+        if (match) return { key: 'motorista', val: match[1].trim() };
+      }
       
       // 5. DATA CARREGAMENTO
       match = cleanLine.match(/(?:DATA\s+CARREGAMENTO|DATA\s+COLETA|DATA)[:\s]+(.*)/i);

@@ -87,6 +87,23 @@ export interface ScheduledMessage {
   createdAt: string;
 }
 
+export interface GroupChatMessage {
+  id: string;
+  category: 'comercial' | 'operacional' | 'ai';
+  text: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  timestamp: string;
+  attachmentName?: string;
+  attachmentType?: string;
+  attachmentPreview?: string; // base64 preview or visual data
+  audioUrl?: string; // voice audio note URL if applicable
+  isVoiceNote?: boolean;
+  isAiTriggered?: boolean;
+  aiAgentResponse?: string;
+}
+
 declare global {
   interface Window {
     falarRodovar?: (texto: string, onEndCallback?: () => void) => void;
