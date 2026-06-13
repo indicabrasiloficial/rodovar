@@ -10,7 +10,8 @@ import {
   onSnapshot, 
   query, 
   where, 
-  writeBatch
+  writeBatch,
+  getDocs
 } from 'firebase/firestore';
 
 const ENTREGAS_COLLECTION = 'entregas';
@@ -869,6 +870,58 @@ export function subscribeToGroupChatRealtime(
 export async function deleteGroupChatMessage(id: string): Promise<void> {
   await deleteDoc(doc(db, CHAT_COLLECTION, id)).catch((error) => {
     handleFirestoreError(error, OperationType.WRITE, `${CHAT_COLLECTION}/${id}`);
+  });
+}
+
+const KICKED_COLLECTION = 'kicked_users';
+
+export async function clearAllGroupChatMessages(category: GroupChatMessage['category']): Promise<void> {
+  const q = query(collection(db, CHAT_COLLECTION), where("category", "==", category));
+  const snapshot = await getDocs(q).catch((error) => {
+    handleFirestoreError(error, OperationType.GET, CHAT_COLLECTION);
+    return null;
+  });
+  if (snapshot && !snapshot.empty) {
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+    await batch.commit().catch((error) => {
+      handleFirestoreError(error, OperationType.WRITE, CHAT_COLLECTION);
+    });
+  }
+}
+
+export async function kickUser(username: string): Promise<void> {
+  const cleanId = username.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  await setDoc(doc(db, KICKED_COLLECTION, cleanId), {
+    username,
+    kickedAt: new Date().toISOString()
+  }).catch((error) => {
+    handleFirestoreError(error, OperationType.WRITE, `${KICKED_COLLECTION}/${cleanId}`);
+  });
+}
+
+export async function reinitUser(username: string): Promise<void> {
+  const cleanId = username.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  await deleteDoc(doc(db, KICKED_COLLECTION, cleanId)).catch((error) => {
+    handleFirestoreError(error, OperationType.WRITE, `${KICKED_COLLECTION}/${cleanId}`);
+  });
+}
+
+export function subscribeToKickList(callback: (kickedList: string[]) => void): () => void {
+  const kickedQuery = collection(db, KICKED_COLLECTION);
+  return onSnapshot(kickedQuery, (snapshot) => {
+    const list: string[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.username) {
+        list.push(data.username);
+      }
+    });
+    callback(list);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, KICKED_COLLECTION);
   });
 }
 

@@ -31,7 +31,16 @@ import {
   Info
 } from 'lucide-react';
 import { GroupChatMessage } from '../types';
-import { sendGroupChatMessage, subscribeToGroupChatRealtime, deleteGroupChatMessage, getEntregas } from '../db/storage';
+import { 
+  sendGroupChatMessage, 
+  subscribeToGroupChatRealtime, 
+  deleteGroupChatMessage, 
+  getEntregas,
+  clearAllGroupChatMessages,
+  kickUser,
+  reinitUser,
+  subscribeToKickList
+} from '../db/storage';
 
 interface GroupChatProps {
   user: {
@@ -129,7 +138,119 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
     );
   }, [user]);
 
-  // Handle auto-approval or reset PIN state on tab switches
+  // Real-time kicked list
+  const [kickedList, setKickedList] = useState<string[]>([]);
+  
+  // Real-time list of online members (Simulated & actual)
+  const [onlineMembers, setOnlineMembers] = useState<Array<{ username: string; displayName: string; role: string; isOnline: boolean }>>([
+    { username: 'diretor_comercial', displayName: 'Diretor Comercial', role: 'Diretor Comercial', isOnline: true },
+    { username: 'diretor_operacional', displayName: 'Diretor Operacional', role: 'Diretor de Operações', isOnline: true },
+    { username: 'diretor_financeiro', displayName: 'Diretor Financeiro', role: 'Diretor Financeiro', isOnline: true },
+    { username: 'gerente_logistica', displayName: 'Gerente Comercial', role: 'Operacional Superior', isOnline: true },
+    { username: 'fiscal_pista', displayName: 'Fiscal de Rodovia', role: 'Fiscal Operacional', isOnline: false },
+    { username: 'rodovar_ai', displayName: 'Agente Rodovar IA', role: 'Inteligência Corporativa', isOnline: true }
+  ]);
+
+  // Is current user capable of kicking? (Diretor de operações, Diretor Comercial, Financeiro)
+  const canKickUser = useMemo(() => {
+    const curRole = user.role?.toLowerCase() || '';
+    const curName = user.role?.toLowerCase() || user.username?.toLowerCase() || '';
+    return (
+      curRole.includes('operacion') || 
+      curRole.includes('comercial') || 
+      curRole.includes('financeir') || 
+      curRole.includes('diretor') || 
+      curRole === 'master' || 
+      curName === 'master' ||
+      curName.includes('diretor') ||
+      curName.includes('financeiro')
+    );
+  }, [user]);
+
+  // Professional emoji selection
+  const promptEmojis = [
+    { char: '📦', name: 'Carga' },
+    { char: '🚛', name: 'Frota' },
+    { char: '🤝', name: 'Fechado' },
+    { char: '📊', name: 'Faturamento' },
+    { char: '🚨', name: 'Alerta' },
+    { char: '💰', name: 'Pix/Frete' },
+    { char: '✅', name: 'Canhoto OK' },
+    { char: '🛑', name: 'Bloqueio' }
+  ];
+
+  // VALAA Clear Entire Conversation
+  const handleValaaClearChat = async () => {
+    const confirmValaa = confirm("⚠️ ATENÇÃO COMANDO VALAA: Deseja realmente APAGAR TODA A CONVERSA do canal " + activeCategory.toUpperCase() + "? Esta operação irá eliminar todas as mensagens de áudio, textos e imagens anexadas de forma permanente do servidor para todos!");
+    if (!confirmValaa) return;
+    
+    setIsAiLoading(true);
+    await clearAllGroupChatMessages(activeCategory);
+    setIsAiLoading(false);
+    
+    if (!isSpeechMuted) {
+      onSpeak("Toda a conversa deste canal foi apagada permanentemente usando o botão Vala");
+    }
+  };
+
+  // Kick out member from session
+  const handleKickMember = async (usernameToKick: string) => {
+    if (usernameToKick === user.username) {
+      alert("Operação inválida: Você não pode expulsar você mesmo!");
+      return;
+    }
+    const confirmKick = confirm(`⚠️ EXPULSÃO: Deseja realmente EXPULSAR o usuário @${usernameToKick} da sala de reuniões? Ele perderá acesso ao chat imediatamente.`);
+    if (!confirmKick) return;
+
+    await kickUser(usernameToKick);
+    // update local list status
+    setOnlineMembers(prev => prev.map(m => m.username === usernameToKick ? { ...m, isOnline: false } : m));
+  };
+
+  // Reinstate/unban member
+  const handleReinstateMember = async (usernameToReinstate: string) => {
+    const confirmReinstate = confirm(`Deseja revogar a suspensão de @${usernameToReinstate} e restabelecer sua entrada à central?`);
+    if (!confirmReinstate) return;
+
+    await reinitUser(usernameToReinstate);
+    setOnlineMembers(prev => prev.map(m => m.username === usernameToReinstate ? { ...m, isOnline: true } : m));
+  };
+
+  // Export conversations Backup safely
+  const handleExportBackup = () => {
+    const backupObj = {
+      sistema: "Chat do Futuro Rodovar",
+      exportadoEm: new Date().toISOString(),
+      exportadoPor: user.displayName,
+      categoriaChat: activeCategory,
+      totalMensagens: messages.length,
+      dadosLog: messages.map(m => ({
+        id: m.id,
+        usuario: m.userName,
+        usuarioID: m.userId,
+        cargo: m.userRole,
+        conteudoTexto: m.text,
+        tipoVoz: !!m.isVoiceNote,
+        contemAnexo: !!m.attachmentName,
+        nomeAnexo: m.attachmentName || null,
+        dataHora: m.timestamp
+      }))
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObj, null, 2));
+    const downloadLink = document.createElement('a');
+    downloadLink.setAttribute("href", dataStr);
+    downloadLink.setAttribute("download", `Backup_Rodovar_${activeCategory}_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+
+    if (!isSpeechMuted) {
+      onSpeak("Backup gerado com sucesso");
+    }
+  };
+
+  // Sync Kicking status and auto-approval active category Check
   useEffect(() => {
     if (activeCategory === 'diretoria') {
       if (isDirector) {
@@ -137,6 +258,13 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
       }
     }
   }, [activeCategory, isDirector]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToKickList((list) => {
+      setKickedList(list);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Voice note recording timer
   useEffect(() => {
@@ -589,6 +717,29 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
     setTimeout(() => setCopiedDailyCode(false), 2000);
   };
 
+  if (kickedList.includes(user.username)) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-14rem)] items-center justify-center bg-black border border-red-900/60 rounded-2xl p-8 text-center text-zinc-300 relative overflow-hidden font-sans shadow-2xl">
+        <div className="absolute top-4 left-4 flex items-center gap-1.5 opacity-40">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#FFD600]" />
+          <span className="text-[10px] font-black uppercase tracking-wider font-mono text-white">Rodovar</span>
+        </div>
+        <div className="w-20 h-20 rounded-full bg-red-950/40 border border-red-500/50 flex items-center justify-center text-red-500 mb-6 animate-pulse shadow-[0_0_30px_rgba(239,68,68,0.25)]">
+          <X className="w-10 h-10" />
+        </div>
+        <h2 className="text-sm font-black uppercase text-red-500 tracking-widest">ACESSO BLOQUEADO / EXPULSO</h2>
+        <p className="text-xs text-zinc-400 mt-2 max-w-md leading-relaxed">
+          Sua credencial <strong className="text-white">@{user.username}</strong> foi suspensa temporariamente da sala de reuniões virtuais por decisão direta dos <strong className="text-red-400">Diretores Operacional, Comercial ou Financeiro</strong> da Rodovar.
+        </p>
+        <div className="mt-8 p-3.5 bg-zinc-950 border border-zinc-900 rounded-xl max-w-sm">
+          <p className="text-[9px] text-zinc-550 font-mono m-0 leading-normal">
+            Código de Resolução: RDV-BAN-RESTRITO
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-14rem)] bg-[#0d0d0d] border border-zinc-805/80 rounded-2xl overflow-hidden font-sans shadow-2xl relative">
       
@@ -609,48 +760,63 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
           </div>
         </div>
 
-        {/* Categories Tab Picker */}
-        <div className="flex items-center gap-1 bg-zinc-900/60 p-1 rounded-xl border border-zinc-800/80 self-start md:self-auto">
+        {/* Categories Tab Picker & Valaa shortcut */}
+        <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
+          <div className="flex items-center gap-1 bg-zinc-900/60 p-1 rounded-xl border border-zinc-800/80">
+            <button
+              type="button"
+              onClick={() => setActiveCategory('comercial')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeCategory === 'comercial'
+                ? 'bg-[#FFD600] text-[#0a0a0a] shadow-lg font-black'
+                : 'text-zinc-500 hover:text-zinc-200'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Comercial</span>
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setActiveCategory('operacional')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeCategory === 'operacional'
+                ? 'bg-[#FFD600] text-[#0a0a0a] shadow-lg font-black'
+                : 'text-zinc-500 hover:text-zinc-200'
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Operacional</span>
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setActiveCategory('diretoria');
+                // Automatically check if user is director otherwise ask for code
+                if (!isDirector) {
+                  setUnlockedDiretoria(false);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeCategory === 'diretoria'
+                ? 'bg-rose-600 text-white shadow-lg font-black'
+                : 'text-zinc-500 hover:text-red-400'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-rose-500 group-hover:text-white" />
+              <span>Diretoria</span>
+            </button>
+          </div>
+
           <button
-            onClick={() => setActiveCategory('comercial')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeCategory === 'comercial'
-              ? 'bg-[#FFD600] text-[#0a0a0a] shadow-lg font-black'
-              : 'text-zinc-500 hover:text-zinc-200'
-            }`}
+            type="button"
+            onClick={handleValaaClearChat}
+            className="px-2.5 py-1.5 bg-[#85162a]/15 hover:bg-[#85162a]/30 border border-rose-900/40 rounded-xl text-[10px] font-mono font-extrabold text-rose-500 hover:text-rose-450 transition-all cursor-pointer uppercase flex items-center gap-1 leading-none shadow-sm"
+            title="VALAA: Apagar toda a conversa deste canal"
           >
-            <Users className="w-3.5 h-3.5" />
-            <span>Comercial</span>
-          </button>
-          
-          <button
-            onClick={() => setActiveCategory('operacional')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeCategory === 'operacional'
-              ? 'bg-[#FFD600] text-[#0a0a0a] shadow-lg font-black'
-              : 'text-zinc-500 hover:text-zinc-200'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Operacional</span>
-          </button>
-          
-          <button
-            onClick={() => {
-              setActiveCategory('diretoria');
-              // Automatically check if user is director otherwise ask for code
-              if (!isDirector) {
-                setUnlockedDiretoria(false);
-              }
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeCategory === 'diretoria'
-              ? 'bg-rose-600 text-white shadow-lg font-black'
-              : 'text-zinc-500 hover:text-red-400'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-rose-500 group-hover:text-white" />
-            <span>Diretoria</span>
+            <Trash2 className="w-3 h-3 text-rose-500" />
+            <span>VALAA</span>
           </button>
         </div>
       </div>
@@ -1081,6 +1247,23 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
                   <Send className="w-4 h-4" />
                 </button>
               </div>
+
+              {/* Professional emojis palette */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 pt-2 border-t border-zinc-900/80 no-scrollbar select-none shrink-0">
+                <span className="text-[7.5px] font-mono font-bold text-zinc-500 tracking-wider uppercase shrink-0 mr-1 opacity-60">Emojis Úteis:</span>
+                {promptEmojis.map((emoji) => (
+                  <button
+                    key={emoji.char}
+                    type="button"
+                    onClick={() => setInputText(prev => prev + ' ' + emoji.char + ' ')}
+                    className="px-2 py-1 bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-850/60 rounded text-xs transition-all cursor-pointer text-zinc-300 hover:text-white flex items-center gap-1 shrink-0 whitespace-nowrap active:scale-95"
+                    title={`Inserir ${emoji.name}`}
+                  >
+                    <span>{emoji.char}</span>
+                    <span className="text-[7.5px] font-mono text-zinc-555 font-semibold">{emoji.name}</span>
+                  </button>
+                ))}
+              </div>
             </form>
           </div>
 
@@ -1232,6 +1415,98 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
                   >
                     <span className="truncate">Verificação de desvios</span>
                     <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
+                  </button>
+                </div>
+              </div>
+
+              {/* MEMBERS ONLINE & BAN CONTROLS */}
+              <div className="bg-zinc-900/40 border border-zinc-900 p-4 rounded-xl space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
+                  <div className="flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-[#FFD600] shrink-0" />
+                    <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-300 m-0">Membros de Plantão</h3>
+                  </div>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                </div>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
+                  {onlineMembers.map((member) => {
+                    const isBanned = kickedList.includes(member.username);
+                    const isSelf = member.username === user.username;
+                    const displayOnline = member.isOnline && !isBanned;
+
+                    return (
+                      <div 
+                        key={member.username} 
+                        className="flex flex-col gap-1 p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${displayOnline ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-700'}`} />
+                            <span className="text-[10px] font-bold text-zinc-300 truncate">
+                              {member.displayName} {isSelf && '(Você)'}
+                            </span>
+                          </div>
+                          
+                          {/* Kick command */}
+                          {!isSelf && canKickUser && (
+                            isBanned ? (
+                              <button
+                                type="button"
+                                onClick={() => handleReinstateMember(member.username)}
+                                className="text-[8px] font-mono font-bold uppercase bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 px-1 py-0.5 rounded cursor-pointer hover:bg-emerald-900/45 transition-all leading-none"
+                              >
+                                Ativar
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleKickMember(member.username)}
+                                className="text-[8px] font-mono font-bold uppercase bg-rose-950/20 text-rose-500 border border-rose-900/40 px-1 py-0.5 rounded cursor-pointer hover:bg-[#85162a]/30 transition-all hover:text-rose-400 leading-none"
+                                title="Expulsar Usuário"
+                              >
+                                Expulsar
+                              </button>
+                            )
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-[8px] font-mono text-zinc-500 leading-none">
+                          <span>@{member.username}</span>
+                          <span className={`${isBanned ? 'text-red-500 font-extrabold uppercase' : 'text-zinc-450'}`}>
+                            {isBanned ? 'Expulso' : member.role}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* INTEGRITY CONTROLS (VALAA & BACKUP) */}
+              <div className="bg-zinc-900/40 border border-zinc-900 p-4 rounded-xl space-y-2.5">
+                <div className="flex items-center gap-1.5 pb-2 border-b border-zinc-900">
+                  <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />
+                  <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-300 m-0">Controles de Canal</h3>
+                </div>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleExportBackup}
+                    className="w-full text-center p-2 bg-zinc-900 hover:bg-zinc-850 rounded-lg border border-zinc-800 text-[10px] font-mono text-zinc-300 hover:text-white flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold"
+                  >
+                    <FolderSync className="w-3.5 h-3.5 text-[#FFD600]" />
+                    <span>Gerar Backup (.json)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleValaaClearChat}
+                    className="w-full text-center p-2 bg-[#85162a]/15 hover:bg-[#85162a]/30 border border-rose-900/40 hover:border-rose-800 rounded-lg text-[10px] font-mono text-rose-550 hover:text-rose-400 flex items-center justify-center gap-1.5 transition-all cursor-pointer font-extrabold shadow-sm animate-pulse"
+                    title="VALAA: Apagar toda a conversa deste canal"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Comando VALAA</span>
                   </button>
                 </div>
               </div>
