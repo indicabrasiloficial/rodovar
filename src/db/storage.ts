@@ -182,17 +182,62 @@ export function getEntregaById(id: string): Entrega | undefined {
   return cachedEntregas.find(e => e.id === id);
 }
 
+export function djb2Hash(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+  }
+  return Math.abs(hash);
+}
+
 export function extractCoordsFromLink(link: string): { lat: number; lng: number } | null {
   if (!link) return null;
   try {
     const decoded = decodeURIComponent(link);
-    const regex = /(-?\d+\.\d+)\s*[,;\s]\s*(-?\d+\.\d+)/g;
-    let match;
-    while ((match = regex.exec(decoded)) !== null) {
-      const lat = parseFloat(match[1]);
-      const lng = parseFloat(match[2]);
+    
+    // 1) First attempt: matches dot decimals (e.g., -12.2664,-38.9662 or -12.2664; -38.9662 or -12.2664 / -38.9662)
+    const dotRegex = /(-?\d+\.\d+)\s*[,;\s|/]\s*(-?\d+\.\d+)/;
+    const dotMatch = decoded.match(dotRegex);
+    if (dotMatch) {
+      const lat = parseFloat(dotMatch[1]);
+      const lng = parseFloat(dotMatch[2]);
       if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-        return { lat, lng };
+        if (Math.abs(lat) > 0.05 && Math.abs(lng) > 0.05) {
+          return { lat, lng };
+        }
+      }
+    }
+
+    // 2) Second attempt: matches comma decimals (In Brazil, e.g. -12,25812 -38,95979 or -12,25812, -38,95979)
+    // We normalize the string first by replacing any commas between digits with dots
+    const normalizedCommas = decoded.replace(/(\d+),(\d+)/g, '$1.$2');
+    const commaMatch = normalizedCommas.match(dotRegex);
+    if (commaMatch) {
+      const lat = parseFloat(commaMatch[1]);
+      const lng = parseFloat(commaMatch[2]);
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        if (Math.abs(lat) > 0.05 && Math.abs(lng) > 0.05) {
+          return { lat, lng };
+        }
+      }
+    }
+
+    // 3) Third attempt: URL query matches for specific param terms
+    const queryPatterns = [
+      { latName: /latitude/i, lngName: /longitude/i },
+      { latName: /lat/i, lngName: /lon/i },
+      { latName: /lat/i, lngName: /lng/i },
+      { latName: /lt/i, lngName: /lg/i }
+    ];
+    for (const pat of queryPatterns) {
+      const latM = decoded.match(new RegExp(`${pat.latName.source}\\s*[=:]\\s*(-?\\d+[.,]\\d+)`, 'i'));
+      const lngM = decoded.match(new RegExp(`${pat.lngName.source}\\s*[=:]\\s*(-?\\d+[.,]\\d+)`, 'i'));
+      if (latM && lngM) {
+        const lat = parseFloat(latM[1].replace(',', '.'));
+        const lng = parseFloat(lngM[1].replace(',', '.'));
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          return { lat, lng };
+        }
       }
     }
   } catch (e) {
@@ -217,15 +262,6 @@ function getSimilarity(s1: string, s2: string): number {
 // Write/Delete functions - Return Synchronously with Optimistic caching, syncing asynchronously in background
 export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entrega {
   const uid = auth.currentUser?.uid || 'system_operator';
-
-  // Geolocation helper coordination
-  if (entrega.link_localizacao) {
-    const coords = extractCoordsFromLink(entrega.link_localizacao);
-    if (coords) {
-      entrega.lat = coords.lat;
-      entrega.lng = coords.lng;
-    }
-  }
 
   // Search existing for possible merged duplicates (100% match requirement)
   if (!entrega.id) {
@@ -253,6 +289,36 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
 
   const cleanId = entrega.id || 'ent-' + Math.random().toString(36).substring(2, 11);
   const existingDelivery = cachedEntregas.find(e => e.id === cleanId);
+
+  // Geolocation helper coordination
+  if (entrega.link_localizacao) {
+    const coords = extractCoordsFromLink(entrega.link_localizacao);
+    if (coords) {
+      entrega.lat = coords.lat;
+      entrega.lng = coords.lng;
+    } else {
+      // Fallback: If no coordinates could be parsed from the link, let's dynamically generate a location
+      // along the route using a deterministic hash of the link so the map updates and moves!
+      const origName = entrega.origem || existingDelivery?.origem || 'Salvador';
+      const destName = entrega.destino || existingDelivery?.destino || 'Feira de Santana';
+      const origCoords = findCityCoords(origName);
+      const destCoords = findCityCoords(destName);
+      
+      const charSum = djb2Hash(entrega.link_localizacao);
+      // Determine a percentage along the highway, say between 15% and 85%
+      const fraction = 0.15 + (charSum % 70) / 100;
+      
+      const midLat = origCoords.lat + fraction * (destCoords.lat - origCoords.lat);
+      const midLng = origCoords.lng + fraction * (destCoords.lng - origCoords.lng);
+      
+      // Jitter so different links produce slightly different offsets even with the same fraction
+      const jitterLat = ((charSum % 13) - 6) * 0.0015;
+      const jitterLng = ((charSum % 17) - 8) * 0.0015;
+      
+      entrega.lat = midLat + jitterLat;
+      entrega.lng = midLng + jitterLng;
+    }
+  }
 
   // Merge previous fields cleanly to support safe partial updates (e.g. status-only or location-link-only updates)
   const basePayload = {
@@ -411,18 +477,20 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     payload.km = Number(entrega.km) || calculateRealisticDistanceKm(payload.origem, payload.destino);
   }
 
-  // Default to origin coordinates as default location for new routes
-  if (payload.origem) {
-    const cityCoords = findCityCoords(payload.origem);
-    if (cityCoords) {
-      payload.lat = cityCoords.lat;
-      payload.lng = cityCoords.lng;
-    }
-  } else if (payload.destino) {
-    const cityCoords = findCityCoords(payload.destino);
-    if (cityCoords) {
-      payload.lat = cityCoords.lat;
-      payload.lng = cityCoords.lng;
+  // Default to origin coordinates as default location for new routes if not already set (retaining link updates!)
+  if (!payload.lat || !payload.lng || (payload.lat === -23.5505 && payload.lng === -46.6333)) {
+    if (payload.origem) {
+      const cityCoords = findCityCoords(payload.origem);
+      if (cityCoords) {
+        payload.lat = cityCoords.lat;
+        payload.lng = cityCoords.lng;
+      }
+    } else if (payload.destino) {
+      const cityCoords = findCityCoords(payload.destino);
+      if (cityCoords) {
+        payload.lat = cityCoords.lat;
+        payload.lng = cityCoords.lng;
+      }
     }
   }
 
