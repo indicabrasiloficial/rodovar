@@ -17,6 +17,7 @@ import EmployeeRegistration from './components/EmployeeRegistration';
 import AgentManual from './components/AgentManual';
 import BlacklistManager from './components/BlacklistManager';
 import GroupChat from './components/GroupChat';
+import BackupRegistry from './components/BackupRegistry';
 
 import { 
   Truck, 
@@ -39,11 +40,12 @@ import {
   BookOpen,
   UserX,
   LayoutDashboard,
-  Bot
+  Bot,
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'group_chat';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'group_chat' | 'backup';
 
 
 export default function App() {
@@ -357,6 +359,12 @@ export default function App() {
             }}
           />
         );
+      case 'backup':
+        return (
+          <BackupRegistry 
+            onClose={() => setSelectedView('dashboard')}
+          />
+        );
       default:
         return <div className="text-center p-12 text-gray-500">Selecione uma opção válida.</div>;
     }
@@ -550,6 +558,21 @@ export default function App() {
               <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
               <span className="hidden sm:inline">Manual Agente</span>
               <span className="inline sm:hidden">Manual</span>
+            </button>
+
+            {/* Nav Backup */}
+            <button
+              onClick={() => setSelectedView('backup')}
+              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
+                selectedView === 'backup' 
+                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+              id="nav-backup"
+            >
+              <Database className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+              <span className="hidden sm:inline">Backup Central</span>
+              <span className="inline sm:hidden">Backup</span>
             </button>
 
             {/* Nav Registration */}
@@ -842,6 +865,20 @@ export default function App() {
                 >
                   <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
                   <span>Manual Agente</span>
+                </button>
+
+                {/* Nav Backup */}
+                <button
+                  onClick={() => setSelectedView('backup')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'backup' 
+                    ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                    : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                  }`}
+                  id="desktop-nav-backup"
+                >
+                  <Database className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                  <span>Backup Central</span>
                 </button>
 
                 {/* Nav Registration */}

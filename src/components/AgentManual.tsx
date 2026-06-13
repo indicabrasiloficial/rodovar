@@ -5,6 +5,30 @@ import { motion } from 'motion/react';
 export default function AgentManual() {
   const commands = [
     {
+      phrase: "@rodovar calcular rota de [Origem] para [Destino]",
+      alternative: "/rota [Origem] [Destino] ou 'calcular rota de...'",
+      effect: "Planeja o melhor percurso simulando quilometragem de rodovia, horas de viagem, consumo estimado de Diesel S10, custos de combustível, pontos de parada segura oficiais para descanço do motorista no percurso e classificação de risco da rota.",
+      category: "Agente de Rotas"
+    },
+    {
+      phrase: "@rodovar consultar cpf [Número do CPF]",
+      alternative: "/cpf [Número] ou 'verificar cpf...'",
+      effect: "Varre instantaneamente a Lista Negra da Central de Segurança Rodovar (blacklist) e de cargas ativas para assegurar que o motorista está com a documentação idônea e liberada pelas gerenciadoras Buonny e Pancary.",
+      category: "Agente de Segurança (CPF)"
+    },
+    {
+      phrase: "@rodovar consultar telefone [Contato comercial]",
+      alternative: "/telefone [Número] ou 'telefone do motorista...'",
+      effect: "Busca o contato telefônico nas bases de dados operacionais e de sinistros para validar se este telefone é ativo na central, listando detalhes cadastrados ou liberando o canal GSM de rastreamento.",
+      category: "Agente de Contatos"
+    },
+    {
+      phrase: "@rodovar consultar placa [Letras e Números]",
+      alternative: "/placa [Placa] ou 'placa do veículo...'",
+      effect: "Realiza uma simulação integrada de consulta contra bancos de roubo/furto de veículos Sinesp, bloqueios governamentais, restrições cadastrais nas gerenciadoras de riscos e integridade operacional do caminhão.",
+      category: "Agente de Veículos (Placa)"
+    },
+    {
       phrase: "analisar frota",
       alternative: "auditoria de frota / rodovar alerta",
       effect: "Faz uma varredura instantânea de todos os motoristas buscando anomalias críticas como atrasos, paradas não planejadas ou ausência de sinal de GPS, recomendando ações rápidas por WhatsApp.",

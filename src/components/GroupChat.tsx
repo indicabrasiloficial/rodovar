@@ -39,7 +39,11 @@ import {
   clearAllGroupChatMessages,
   kickUser,
   reinitUser,
-  subscribeToKickList
+  subscribeToKickList,
+  updatePresence,
+  subscribeToPresence,
+  getBlacklist,
+  getBlacklistClientes
 } from '../db/storage';
 
 interface GroupChatProps {
@@ -144,7 +148,10 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
   // Real-time kicked list
   const [kickedList, setKickedList] = useState<string[]>([]);
   
-  // Real-time list of online members (Simulated & actual)
+  // Real-time dynamic Firestore presence records
+  const [dbPresence, setDbPresence] = useState<Array<{ username: string; displayName: string; role: string; lastActive: string; isOnline: boolean }>>([]);
+
+  // Real-time list of online members (Simulated & actual merged)
   const [onlineMembers, setOnlineMembers] = useState<Array<{ username: string; displayName: string; role: string; isOnline: boolean }>>([
     { username: 'diretor_comercial', displayName: 'Diretor Comercial', role: 'Diretor Comercial', isOnline: true },
     { username: 'diretor_operacional', displayName: 'Diretor Operacional', role: 'Diretor de Operações', isOnline: true },
@@ -153,6 +160,79 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
     { username: 'fiscal_pista', displayName: 'Fiscal de Rodovia', role: 'Fiscal Operacional', isOnline: false },
     { username: 'rodovar_ai', displayName: 'Agente Rodovar IA', role: 'Inteligência Corporativa', isOnline: true }
   ]);
+
+  // Synchronize actual real-time presence heartbeat in the room "Chat do Futuro"
+  useEffect(() => {
+    if (!user || !user.username) return;
+
+    // Register active
+    updatePresence(user.username, user.displayName, user.role, true).catch(err => console.error(err));
+
+    // Heartbeat every 25 seconds
+    const intervalId = setInterval(() => {
+      updatePresence(user.username, user.displayName, user.role, true).catch(err => console.error(err));
+    }, 25000);
+
+    // Unload page hook to go offline immediately
+    const handleUnload = () => {
+      updatePresence(user.username, user.displayName, user.role, false).catch(err => console.error(err));
+    };
+    window.addEventListener('beforeunload', handleUnload);
+
+    // Subscribe to all users presence in database
+    const unsubscribePresence = subscribeToPresence((list) => {
+      setDbPresence(list);
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('beforeunload', handleUnload);
+      updatePresence(user.username, user.displayName, user.role, false).catch(err => console.error(err));
+      unsubscribePresence();
+    };
+  }, [user]);
+
+  // Synchronize dynamic DB presence to onlineMembers
+  useEffect(() => {
+    const seedBase = [
+      { username: 'diretor_comercial', displayName: 'Diretor Comercial', role: 'Diretor Comercial', isOnline: true },
+      { username: 'diretor_operacional', displayName: 'Diretor Operacional', role: 'Diretor de Operações', isOnline: true },
+      { username: 'diretor_financeiro', displayName: 'Diretor Financeiro', role: 'Diretor Financeiro', isOnline: true },
+      { username: 'gerente_logistica', displayName: 'Gerente Comercial', role: 'Operacional Superior', isOnline: true },
+      { username: 'fiscal_pista', displayName: 'Fiscal de Rodovia', role: 'Fiscal Operacional', isOnline: false },
+      { username: 'rodovar_ai', displayName: 'Agente Rodovar IA', role: 'Inteligência Corporativa', isOnline: true }
+    ];
+
+    const merged = [...seedBase];
+
+    dbPresence.forEach(p => {
+      if (!p.username) return;
+      const index = merged.findIndex(m => m.username === p.username);
+      
+      const now = new Date().getTime();
+      const lastActiveTime = new Date(p.lastActive).getTime();
+      // Active in the last 2 minutes is considered online
+      const isActiveRealTime = p.isOnline && (now - lastActiveTime < 120000); 
+
+      if (index !== -1) {
+        if (p.username !== 'rodovar_ai') { 
+          merged[index] = {
+            ...merged[index],
+            isOnline: isActiveRealTime
+          };
+        }
+      } else {
+        merged.push({
+          username: p.username,
+          displayName: p.displayName || p.username,
+          role: p.role || 'Monitorador',
+          isOnline: isActiveRealTime
+        });
+      }
+    });
+
+    setOnlineMembers(merged);
+  }, [dbPresence]);
 
   // Is current user capable of kicking? (Diretor de operações, Diretor Comercial, Financeiro)
   const canKickUser = useMemo(() => {
@@ -286,6 +366,8 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
     if (activeCategory === 'diretoria') {
       if (isDirector) {
         setUnlockedDiretoria(true);
+      } else {
+        setUnlockedDiretoria(false);
       }
     }
   }, [activeCategory, isDirector]);
@@ -505,20 +587,27 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
     if (isAiTrigger) {
       setIsAiLoading(true);
       try {
-        const deliveriesContext = getEntregas().slice(0, 5).map(ent => ({
+        const deliveriesContext = getEntregas().map(ent => ({
           id: ent.id,
           origem: ent.origem,
           destino: ent.destino,
           cliente: ent.cliente,
           motorista: ent.motorista,
-          status: ent.status
+          tel_motorista: ent.tel_motorista,
+          cpf_motorista: ent.cpf_motorista,
+          status: ent.status,
+          km: ent.km,
+          valor_carga: ent.valor_carga,
+          categoria_risco: ent.categoria_risco
         }));
 
         const bodyData = {
           prompt: currentText,
           context: {
             activeDeliveriesCount: getEntregas().length,
-            sample: deliveriesContext,
+            allDeliveries: deliveriesContext,
+            blacklistMotoristas: getBlacklist(),
+            blacklistClientes: getBlacklistClientes(),
             currentUser: user,
             category: activeCategory
           },
@@ -569,6 +658,10 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
   // Confirm authorization PIN
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isDirector) {
+      setPinErrorMsg('Acesso negado: Operadores e funcionários não possuem autorização para ingressar.');
+      return;
+    }
     const cleanPin = pinInput.trim().toUpperCase();
     const correctPin = getDailyCode();
 
@@ -882,17 +975,20 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
               <div className="font-sans space-y-1">
                 <p className="font-bold uppercase tracking-wider text-[11px] text-[#FFD600] m-0">Informativo Geral:</p>
                 {activeCategory === 'comercial' ? (
-                  <p className="m-0 text-zinc-400 text-[11px]">
-                    <strong className="text-yellow-400">VIA COMERCIAL COM MOTORISTAS:</strong> Use este espaço para negociar ofertas de frete, Pix, e-mail de transporte e faturamentos de viagem.
-                  </p>
+                  <div className="m-0 text-zinc-400 text-[11px] space-y-1">
+                    <p className="m-0"><strong className="text-[#FFD600] uppercase">Diretrizes de Negociação Rodovar (Exclusivo para Funcionários):</strong></p>
+                    <p className="m-0">• <strong className="text-zinc-200">Auditoria Preventiva:</strong> Utilize o comando do Agente de Segurança para verificar se o motorista consta em nossa lista de restrições antes de pré-aprovar a entrega.</p>
+                    <p className="m-0">• <strong className="text-zinc-200">Destaque Operacional:</strong> Enfatize a velocidade de pagamento via Pix adiantado e a credibilidade de nossas rotas assistidas para fechar a negociação com rapidez.</p>
+                    <p className="m-0">• <strong className="text-zinc-200">Preservação de Margem:</strong> Sempre faça o cálculo cruzado de distância e faturamentos para garantir a viabilidade do frete entre empresa e terceiros.</p>
+                  </div>
                 ) : activeCategory === 'operacional' ? (
-                  <p className="m-0 text-zinc-400 text-[11px]">
-                    <strong className="text-yellow-400">SUPREME OPERACIONAL:</strong> Canal focado para o controle de anomalias logísticas críticas e monitoramento de canhotos.
-                  </p>
+                  <div className="m-0 text-zinc-400 text-[11px] space-y-1">
+                    <p className="m-0"><strong className="text-yellow-400">SUPREME OPERACIONAL:</strong> Canal corporativo exclusivo para o controle ágil de anomalias logísticas críticas e auditoria sistemática de canhotos.</p>
+                  </div>
                 ) : (
-                  <p className="m-0 text-zinc-400 text-[11px]">
-                    <strong className="text-rose-400">DIRETORIA SECRETA RODOVAR (ACESSO CONFIDENCIAL):</strong> Chat exclusivo com áudio para decisões de alto-escalão corporativo.
-                  </p>
+                  <div className="m-0 text-zinc-400 text-[11px] space-y-1">
+                    <p className="m-0"><strong className="text-rose-400">DIRETORIA SECRETA RODOVAR (ACESSO CONFIDENCIAL):</strong> Canal exclusivo de governância para validação de fluxos de alto escalão corporativo.</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -919,32 +1015,49 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
             </div>
           </div>
 
-          <div className="max-w-md space-y-3">
+          <div className="max-w-md space-y-4">
             <h3 className="text-lg font-black uppercase tracking-wider text-rose-500">PAINEL EXCLUSIVO DA DIRETORIA</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Você está prestes a acessar a sala de reuniões confidenciais da Rodovar. Se você não for Diretor do sistema, insira o <span className="text-yellow-500 font-bold">Código de Convite Diário</span> rotativo fornecido por um diretor de plantão.
-            </p>
-            
-            <form onSubmit={handlePinSubmit} className="pt-4 max-w-xs mx-auto space-y-3.5">
-              <input
-                type="text"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                placeholder="Ex: RDV-DDMM-DIR"
-                className="w-full text-center font-mono font-black uppercase tracking-widest bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-700 rounded-xl px-4 py-3 focus:outline-none focus:border-rose-500 text-sm"
-              />
-              {pinErrorMsg && (
-                <p className="text-[10px] text-rose-500 font-mono mt-1 font-bold">{pinErrorMsg}</p>
-              )}
-              <button
-                type="submit"
-                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer"
-              >
-                Auditar & Entrar
-              </button>
-            </form>
 
-            <p className="text-[10px] text-zinc-650 pt-5 font-mono">
+            {!isDirector ? (
+              <div className="bg-[#1f0d11] border border-rose-950 px-5 py-6 rounded-2xl space-y-3 shadow-lg">
+                <p className="text-xs text-rose-400 font-extrabold leading-relaxed m-0 uppercase tracking-wider flex items-center justify-center gap-1.5">
+                  ⚠️ ACESSO RESTRITO AOS DIRETORES
+                </p>
+                <p className="text-[11px] text-zinc-400 leading-relaxed m-0 font-sans">
+                  O perfil de <strong className="text-white">{user.role || 'Operador'}</strong> não possui direitos ou privilégios de acesso a este canal. De acordo com as diretrizes de conformidade da central Rodovar, a sala de reuniões virtuais confidencial é <span className="text-rose-400 font-bold">exclusiva para diretores</span>.
+                </p>
+                <div className="pt-3 text-[9px] font-mono text-rose-900 border-t border-rose-950/40">
+                  CÓDIGO DE SEGURANÇA: BLOQUEADO POR CLASSIFICAÇÃO DE CARGO
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+                  Você está prestes a acessar a sala de reuniões confidenciais da Rodovar. Confirme seu <span className="text-yellow-500 font-bold">Código de Convite Diário</span> para autenticar sua sessão.
+                </p>
+                
+                <form onSubmit={handlePinSubmit} className="pt-2 max-w-xs mx-auto space-y-3.5">
+                  <input
+                    type="text"
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value)}
+                    placeholder="Ex: RDV-DDMM-DIR"
+                    className="w-full text-center font-mono font-black uppercase tracking-widest bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-700 rounded-xl px-4 py-3 focus:outline-none focus:border-rose-500 text-sm"
+                  />
+                  {pinErrorMsg && (
+                    <p className="text-[10px] text-rose-500 font-mono mt-1 font-bold">{pinErrorMsg}</p>
+                  )}
+                  <button
+                    type="submit"
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Auditar & Entrar
+                  </button>
+                </form>
+              </>
+            )}
+
+            <p className="text-[10px] text-zinc-650 pt-3 font-mono">
               Identificação do Usuário: {user.displayName} ({user.role})
             </p>
           </div>
@@ -1085,6 +1198,24 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
                             (() => {
                               const isInvitation = msg.text.includes("📢 CONVITE") && msg.text.includes("Acesso");
                               if (isInvitation) {
+                                if (!isDirector) {
+                                  return (
+                                    <div className="bg-[#12080a] border border-rose-950/50 rounded-xl p-3.5 my-1 max-w-sm shadow-md select-none">
+                                      <div className="flex items-center gap-2 pb-2 border-b border-rose-950/25">
+                                        <div className="w-6 h-6 rounded-lg bg-rose-950/20 border border-rose-950 flex items-center justify-center text-zinc-500 shrink-0">
+                                          <Lock className="w-3.5 h-3.5 text-rose-500/60 animate-pulse" />
+                                        </div>
+                                        <div>
+                                          <h4 className="text-[9px] font-mono font-black text-zinc-500 uppercase tracking-widest leading-none m-0">Convite Confidencial</h4>
+                                        </div>
+                                      </div>
+                                      <p className="text-[10px] text-zinc-500 leading-relaxed m-0 font-sans mt-2">
+                                        🔒 [CONTEÚDO INDISPONÍVEL] Convite restrito exclusivamente aos Diretores da Central. Operadores não possuem direitos ou privilégios de acesso.
+                                      </p>
+                                    </div>
+                                  );
+                                }
+
                                 // Extract code RDV-XXXX-DIR from text
                                 const codeMatch = msg.text.match(/RDV-\d+-DIR/);
                                 const code = codeMatch ? codeMatch[0] : getDailyCode();
@@ -1104,7 +1235,7 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
                                     </div>
 
                                     <p className="text-[10px] text-zinc-300 leading-relaxed m-0 font-sans">
-                                      O(A) <strong className="text-white">{msg.userName}</strong> convida você a ingressar no canal restrito da Diretoria. Use a credencial de segurança de hoje abaixo:
+                                      O(A) <strong className="text-white">{msg.userName}</strong> convida você a ingressar no canal restrito do alto escalão. Use a credencial de segurança de hoje abaixo:
                                     </p>
 
                                     <div className="bg-[#0b0607] border border-rose-950/30 rounded-lg p-2.5 flex items-center justify-between gap-2">
@@ -1517,28 +1648,67 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2.5 border-b border-zinc-900">
                   <Sparkles className="w-4 h-4 text-[#FFD600] shrink-0" />
-                  <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-300 m-0">IA Corporativa Rodovar</h3>
+                  <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-300 m-0">Comandos de Agentes</h3>
                 </div>
 
                 <p className="text-[10px] text-zinc-550 font-sans leading-relaxed m-0">
-                  A IA <strong className="text-[#FFD600] font-mono">@rodovar</strong> entende seus despacho de cargas e dados adjacentes em tempo real. Faça perguntas rápidas sobre as informações do painel:
+                  Clique para preencher o chat com o comando do Agente de IA correspondente:
                 </p>
 
                 <div className="space-y-2">
                   <button
                     type="button"
-                    onClick={() => handleQuickQuestion('Como podemos otimizar o tempo de escoamento e segurança da frota interestadual?')}
+                    onClick={() => {
+                      setInputText('@rodovar calcular rota de São Paulo para Rio de Janeiro');
+                      const inp = document.getElementById('chat-input-text');
+                      if (inp) inp.focus();
+                    }}
                     className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
+                    title="Calcular Rota Completa"
                   >
-                    <span className="truncate">Segurança e escoamento</span>
+                    <span>🚚 Calcular Rota</span>
                     <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => handleQuickQuestion('Existe algum desvio de rota ativo nas últimas horas?')}
+                    onClick={() => {
+                      setInputText('@rodovar consultar cpf ');
+                      const inp = document.getElementById('chat-input-text');
+                      if (inp) inp.focus();
+                    }}
                     className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
+                    title="Consultar CPF na Lista Negra"
                   >
-                    <span className="truncate">Verificação de desvios</span>
+                    <span>🔍 Consultar CPF</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputText('@rodovar consultar telefone ');
+                      const inp = document.getElementById('chat-input-text');
+                      if (inp) inp.focus();
+                    }}
+                    className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
+                    title="Consultar Telefone do Motorista"
+                  >
+                    <span>📞 Consultar Telefone</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputText('@rodovar consultar placa ABC1D23');
+                      const inp = document.getElementById('chat-input-text');
+                      if (inp) inp.focus();
+                    }}
+                    className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
+                    title="Consultar Placa do Veículo"
+                  >
+                    <span>🚘 Consultar Placa</span>
                     <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
                   </button>
                 </div>

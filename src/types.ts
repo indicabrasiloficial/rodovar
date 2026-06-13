@@ -43,6 +43,16 @@ export interface Entrega {
   avaliacao_cliente?: 'boa' | 'ruim' | null;
   cpf_motorista?: string;
   cpf_cnpj_cliente?: string;
+  documentos?: DocumentoAnexo[];
+}
+
+export interface DocumentoAnexo {
+  id: string;
+  nome: string;
+  tipo: 'MDFE' | 'CTE' | 'CANHOTO' | 'OUTROS';
+  dataAnexado: string;
+  tamanho?: string;
+  conteudoBase64?: string;
 }
 
 export interface BlacklistMotorista {

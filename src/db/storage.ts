@@ -342,6 +342,7 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     canhoto_solicitado: !!existingDelivery?.canhoto_solicitado,
     km: existingDelivery?.km || 0,
     historico: existingDelivery?.historico || [],
+    documentos: existingDelivery?.documentos || [],
     userId: uid
   };
 
@@ -432,6 +433,22 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     // Check observacoes
     if (entrega.observacoes !== undefined && entrega.observacoes !== existingDelivery.observacoes) {
       logs.push('Atualizou as observações de entrega');
+    }
+    // Check documentos
+    if (entrega.documentos !== undefined) {
+      const prevDocs = existingDelivery.documentos || [];
+      const currDocs = entrega.documentos || [];
+      if (currDocs.length > prevDocs.length) {
+        const added = currDocs.find(d => !prevDocs. some(pd => pd.id === d.id));
+        if (added) {
+          logs.push(`Anexou novo documento tipo ${added.tipo} (${added.nome})`);
+        }
+      } else if (currDocs.length < prevDocs.length) {
+        const removed = prevDocs.find(pd => !currDocs.some(d => d.id === pd.id));
+        if (removed) {
+          logs.push(`Deletou o documento anexado tipo ${removed.tipo} (${removed.nome})`);
+        }
+      }
     }
   }
 
@@ -916,15 +933,35 @@ export function subscribeToGroupChatRealtime(
   
   return onSnapshot(chatQuery, (snapshot) => {
     const list: GroupChatMessage[] = [];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
+
+    const oldMsgIdsToDelete: string[] = [];
+
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
-      if (data.category === category) {
-        list.push({
-          id: docSnap.id,
-          ...data
-        } as GroupChatMessage);
+      const isVoiceNote = data.isVoiceNote === true;
+      const msgTimestamp = data.timestamp;
+
+      if (isVoiceNote && msgTimestamp && msgTimestamp < sevenDaysAgoStr) {
+        oldMsgIdsToDelete.push(docSnap.id);
+      } else {
+        if (data.category === category) {
+          list.push({
+            id: docSnap.id,
+            ...data
+          } as GroupChatMessage);
+        }
       }
     });
+
+    // Delete outdated voice notes asynchronously
+    if (oldMsgIdsToDelete.length > 0) {
+      oldMsgIdsToDelete.forEach(id => {
+        deleteDoc(doc(db, CHAT_COLLECTION, id)).catch(() => {});
+      });
+    }
 
     // Client-side sort by timestamp ascending to ensure perfect linear timelines
     list.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -992,4 +1029,35 @@ export function subscribeToKickList(callback: (kickedList: string[]) => void): (
     handleFirestoreError(error, OperationType.GET, KICKED_COLLECTION);
   });
 }
+
+const PRESENCE_COLLECTION = 'group_chat_presence';
+
+export async function updatePresence(username: string, displayName: string, role: string, isOnline: boolean): Promise<void> {
+  if (!username) return;
+  const cleanId = username.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const payload = {
+    username,
+    displayName,
+    role,
+    isOnline,
+    lastActive: new Date().toISOString()
+  };
+  await setDoc(doc(db, PRESENCE_COLLECTION, cleanId), payload).catch((error) => {
+    handleFirestoreError(error, OperationType.WRITE, `${PRESENCE_COLLECTION}/${cleanId}`);
+  });
+}
+
+export function subscribeToPresence(callback: (presenceList: any[]) => void): () => void {
+  const presenceQuery = collection(db, PRESENCE_COLLECTION);
+  return onSnapshot(presenceQuery, (snapshot) => {
+    const list: any[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data());
+    });
+    callback(list);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, PRESENCE_COLLECTION);
+  });
+}
+
 

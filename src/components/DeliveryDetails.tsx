@@ -27,7 +27,10 @@ import {
   ShieldAlert,
   AlertTriangle,
   AlertCircle,
-  Coins
+  Coins,
+  Paperclip,
+  Share2,
+  Plus
 } from 'lucide-react';
 import DeliveryMap from './DeliveryMap';
 
@@ -135,6 +138,101 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   const [isSavingLink, setIsSavingLink] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [clickedScripts, setClickedScripts] = useState<string[]>([]);
+
+  // Document attachment states and methods
+  const [newDocType, setNewDocType] = useState<'MDFE' | 'CTE' | 'CANHOTO' | 'OUTROS'>('MDFE');
+  const [docUploadError, setDocUploadError] = useState('');
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!entrega) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 4 * 1024 * 1024) {
+      setDocUploadError('Arquivo excedeu o limite! Escolha fotos/documentos de no máximo 4 MB.');
+      return;
+    }
+
+    setDocUploadError('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      const sizeStr = (file.size / 1024).toFixed(1) + ' KB';
+      
+      const novoDoc = {
+        id: 'doc-' + Math.random().toString(36).substring(2, 11),
+        nome: file.name,
+        tipo: newDocType,
+        dataAnexado: new Date().toISOString(),
+        tamanho: sizeStr,
+        conteudoBase64: base64
+      };
+
+      const updatedDocs = [...(entrega.documentos || []), novoDoc];
+      const updated = saveEntrega({
+        id: entrega.id,
+        documentos: updatedDocs
+      });
+
+      setEntrega(updated);
+      if (window.falarRodovar) {
+        window.falarRodovar(`Documento ${newDocType} anexado com sucesso total!`);
+      }
+      
+      // Clear input
+      e.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDeleteDocument = (docId: string) => {
+    if (!entrega || !confirm('Deseja realmente remover este documento anexado desta carga?')) return;
+
+    const updatedDocs = (entrega.documentos || []).filter(d => d.id !== docId);
+    const updated = saveEntrega({
+      id: entrega.id,
+      documentos: updatedDocs
+    });
+
+    setEntrega(updated);
+    if (window.falarRodovar) {
+      window.falarRodovar('Documento removido da carga.');
+    }
+  };
+
+  const handleShareDocument = (doc: any, targetType: 'motorista' | 'cliente' | 'outro') => {
+    if (!entrega) return;
+    
+    let phone = '';
+    if (targetType === 'motorista') {
+      phone = entrega.tel_motorista;
+    } else if (targetType === 'cliente') {
+      phone = entrega.tel_cliente;
+    } else {
+      const input = prompt('Digite o número de WhatsApp completo com DDD (ex: 11999999999):');
+      if (!input) return;
+      phone = input;
+    }
+
+    const docTypeLabel: Record<string, string> = {
+      MDFE: 'MDF-e (Manifesto Eletrônico)',
+      CTE: 'CT-e (Conhecimento de Transporte)',
+      CANHOTO: 'Canhoto Recebido',
+      OUTROS: 'Documento Operacional'
+    };
+
+    const docMsg = `🚚 *RODOVAR DOCUMENTO COMPARTILHADO* 🚚\n\n` +
+      `📂 *Carga:* ${entrega.origem} ➔ ${entrega.destino}\n` +
+      `👤 *Motorista:* ${entrega.motorista} (${entrega.tel_motorista})\n` +
+      `📋 *Tipo de Documento:* *${docTypeLabel[doc.tipo] || doc.tipo}*\n` +
+      `📎 *Nome do Arquivo:* \`${doc.nome}\`\n` +
+      `📏 *Tamanho:* ${doc.tamanho || 'Visualização Direta'}\n` +
+      `📅 *Gravado em:* ${formatTimestamp(doc.dataAnexado)}\n\n` +
+      `Acesse a central Rodovar para auditar o documento ou emitir o PDF/Imprimir.\n` +
+      `_Auditado com êxito pela Central Rodovar IA._`;
+
+    clickWhatsApp(phone, docMsg);
+  };
 
   // Calculate driver travel rating score
   const ratingStats = React.useMemo(() => {
@@ -697,6 +795,139 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                   >
                     Solicitar via WhatsApp
                   </button>
+                )}
+              </div>
+
+              {/* Painel Profissional de Documentos da Ficha do Motorista */}
+              <div className="bg-zinc-950/50 p-5 border border-zinc-900 rounded-xl space-y-4 sm:col-span-2 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-900 pb-3">
+                  <div className="space-y-0.5">
+                    <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] flex items-center gap-1.5 font-bold">
+                      <Paperclip className="w-4 h-4 text-[#FFD600]" />
+                      Documentos Anexados nesta Ficha (MDF-e, CT-e, Canhoto)
+                    </span>
+                    <p className="text-[10px] text-zinc-500 font-sans">Controle e rastreabilidade total de documentos por rota</p>
+                  </div>
+                  
+                  {/* Selector of Type & File Input */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      value={newDocType}
+                      onChange={(e) => setNewDocType(e.target.value as any)}
+                      className="bg-zinc-900 border border-zinc-800 text-white rounded px-2.5 py-1 text-xs focus:border-[#FFD600] focus:ring-1 focus:ring-[#FFD600] outline-none"
+                    >
+                      <option value="MDFE">MDF-e</option>
+                      <option value="CTE">CT-e</option>
+                      <option value="CANHOTO">Canhoto</option>
+                      <option value="OUTROS">Outros</option>
+                    </select>
+
+                    <label className="flex items-center gap-1 bg-[#FFD600] text-black px-2.5 py-1 text-xs font-bold rounded cursor-pointer hover:bg-yellow-400 select-none transition-all">
+                      <Plus className="w-3.5 h-3.5" />
+                      Anexar Arquivo
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {docUploadError && (
+                  <p className="text-[10px] text-red-500 font-mono font-bold">{docUploadError}</p>
+                )}
+
+                {/* Document List */}
+                {!entrega.documentos || entrega.documentos.length === 0 ? (
+                  <div className="text-center py-6 text-zinc-650 bg-zinc-900/10 border border-dashed border-zinc-850 rounded-lg">
+                    <p className="font-sans text-[11px]">Nenhum documento (MDF-e, CT-e ou Canhoto) anexado a esta ficha de motorista.</p>
+                    <p className="text-[9px] font-mono mt-0.5 text-zinc-600">Selecione o tipo ao lado e clique em "Anexar Arquivo" para anexar documentos reais.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {entrega.documentos.map((doc) => {
+                      const badgeColors: Record<string, string> = {
+                        MDFE: 'text-amber-400 bg-amber-950/40 border-amber-900/30',
+                        CTE: 'text-indigo-400 bg-indigo-950/40 border-indigo-900/30',
+                        CANHOTO: 'text-emerald-400 bg-emerald-950/40 border-emerald-900/30',
+                        OUTROS: 'text-zinc-400 bg-zinc-900 border-zinc-800'
+                      };
+
+                      return (
+                        <div key={doc.id} className="bg-zinc-900/40 border border-zinc-850 p-3 rounded-lg flex flex-col justify-between gap-3 hover:border-zinc-700 transition-all">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[8px] font-mono uppercase px-1 py-0.2 rounded border font-black ${badgeColors[doc.tipo] || badgeColors.OUTROS}`}>
+                                  {doc.tipo}
+                                </span>
+                                <span className="text-[10px] font-mono text-zinc-500">{doc.tamanho || 'Visualizar'}</span>
+                              </div>
+                              <p className="text-xs font-bold text-gray-200 line-clamp-1" title={doc.nome}>
+                                {doc.nome}
+                              </p>
+                              <span className="text-[9px] text-zinc-500 font-mono block">
+                                Anexado {formatTimestamp(doc.dataAnexado)}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDocument(doc.id)}
+                              className="text-zinc-600 hover:text-red-400 transition p-1 rounded hover:bg-red-950/10 cursor-pointer"
+                              title="Remover anexo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="border-t border-zinc-800/40 pt-2 flex items-center justify-between gap-1 flex-wrap">
+                            {doc.conteudoBase64 ? (
+                              <a
+                                href={doc.conteudoBase64}
+                                download={doc.nome}
+                                className="text-[10px] font-bold text-gray-400 hover:text-[#FFD600] flex items-center gap-1 transition-colors"
+                              >
+                                📥 Baixar Arquivo
+                              </a>
+                            ) : (
+                              <span className="text-[9px] text-zinc-650 font-mono">Download indisponível</span>
+                            )}
+
+                            {/* Compartilhar WhatsApp Dropdown options */}
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="text-[9px] text-zinc-500 font-mono mr-0.5">Compartilhar:</span>
+                              <button
+                                type="button"
+                                onClick={() => handleShareDocument(doc, 'motorista')}
+                                className="px-1.5 py-0.5 bg-zinc-800 hover:bg-[#FFD600] text-gray-400 hover:text-black font-semibold text-[9px] rounded uppercase font-mono tracking-wider transition-colors cursor-pointer"
+                                title="Enviar para o Motorista"
+                              >
+                                MOT
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleShareDocument(doc, 'cliente')}
+                                className="px-1.5 py-0.5 bg-zinc-800 hover:bg-[#FFD600] text-gray-400 hover:text-black font-semibold text-[9px] rounded uppercase font-mono tracking-wider transition-colors cursor-pointer"
+                                title="Enviar para o Cliente"
+                              >
+                                CLI
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleShareDocument(doc, 'outro')}
+                                className="px-1.5 py-0.5 bg-zinc-800 hover:bg-[#FFD600] text-gray-300 hover:text-black font-bold text-[9px] rounded transition-colors cursor-pointer"
+                                title="Digitar outro número de destino"
+                              >
+                                <Share2 className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
