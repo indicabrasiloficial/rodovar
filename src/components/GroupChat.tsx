@@ -129,12 +129,15 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
   const isDirector = useMemo(() => {
     const curRole = user.role?.toLowerCase() || '';
     const curName = user.username?.toLowerCase() || '';
+    const curDisp = user.displayName?.toLowerCase() || '';
     return (
       curRole.includes('diretor') || 
       curRole.includes('financeiro') || 
       curRole === 'master' || 
       curName === 'master' ||
-      curName.includes('diretor')
+      curName.includes('diretor') ||
+      curName.includes('jairo') ||
+      curDisp.includes('jairo')
     );
   }, [user]);
 
@@ -155,6 +158,7 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
   const canKickUser = useMemo(() => {
     const curRole = user.role?.toLowerCase() || '';
     const curName = user.role?.toLowerCase() || user.username?.toLowerCase() || '';
+    const curDisp = user.displayName?.toLowerCase() || '';
     return (
       curRole.includes('operacion') || 
       curRole.includes('comercial') || 
@@ -163,7 +167,9 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
       curRole === 'master' || 
       curName === 'master' ||
       curName.includes('diretor') ||
-      curName.includes('financeiro')
+      curName.includes('financeiro') ||
+      curName.includes('jairo') ||
+      curDisp.includes('jairo')
     );
   }, [user]);
 
@@ -247,6 +253,31 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
 
     if (!isSpeechMuted) {
       onSpeak("Backup gerado com sucesso");
+    }
+  };
+
+  // Share Invitation automatically with neighboring chats (Comercial or Operacional)
+  const handleShareInvite = async (targetCategory: 'comercial' | 'operacional') => {
+    const code = getDailyCode();
+    setIsAiLoading(true);
+    try {
+      await sendGroupChatMessage({
+        category: targetCategory,
+        text: `📢 CONVITE DA DIRETORIA: O(A) ${user.displayName} (${user.role}) convida os membros autorizados a ingressar na sala secreta de Diretoria nas próximas 24 horas. Código de Acesso: ${code}`,
+        userId: user.username,
+        userName: user.displayName,
+        userRole: user.role,
+        timestamp: new Date().toISOString()
+      });
+      if (!isSpeechMuted) {
+        onSpeak(`Convite enviado para o grupo ${targetCategory === 'comercial' ? 'Comercial' : 'Operacional'}`);
+      }
+      alert(`Convite enviado com sucesso para o canal ${targetCategory.toUpperCase()}!`);
+    } catch (err) {
+      console.error(err);
+      alert('Falha ao compartilhar convite.');
+    } finally {
+      setIsAiLoading(false);
     }
   };
 
@@ -761,7 +792,7 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
         </div>
 
         {/* Categories Tab Picker & Valaa shortcut */}
-        <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
+        <div className="flex items-center gap-2 flex-wrap self-start md:self-auto w-full md:w-auto">
           <div className="flex items-center gap-1 bg-zinc-900/60 p-1 rounded-xl border border-zinc-800/80">
             <button
               type="button"
@@ -818,6 +849,22 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
             <Trash2 className="w-3 h-3 text-rose-500" />
             <span>VALAA</span>
           </button>
+
+          {isDirector && (
+            <div className="flex items-center gap-1.5 bg-[#1b0d0f] border border-rose-950/40 px-3 py-1.5 rounded-xl text-[10px] font-mono font-bold text-rose-400 leading-none shadow-sm shrink-0 ml-auto md:ml-0">
+              <ShieldCheck className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              <span className="opacity-70 font-sans text-[8.5px]">CÓD:</span>
+              <span className="font-mono font-black text-rose-300 tracking-wider text-[10px]">{getDailyCode()}</span>
+              <button
+                type="button"
+                onClick={handleCopyDailyCode}
+                className="p-1 bg-zinc-950 hover:bg-zinc-800 rounded text-zinc-400 hover:text-[#FFD600] transition-colors cursor-pointer ml-1 active:scale-95 flex items-center justify-center h-5 w-5"
+                title="Copiar Código"
+              >
+                {copiedDailyCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1035,7 +1082,60 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
 
                           ) : (
                             /* TEXT RENDERING */
-                            <p className="m-0 whitespace-pre-wrap">{msg.text}</p>
+                            (() => {
+                              const isInvitation = msg.text.includes("📢 CONVITE") && msg.text.includes("Acesso");
+                              if (isInvitation) {
+                                // Extract code RDV-XXXX-DIR from text
+                                const codeMatch = msg.text.match(/RDV-\d+-DIR/);
+                                const code = codeMatch ? codeMatch[0] : getDailyCode();
+
+                                return (
+                                  <div className="bg-[#1a0c0e] border border-rose-900/40 rounded-xl p-3.5 space-y-3.5 my-1 max-w-sm shadow-[0_0_20px_rgba(244,63,94,0.06)] relative overflow-hidden select-none">
+                                    <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/5 rounded-full blur-xl pointer-events-none" />
+                                    
+                                    <div className="flex items-center gap-2 pb-2 border-b border-rose-950/20">
+                                      <div className="w-7 h-7 rounded-lg bg-rose-950/40 border border-rose-500/40 flex items-center justify-center text-rose-500 shrink-0">
+                                        <ShieldCheck className="w-4 h-4" />
+                                      </div>
+                                      <div>
+                                        <h4 className="text-[10px] font-mono font-black text-rose-500 uppercase tracking-widest leading-none m-0">Convite da Diretoria</h4>
+                                        <span className="text-[7.5px] font-sans text-zinc-500 leading-none">Acesso Confidencial Rotativo</span>
+                                      </div>
+                                    </div>
+
+                                    <p className="text-[10px] text-zinc-300 leading-relaxed m-0 font-sans">
+                                      O(A) <strong className="text-white">{msg.userName}</strong> convida você a ingressar no canal restrito da Diretoria. Use a credencial de segurança de hoje abaixo:
+                                    </p>
+
+                                    <div className="bg-[#0b0607] border border-rose-950/30 rounded-lg p-2.5 flex items-center justify-between gap-2">
+                                      <div className="flex flex-col">
+                                        <span className="text-[7.5px] font-mono text-zinc-650 leading-none uppercase font-bold">Código do Convite</span>
+                                        <span className="text-xs font-mono font-black text-[#FFD600] tracking-widest mt-1">{code}</span>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(code);
+                                          if (!isSpeechMuted) {
+                                            onSpeak("Código de convite copiado com sucesso! Insira-o ao acessar o fórum da diretoria.");
+                                          }
+                                          alert(`Chave ${code} copiada para a área de transferência!`);
+                                          setPinInput(code);
+                                          setActiveCategory('diretoria');
+                                        }}
+                                        className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-mono font-black tracking-wider uppercase rounded-lg transition-transform cursor-pointer flex items-center gap-1 active:scale-95 shadow-md shrink-0"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                        <span>Copiar & Entrar</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              return <p className="m-0 whitespace-pre-wrap">{msg.text}</p>;
+                            })()
                           )}
 
                           {/* Attachment files rendering */}
@@ -1272,30 +1372,55 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
             
             <div className="space-y-5">
               
-              {/* Daily PIN Section for Directorate Tab */}
-              {activeCategory === 'diretoria' && (
-                <div className="bg-[#1a0e11] border border-rose-950/50 p-4 rounded-xl space-y-2.5 relative overflow-hidden">
+              {/* Daily PIN Section for Directorate Tab (Visible strictly to Authorized Directors/Finance) */}
+              {isDirector && (
+                <div className="bg-[#1a0e11] border border-rose-950/50 p-4 rounded-xl space-y-3 relative overflow-hidden">
                   <div className="flex items-center gap-1.5 pb-2 border-b border-rose-950/40">
                     <ShieldCheck className="w-4 h-4 text-rose-500 shrink-0" />
-                    <h3 className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-rose-400 m-0">Auditório do Convite</h3>
+                    <h3 className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-rose-400 m-0">Gerador de Convites</h3>
                   </div>
                   
                   <p className="text-[9px] text-zinc-400 leading-normal m-0 font-sans">
-                    Como diretor, repasse o código de reunião abaixo para convidar um colega a participar deste chat hoje:
+                    Código de Convite Diário rotativo (muda a cada 24 horas). Somente diretores e financeiro possuem acesso a esta credencial:
                   </p>
 
-                  <div className="bg-zinc-900/80 border border-zinc-850/90 rounded-lg p-2.5 flex items-center justify-between gap-1 mt-1">
+                  <div className="bg-zinc-900/80 border border-zinc-850/90 rounded-lg p-2.5 flex items-center justify-between gap-1">
                     <span className="font-mono font-black text-rose-400 tracking-wider text-xs">
                       {getDailyCode()}
                     </span>
                     <button
                       type="button"
                       onClick={handleCopyDailyCode}
-                      className="p-1.5 bg-zinc-950 hover:bg-zinc-800 rounded text-zinc-400 hover:text-[#FFD600] cursor-pointer"
-                      title="Copiar Código de Reunião"
+                      className="p-1.5 bg-zinc-950 hover:bg-zinc-800 rounded text-zinc-400 hover:text-[#FFD600] flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95"
+                      title="Copiar Código"
                     >
                       {copiedDailyCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[8.5px] font-mono font-bold text-zinc-500 uppercase tracking-widest block font-sans">Convidar Compartilhando:</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleShareInvite('comercial')}
+                        className="py-1.5 px-1 bg-zinc-900/60 hover:bg-[#FFD600]/10 border border-zinc-900 hover:border-[#FFD600]/30 hover:text-[#FFD600] rounded-lg text-[9px] font-mono font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 text-zinc-400"
+                        title="Enviar convite ao Comercial"
+                      >
+                        <Users className="w-3 h-3 text-[#FFD600]" />
+                        <span>Comercial</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleShareInvite('operacional')}
+                        className="py-1.5 px-1 bg-zinc-900/60 hover:bg-rose-500/10 border border-zinc-900 hover:border-rose-500/30 hover:text-rose-400 rounded-lg text-[9px] font-mono font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 text-zinc-400"
+                        title="Enviar convite ao Operacional"
+                      >
+                        <Shield className="w-3 h-3 text-rose-500" />
+                        <span>Operacional</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
