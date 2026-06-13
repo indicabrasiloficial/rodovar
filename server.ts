@@ -9,9 +9,9 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Enlarge limits to handle base64 attachments safely
-app.use(express.json({ limit: "15mb" }));
-app.use(express.urlencoded({ extended: true, limit: "15mb" }));
+// Enlarge limits to handle safely 50MB attachments (usually Base64 payload is ~33% larger, so 65mb provides safety)
+app.use(express.json({ limit: "65mb" }));
+app.use(express.urlencoded({ extended: true, limit: "65mb" }));
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({

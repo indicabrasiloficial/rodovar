@@ -89,7 +89,7 @@ export interface ScheduledMessage {
 
 export interface GroupChatMessage {
   id: string;
-  category: 'comercial' | 'operacional' | 'ai';
+  category: 'comercial' | 'operacional' | 'ai' | 'diretoria';
   text: string;
   userId: string;
   userName: string;

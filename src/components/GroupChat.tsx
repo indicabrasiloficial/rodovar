@@ -12,15 +12,26 @@ import {
   FileText, 
   Image as ImageIcon, 
   X, 
-  Volume2, 
+  Clock, 
+  ArrowRight, 
+  AlertCircle,
+  Copy,
+  Check,
+  Lock,
+  Unlock,
+  Trash2,
+  Share2,
+  Play,
+  Pause,
+  Headphones,
+  Volume2,
   VolumeX,
-  Clock,
-  ArrowRight,
-  HelpCircle,
-  AlertCircle
+  ShieldCheck,
+  FolderSync,
+  Info
 } from 'lucide-react';
-import { GroupChatMessage, Entrega } from '../types';
-import { sendGroupChatMessage, subscribeToGroupChatRealtime, getEntregas } from '../db/storage';
+import { GroupChatMessage } from '../types';
+import { sendGroupChatMessage, subscribeToGroupChatRealtime, deleteGroupChatMessage, getEntregas } from '../db/storage';
 
 interface GroupChatProps {
   user: {
@@ -33,25 +44,117 @@ interface GroupChatProps {
 }
 
 export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatProps) {
-  const [activeCategory, setActiveCategory] = useState<'comercial' | 'operacional'>('comercial');
+  const [activeCategory, setActiveCategory] = useState<'comercial' | 'operacional' | 'diretoria'>('comercial');
   const [messages, setMessages] = useState<GroupChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
+  
+  // Traditional WebSpeech API (Speech-To-Text / dictation)
+  const [isSpeechToTextRecording, setIsSpeechToTextRecording] = useState(false);
+  const [speechToTextRecognition, setSpeechToTextRecognition] = useState<any>(null);
+
+  // Real Audio Audio Notes state (Envio de Voz Real)
+  const [isRealVoiceRecording, setIsRealVoiceRecording] = useState(false);
+  const [voiceRecordTime, setVoiceRecordTime] = useState(0);
+  const [voiceNoteData, setVoiceNoteData] = useState<{
+    name: string;
+    mimeType: string;
+    data: string; // Base64
+  } | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const voiceTimerRef = useRef<any>(null);
+
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [showRules, setShowRules] = useState(true);
   
-  // File upload state
+  // File upload state (Upped limit to 50MB)
   const [attachment, setAttachment] = useState<{
     name: string;
     mimeType: string;
     data: string; // Base64
   } | null>(null);
 
-  const [recognition, setRecognition] = useState<any>(null);
+  // Access check state for Secret Diretoria tab
+  const [unlockedDiretoria, setUnlockedDiretoria] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinErrorMsg, setPinErrorMsg] = useState('');
+  const [copiedDailyCode, setCopiedDailyCode] = useState(false);
+
+  // Message forwarding state
+  const [forwardMessageTarget, setForwardMessageTarget] = useState<GroupChatMessage | null>(null);
+  const [showForwardModal, setShowForwardModal] = useState(false);
+
+  // Secret Live Audio Meeting room state
+  const [isConnectedToMeeting, setIsConnectedToMeeting] = useState(false);
+  const [isMeetingMuted, setIsMeetingMuted] = useState(false);
+  const [meetingParticipants, setMeetingParticipants] = useState<Array<{ name: string; role: string; isSpeaking: boolean }>>([
+    { name: "Genivaldo", role: "Gerente Supremo", isSpeaking: false },
+    { name: "Diretor Operacional", role: "Gestor Geral", isSpeaking: true },
+    { name: "Diretor Comercial", role: "Comercial Principal", isSpeaking: false }
+  ]);
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyzerRef = useRef<AnalyserNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize Speech Recognition
+  // Currently playing audio references to prevent overlapping playbacks
+  const [currentlyPlayingMsgId, setCurrentlyPlayingMsgId] = useState<string | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Deterministic daily invitation code
+  const getDailyCode = (): string => {
+    const d = new Date();
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    // e.g. RDV-1306-DIR
+    return `RDV-${day}${month}-DIR`;
+  };
+
+  // Check if current user is Director role
+  const isDirector = useMemo(() => {
+    const curRole = user.role?.toLowerCase() || '';
+    const curName = user.username?.toLowerCase() || '';
+    return (
+      curRole.includes('diretor') || 
+      curRole.includes('financeiro') || 
+      curRole === 'master' || 
+      curName === 'master' ||
+      curName.includes('diretor')
+    );
+  }, [user]);
+
+  // Handle auto-approval or reset PIN state on tab switches
+  useEffect(() => {
+    if (activeCategory === 'diretoria') {
+      if (isDirector) {
+        setUnlockedDiretoria(true);
+      }
+    }
+  }, [activeCategory, isDirector]);
+
+  // Voice note recording timer
+  useEffect(() => {
+    if (isRealVoiceRecording) {
+      voiceTimerRef.current = setInterval(() => {
+        setVoiceRecordTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (voiceTimerRef.current) {
+        clearInterval(voiceTimerRef.current);
+      }
+    }
+    return () => {
+      if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
+    };
+  }, [isRealVoiceRecording]);
+
+  // Initialize Speech Recognition for speech-to-text dictation
   useEffect(() => {
     const SpeechVal = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechVal) {
@@ -66,27 +169,26 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
           const separator = prev.trim() ? ' ' : '';
           return prev + separator + text;
         });
-        setIsRecording(false);
-        // Feed audio notification
+        setIsSpeechToTextRecording(false);
         if (!isSpeechMuted) {
-          onSpeak("Áudio capturado");
+          onSpeak("Ditado processado");
         }
       };
 
       rec.onerror = (err: any) => {
         console.error('Erro no reconhecimento de voz:', err);
-        setIsRecording(false);
+        setIsSpeechToTextRecording(false);
       };
 
       rec.onend = () => {
-        setIsRecording(false);
+        setIsSpeechToTextRecording(false);
       };
 
-      setRecognition(rec);
+      setSpeechToTextRecognition(rec);
     }
   }, [isSpeechMuted, onSpeak]);
 
-  // Real-time listener for current active segment messages
+  // Listen to Firestore real-time group-chat sync messages
   useEffect(() => {
     const unsubscribe = subscribeToGroupChatRealtime(activeCategory, (syncMsgs) => {
       setMessages(syncMsgs);
@@ -94,33 +196,94 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
     return () => unsubscribe();
   }, [activeCategory]);
 
-  // Scroll to bottom on updates
+  // Scroll smoothly to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isAiLoading]);
 
-  // Voice recording toggle
-  const toggleRecording = () => {
-    if (!recognition) {
-      alert("Seu navegador não oferece suporte para reconhecimento de fala local.");
+  // Setup/Tear down the Secret Meeting Audio Room visualization
+  useEffect(() => {
+    if (isConnectedToMeeting && canvasRef.current) {
+      startVisualizer();
+    } else {
+      stopVisualizer();
+    }
+    return () => stopVisualizer();
+  }, [isConnectedToMeeting]);
+
+  // Speech-To-Text dictation toggle
+  const toggleSpeechToText = () => {
+    if (!speechToTextRecognition) {
+      alert("Seu navegador não oferece suporte para reconhecimento de fala WebSpeech nativo.");
       return;
     }
 
-    if (isRecording) {
-      recognition.stop();
+    if (isSpeechToTextRecording) {
+      speechToTextRecognition.stop();
     } else {
-      setIsRecording(true);
-      recognition.start();
+      setIsSpeechToTextRecording(true);
+      speechToTextRecognition.start();
     }
   };
 
-  // Convert File to Base64 easily
+  // Gravar Áudio Real de Voz (Real Audio Media Note Recording)
+  const startRealVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Data = (reader.result as string).split(',')[1];
+          setVoiceNoteData({
+            name: `Áudio_Voz_${new Date().toLocaleTimeString().replace(/:/g, '-')}.webm`,
+            mimeType: 'audio/webm',
+            data: base64Data
+          });
+        };
+        reader.readAsDataURL(audioBlob);
+
+        // Turn off stream tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setIsRealVoiceRecording(true);
+      setVoiceRecordTime(0);
+      if (!isSpeechMuted) {
+        onSpeak("Gravando áudio");
+      }
+    } catch (err) {
+      console.error("Erro ao acessar permissão de gravação:", err);
+      alert("Não foi possível acessar seu microfone para gravação de áudio real de reunião.");
+    }
+  };
+
+  const stopRealVoiceRecording = () => {
+    if (mediaRecorderRef.current && isRealVoiceRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRealVoiceRecording(false);
+    }
+  };
+
+  // Convert files to base64 with strict 50MB check
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 8 * 1024 * 1024) {
-      alert("O tamanho do arquivo excede o limite máximo de 8MB.");
+    const maxLimit = 50 * 1024 * 1024; // 50MB Limit
+    if (file.size > maxLimit) {
+      alert(`⚠️ Erro de Limite: O tamanho do arquivo (${(file.size / (1024 * 1024)).toFixed(1)} MB) excede o limite máximo configurado de 50 MB.`);
       return;
     }
 
@@ -136,21 +299,23 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
     reader.readAsDataURL(file);
   };
 
+  // Submit messages
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputText.trim() && !attachment) return;
+    if (!inputText.trim() && !attachment && !voiceNoteData) return;
 
     const currentText = inputText;
     const currentAttachment = attachment;
+    const currentVoice = voiceNoteData;
 
     // Reset input fields
     setInputText('');
     setAttachment(null);
+    setVoiceNoteData(null);
 
-    // 1. Send the primary user message to Firebase
     const messagePayload: Omit<GroupChatMessage, 'id'> = {
       category: activeCategory,
-      text: currentText,
+      text: currentVoice ? "🎙️ Mensagem de Voz Enviada" : currentText,
       userId: user.username,
       userName: user.displayName,
       userRole: user.role,
@@ -159,16 +324,24 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
         attachmentName: currentAttachment.name,
         attachmentType: currentAttachment.mimeType,
         attachmentPreview: currentAttachment.data
+      }),
+      ...(currentVoice && {
+        attachmentName: currentVoice.name,
+        attachmentType: currentVoice.mimeType,
+        attachmentPreview: currentVoice.data,
+        isVoiceNote: true
       })
     };
 
     await sendGroupChatMessage(messagePayload);
 
-    // 2. Check if user has triggered @rodovar AI helper or if we are in assistance mode
-    const isAiTrigger = currentText.toLowerCase().includes('@rodovar') || 
-                        currentText.toLowerCase().includes('ia') || 
-                        currentText.toLowerCase().includes('ajuda') || 
-                        currentText.toLowerCase().includes('assistente');
+    // AI Agent callback
+    const isAiTrigger = !currentVoice && (
+      currentText.toLowerCase().includes('@rodovar') || 
+      currentText.toLowerCase().includes('ia') || 
+      currentText.toLowerCase().includes('ajuda') || 
+      currentText.toLowerCase().includes('assistente')
+    );
 
     if (isAiTrigger) {
       setIsAiLoading(true);
@@ -206,7 +379,6 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
         const data = await response.json();
 
         if (data.success && data.text) {
-          // Append the AI reply
           const aiPayload: Omit<GroupChatMessage, 'id'> = {
             category: activeCategory,
             text: data.text,
@@ -219,9 +391,7 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
 
           await sendGroupChatMessage(aiPayload);
 
-          // TTS read out AI answer
           if (!isSpeechMuted) {
-            // Clean markdown syntax before speaking
             const voiceClbkText = data.text
               .replace(/[*#_\-\[\]`]/g, '')
               .replace(/RODOVAR_AI/g, 'Rodovar')
@@ -237,14 +407,192 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
     }
   };
 
-  // Quick prompt questions
+  // Confirm authorization PIN
+  const handlePinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanPin = pinInput.trim().toUpperCase();
+    const correctPin = getDailyCode();
+
+    if (cleanPin === correctPin) {
+      setUnlockedDiretoria(true);
+      setPinErrorMsg('');
+      setPinInput('');
+    } else {
+      setPinErrorMsg('Código inválido para hoje. Verifique com um diretor de plantão.');
+    }
+  };
+
+  // Delete message
+  const handleDeleteMessage = async (msgId: string) => {
+    if (confirm("Tem certeza que deseja deletar permanentemente esta mensagem?")) {
+      await deleteGroupChatMessage(msgId);
+    }
+  };
+
+  // Open forwarding
+  const handleOpenForward = (msg: GroupChatMessage) => {
+    setForwardMessageTarget(msg);
+    setShowForwardModal(true);
+  };
+
+  // Execute forwarding
+  const handleForwardMessage = async (targetCategory: 'comercial' | 'operacional' | 'diretoria') => {
+    if (!forwardMessageTarget) return;
+
+    const payload: Omit<GroupChatMessage, 'id'> = {
+      category: targetCategory,
+      text: `🔄 [Encaminhado por ${user.displayName}]: ${forwardMessageTarget.text}`,
+      userId: user.username,
+      userName: user.displayName,
+      userRole: user.role,
+      timestamp: new Date().toISOString(),
+      ...(forwardMessageTarget.attachmentName && {
+        attachmentName: forwardMessageTarget.attachmentName,
+        attachmentType: forwardMessageTarget.attachmentType,
+        attachmentPreview: forwardMessageTarget.attachmentPreview
+      }),
+      ...(forwardMessageTarget.isVoiceNote && {
+        isVoiceNote: true
+      })
+    };
+
+    await sendGroupChatMessage(payload);
+    setShowForwardModal(false);
+    setForwardMessageTarget(null);
+    alert(`Mensagem encaminhada com sucesso para o grupo ${targetCategory.toUpperCase()}!`);
+  };
+
+  // Play audio voice notes cleanly
+  const togglePlayAudio = (msgId: string, base64Audio: string) => {
+    if (currentlyPlayingMsgId === msgId) {
+      // Pause
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+      setCurrentlyPlayingMsgId(null);
+    } else {
+      // Spot cleanup
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+      }
+
+      const audioUri = `data:audio/webm;base64,${base64Audio}`;
+      const audio = new Audio(audioUri);
+      activeAudioRef.current = audio;
+      setCurrentlyPlayingMsgId(msgId);
+
+      audio.play().catch(err => {
+        console.error("Erro ao reproduzir nota de voz:", err);
+        setCurrentlyPlayingMsgId(null);
+      });
+
+      audio.onended = () => {
+        setCurrentlyPlayingMsgId(null);
+      };
+    }
+  };
+
+  // Audio room visuals
+  const startVisualizer = async () => {
+    try {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      analyzerRef.current = audioCtxRef.current.createAnalyser();
+      analyzerRef.current.fftSize = 256;
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+      if (stream) {
+        micStreamRef.current = stream;
+        const source = audioCtxRef.current.createMediaStreamSource(stream);
+        source.connect(analyzerRef.current);
+      }
+
+      drawWave();
+    } catch (e) {
+      console.warn("Nenhum microfone real capturado para visualização, usando fluxo de simulação.");
+      drawWave(); // simulate anyway
+    }
+  };
+
+  const stopVisualizer = () => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+    }
+    micStreamRef.current = null;
+    audioCtxRef.current = null;
+    analyzerRef.current = null;
+  };
+
+  const drawWave = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const bufferLength = analyzerRef.current ? analyzerRef.current.frequencyBinCount : 64;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const render = () => {
+      animFrameRef.current = requestAnimationFrame(render);
+
+      if (analyzerRef.current) {
+        analyzerRef.current.getByteFrequencyData(dataArray);
+      } else {
+        // Mock data
+        for (let i = 0; i < bufferLength; i++) {
+          dataArray[i] = Math.sin(Date.now() * 0.005 + i * 0.1) * 30 + 35;
+        }
+      }
+
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, width, height);
+
+      // Draw futuristic wave
+      const barWidth = (width / bufferLength) * 2.5;
+      let barHeight;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        barHeight = dataArray[i] * 0.6;
+
+        const grad = ctx.createLinearGradient(0, height - barHeight, 0, height);
+        grad.addColorStop(0, '#FFD600');
+        grad.addColorStop(0.5, '#ffd90033');
+        grad.addColorStop(1, '#ffd90000');
+
+        ctx.fillStyle = grad;
+        // Draw double mirrored visualizer
+        ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+        ctx.fillRect(width - x, height - barHeight, barWidth - 1, barHeight);
+
+        x += barWidth + 1;
+      }
+    };
+
+    render();
+  };
+
+  // Quick prompt trigger handler
   const handleQuickQuestion = (question: string) => {
     setInputText(`@rodovar ${question}`);
   };
 
+  const handleCopyDailyCode = () => {
+    navigator.clipboard.writeText(getDailyCode());
+    setCopiedDailyCode(true);
+    setTimeout(() => setCopiedDailyCode(false), 2000);
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-14rem)] bg-[#0d0d0d] border border-zinc-805/80 rounded-2xl overflow-hidden font-sans shadow-2xl relative">
-      {/* Top Navigation Row */}
+      
+      {/* Top Header Row of Future Chat */}
       <div className="bg-zinc-950 border-b border-zinc-900 px-5 py-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#FFD600]/10 flex items-center justify-center border border-[#FFD600]/25 animate-pulse">
@@ -257,15 +605,15 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
                 Realtime
               </span>
             </h2>
-            <p className="text-[10px] text-zinc-500 m-0 font-mono mt-0.5">Canal integrado para colaboração instantânea de times e motoristas</p>
+            <p className="text-[10px] text-zinc-500 m-0 font-mono mt-0.5">Canal integrado de alta cupula e comunicação empresarial</p>
           </div>
         </div>
 
-        {/* Group Tab Category Picker */}
-        <div className="flex items-center gap-1.5 bg-zinc-900/60 p-1 rounded-xl border border-zinc-800/80 self-start md:self-auto">
+        {/* Categories Tab Picker */}
+        <div className="flex items-center gap-1 bg-zinc-900/60 p-1 rounded-xl border border-zinc-800/80 self-start md:self-auto">
           <button
             onClick={() => setActiveCategory('comercial')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
               activeCategory === 'comercial'
               ? 'bg-[#FFD600] text-[#0a0a0a] shadow-lg font-black'
               : 'text-zinc-500 hover:text-zinc-200'
@@ -274,9 +622,10 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
             <Users className="w-3.5 h-3.5" />
             <span>Comercial</span>
           </button>
+          
           <button
             onClick={() => setActiveCategory('operacional')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
               activeCategory === 'operacional'
               ? 'bg-[#FFD600] text-[#0a0a0a] shadow-lg font-black'
               : 'text-zinc-500 hover:text-zinc-200'
@@ -285,10 +634,28 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
             <Shield className="w-3.5 h-3.5" />
             <span>Operacional</span>
           </button>
+          
+          <button
+            onClick={() => {
+              setActiveCategory('diretoria');
+              // Automatically check if user is director otherwise ask for code
+              if (!isDirector) {
+                setUnlockedDiretoria(false);
+              }
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeCategory === 'diretoria'
+              ? 'bg-rose-600 text-white shadow-lg font-black'
+              : 'text-zinc-500 hover:text-red-400'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-rose-500 group-hover:text-white" />
+            <span>Diretoria</span>
+          </button>
         </div>
       </div>
 
-      {/* Corporate Rule Banner */}
+      {/* Rules Banner */}
       <AnimatePresence>
         {showRules && (
           <motion.div 
@@ -300,14 +667,18 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
             <div className="flex gap-2.5 items-start">
               <AlertCircle className="w-4 h-4 shrink-0 text-[#FFD600] mt-0.5" />
               <div className="font-sans space-y-1">
-                <p className="font-bold uppercase tracking-wider text-[11px] text-[#FFD600] m-0">Regras e Dinâminca Operacional da Central Rodovar:</p>
+                <p className="font-bold uppercase tracking-wider text-[11px] text-[#FFD600] m-0">Informativo Geral:</p>
                 {activeCategory === 'comercial' ? (
                   <p className="m-0 text-zinc-400 text-[11px]">
-                    <strong className="text-yellow-400">COMERCIAL FECHA CARGA COM OS MOTORISTAS:</strong> Use este espaço para negociar propostas, alinhar coletas, confirmar dados bancários de Pix e despachar rotas. Todos os demais perfis assistem e mantêm suporte de base passivo.
+                    <strong className="text-yellow-400">VIA COMERCIAL COM MOTORISTAS:</strong> Use este espaço para negociar ofertas de frete, Pix, e-mail de transporte e faturamentos de viagem.
+                  </p>
+                ) : activeCategory === 'operacional' ? (
+                  <p className="m-0 text-zinc-400 text-[11px]">
+                    <strong className="text-yellow-400">SUPREME OPERACIONAL:</strong> Canal focado para o controle de anomalias logísticas críticas e monitoramento de canhotos.
                   </p>
                 ) : (
                   <p className="m-0 text-zinc-400 text-[11px]">
-                    <strong className="text-yellow-400">OPERADOR MONITORA TODA CARGA (SUPREMO DO PAINEL):</strong> Use este canal para incidentes críticos de desvios, confirmações de chegada em cercas eletrônicas, envio de canhotos fiscais e auditorias de velocidade.
+                    <strong className="text-rose-400">DIRETORIA SECRETA RODOVAR (ACESSO CONFIDENCIAL):</strong> Chat exclusivo com áudio para decisões de alto-escalão corporativo.
                   </p>
                 )}
               </div>
@@ -323,260 +694,642 @@ export default function GroupChat({ user, isSpeechMuted, onSpeak }: GroupChatPro
         )}
       </AnimatePresence>
 
-      {/* Main Grid: Messages Panel + Interactive sidebar */}
-      <div className="flex-1 flex overflow-hidden min-h-0 bg-[#0a0a0a]">
-        {/* Messages Feed column */}
-        <div className="flex-1 flex flex-col min-w-0 h-full relative p-5 max-w-full">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin scrollbar-thumb-zinc-800">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full py-10 text-center space-y-3.5 max-w-sm mx-auto">
-                <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-850 flex items-center justify-center text-zinc-700">
-                  <Bot className="w-7 h-7" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest font-mono">Nenhuma mensagem no momento</h4>
-                  <p className="text-[10px] text-zinc-600 font-sans leading-relaxed mt-1">Este canal está vazio. Digite uma mensagem operacional abaixo ou mencione o agente usando <strong className="text-yellow-500 font-mono">@rodovar</strong> para ativar a Inteligência Artificial corporativa.</p>
-                </div>
-              </div>
-            ) : (
-              messages.map((msg, index) => {
-                const isMe = msg.userId === user.username;
-                const isAi = msg.userId === 'rodovar_ai';
-                const formattedTime = new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-                return (
-                  <div 
-                    key={msg.id || index}
-                    className={`flex items-start gap-3 max-w-[85%] ${isMe ? 'ml-auto flex-row-reverse' : ''}`}
-                  >
-                    {/* Character avatar badge */}
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold font-mono border uppercase shrink-0 ${
-                      isAi 
-                      ? 'bg-[#FFD600]/10 border-[#FFD600]/30 text-[#FFD600]' 
-                      : isMe 
-                      ? 'bg-zinc-900 border-zinc-800 text-[#FFD600]' 
-                      : 'bg-zinc-950 border-zinc-900 text-zinc-300'
-                    }`}>
-                      {isAi ? <Bot className="w-4 h-4 text-[#FFD600]" /> : msg.userName.charAt(0)}
-                    </div>
-
-                    <div className="space-y-1">
-                      {/* Name metadata tag */}
-                      <div className={`flex items-center gap-1.5 text-[9px] font-mono ${isMe ? 'justify-end' : ''}`}>
-                        <span className="font-extrabold text-zinc-300 uppercase tracking-wide">{msg.userName}</span>
-                        <span className="text-zinc-650 bg-zinc-900/60 border border-zinc-850 px-1 rounded text-[8px] tracking-wider uppercase">{msg.userRole}</span>
-                        <span className="text-zinc-600 flex items-center gap-0.5 font-sans"><Clock className="w-2.5 h-2.5" />{formattedTime}</span>
-                      </div>
-
-                      {/* Bubble content */}
-                      <div className={`p-3.5 rounded-xl text-xs leading-relaxed break-words font-sans selection:bg-[#FFD600]/30 selection:text-white ${
-                        isAi 
-                        ? 'bg-[#121204] border border-yellow-950/40 text-yellow-100 shadow-[0_0_15px_rgba(255,214,0,0.03)]' 
-                        : isMe 
-                        ? 'bg-zinc-900 border border-zinc-850 text-zinc-200' 
-                        : 'bg-zinc-950 border border-zinc-905 text-zinc-400'
-                      }`}>
-                        {/* Text block rendering */}
-                        <p className="m-0 whitespace-pre-wrap">{msg.text}</p>
-
-                        {/* Attachment files rendering */}
-                        {msg.attachmentName && (
-                          <div className="mt-3.5 p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg flex items-center gap-2 max-w-sm">
-                            {msg.attachmentType?.startsWith('image/') ? (
-                              <div className="w-10 h-10 rounded overflow-hidden shrink-0 border border-zinc-800">
-                                <img 
-                                  src={`data:${msg.attachmentType};base64,${msg.attachmentPreview}`} 
-                                  alt="Preview" 
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                />
-                              </div>
-                            ) : (
-                              <div className="w-10 h-10 rounded bg-zinc-900 flex items-center justify-center text-zinc-600 shrink-0 border border-zinc-850">
-                                <FileText className="w-5 h-5 text-zinc-500" />
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[10px] font-mono text-zinc-300 truncate m-0 font-bold" title={msg.attachmentName}>{msg.attachmentName}</p>
-                              <p className="text-[8px] text-zinc-500 font-mono m-0 uppercase mt-0.5">Anexo Enviado</p>
-                            </div>
-                            <a
-                              href={`data:${msg.attachmentType};base64,${msg.attachmentPreview}`}
-                              download={msg.attachmentName}
-                              className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#FFD600] hover:underline shrink-0 ml-1.5"
-                            >
-                              Baixar
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-
-            {/* AI Agent Loading bubble animation */}
-            {isAiLoading && (
-              <div className="flex items-start gap-3 max-w-[85%] animate-pulse">
-                <div className="w-8 h-8 rounded-lg bg-[#FFD600]/10 border border-[#FFD600]/30 flex items-center justify-center animate-bounce">
-                  <Bot className="w-4 h-4 text-[#FFD600]" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-[9px] font-mono">
-                    <span className="font-extrabold text-[#FFD600] tracking-wide uppercase">Agente Rodovar IA</span>
-                    <span className="text-zinc-650">Processando resposta inteligente...</span>
-                  </div>
-                  <div className="bg-[#121204] border border-yellow-950/30 p-3.5 rounded-xl flex items-center gap-2">
-                    <div className="flex gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
+      {/* Main Container Core Partition */}
+      {activeCategory === 'diretoria' && !unlockedDiretoria ? (
+        
+        /* SECRET LOCK SCREEN FOR DIRETORIA */
+        <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 p-6 text-center text-zinc-300 select-none">
+          <div className="w-20 h-20 rounded-full bg-[#1c0c10] border border-rose-900/65 flex items-center justify-center text-rose-500 mb-6 relative">
+            <Lock className="w-8 h-8 animate-pulse text-rose-500" />
+            <div className="absolute -top-1 -right-1 bg-yellow-500 text-black p-1 text-[8px] font-bold uppercase rounded font-mono">
+              Rodovar Sec
+            </div>
           </div>
 
-          {/* Prompt input Form container */}
-          <form 
-            onSubmit={handleSendMessage} 
-            className="border border-zinc-850 rounded-2xl bg-zinc-950 mt-4 p-2 focus-within:border-[#FFD600]/35 transition-colors shrink-0 flex flex-col gap-1.5"
-          >
-            {/* Attachment preview panel */}
-            {attachment && (
-              <div className="bg-zinc-900 border border-zinc-850 rounded-xl p-2 flex items-center justify-between gap-3 text-xs text-zinc-300">
-                <div className="flex items-center gap-2 min-w-0">
-                  {attachment.mimeType.startsWith('image/') ? (
-                    <ImageIcon className="w-4 h-4 text-[#FFD600] shrink-0" />
-                  ) : (
-                    <FileText className="w-4 h-4 text-[#FFD600] shrink-0" />
-                  )}
-                  <span className="font-mono text-[10px] text-zinc-300 truncate font-bold">{attachment.name}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAttachment(null)}
-                  className="p-1 text-zinc-550 hover:text-red-400 cursor-pointer"
-                  title="Remover anexo"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              {/* File clip click trigger */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2.5 bg-zinc-900 hover:bg-zinc-850 rounded-xl text-zinc-400 hover:text-[#FFD600] border border-zinc-850/60 transition-colors cursor-pointer shrink-0"
-                title="Anexar arquivo de carga ou planilha (Máx 8MB)"
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
-              <input 
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-                accept="image/*,.pdf,.xlsx,.csv,.txt"
-              />
-
-              {/* Main message text input */}
+          <div className="max-w-md space-y-3">
+            <h3 className="text-lg font-black uppercase tracking-wider text-rose-500">PAINEL EXCLUSIVO DA DIRETORIA</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Você está prestes a acessar a sala de reuniões confidenciais da Rodovar. Se você não for Diretor do sistema, insira o <span className="text-yellow-500 font-bold">Código de Convite Diário</span> rotativo fornecido por um diretor de plantão.
+            </p>
+            
+            <form onSubmit={handlePinSubmit} className="pt-4 max-w-xs mx-auto space-y-3.5">
               <input
                 type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder={isRecording ? "Ouvindo sua voz..." : "Envie instruções de frete ou use @rodovar..."}
-                className="flex-1 bg-transparent border-0 ring-0 focus:outline-none focus:ring-0 text-xs text-zinc-100 placeholder-zinc-700 min-w-0"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                placeholder="Ex: RDV-DDMM-DIR"
+                className="w-full text-center font-mono font-black uppercase tracking-widest bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-700 rounded-xl px-4 py-3 focus:outline-none focus:border-rose-500 text-sm"
               />
-
-              {/* Voice recognition toggle */}
-              <button
-                type="button"
-                onClick={toggleRecording}
-                className={`p-2.5 rounded-xl border transition-colors cursor-pointer shrink-0 ${
-                  isRecording 
-                  ? 'bg-red-950/20 text-red-500 border-red-900/60 animate-pulse' 
-                  : 'bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-[#FFD600] border-zinc-850/60'
-                }`}
-                title="Ativar comando de voz por microfone"
-              >
-                {isRecording ? <MicOff className="w-4 h-4 text-red-500" /> : <Mic className="w-4 h-4" />}
-              </button>
-
-              {/* Primary send button */}
+              {pinErrorMsg && (
+                <p className="text-[10px] text-rose-500 font-mono mt-1 font-bold">{pinErrorMsg}</p>
+              )}
               <button
                 type="submit"
-                disabled={!inputText.trim() && !attachment}
-                className={`p-2.5 rounded-xl transition-all font-mono font-extrabold uppercase text-[10px] tracking-wider shrink-0 cursor-pointer ${
-                  inputText.trim() || attachment
-                  ? 'bg-[#FFD600] text-black hover:bg-[#ffe23b] hover:scale-[1.02] shadow-lg'
-                  : 'bg-zinc-900 border border-zinc-850 text-zinc-650 cursor-not-allowed'
-                }`}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer"
               >
-                <Send className="w-4 h-4" />
+                Auditar & Entrar
               </button>
-            </div>
-          </form>
-        </div>
+            </form>
 
-        {/* Dynamic informational sidebar columns (Professional AI Operations Helpers) */}
-        <div className="hidden xl:flex w-72 bg-zinc-950 border-l border-zinc-905 p-5 flex-col justify-between shrink-0">
-          <div className="space-y-5">
-            <div className="flex items-center gap-2 pb-3.5 border-b border-zinc-900">
-              <Sparkles className="w-4 h-4 text-[#FFD600] shrink-0" />
-              <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-300 m-0">Assistência Rodovar IA</h3>
-            </div>
-
-            <div className="space-y-4">
-              <p className="text-[10px] text-zinc-400 font-sans leading-relaxed m-0">
-                Você pode obter insights rápidos de logística conversando com o <strong className="text-yellow-400 font-mono">@rodovar</strong> na linha de texto! Experimente as perguntas baseadas nos dados do painel:
-              </p>
-
-              {/* Fast triggers panel */}
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickQuestion('Qual o status atual do monitoramento de combustível ?')}
-                  className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
-                >
-                  <span className="truncate">Como estão nossas cargas?</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickQuestion('Existe algum desvio de rota crítico ativo nas últimas horas?')}
-                  className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
-                >
-                  <span className="truncate">Alerta de desvio de rota?</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickQuestion('Como podemos otimizar o tempo de escoamento e segurança da frota interestadual?')}
-                  className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
-                >
-                  <span className="truncate">Dicas de segurança de frete?</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-3 bg-zinc-900/30 border border-zinc-900 rounded-xl text-center space-y-1">
-            <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-mono font-bold bg-[#FFD600]/10 text-[#FFD600] border border-[#FFD600]/20 uppercase">
-              Operação Segura
-            </span>
-            <p className="text-[9px] text-zinc-550 font-mono m-0 leading-normal mt-1 leading-relaxed">
-              Respostas de IA utilizam a chave Gemini. As informações de faturamento e chaves Pix são protegidas por integridade de ponta a ponta.
+            <p className="text-[10px] text-zinc-650 pt-5 font-mono">
+              Identificação do Usuário: {user.displayName} ({user.role})
             </p>
           </div>
         </div>
-      </div>
+
+      ) : (
+
+        /* STANDARD AND AUTHORIZED CHAT SYSTEM VIEW */
+        <div className="flex-1 flex overflow-hidden min-h-0 bg-[#0a0a0a]">
+          
+          {/* Messages Feed column */}
+          <div className="flex-1 flex flex-col min-w-0 h-full relative p-5 max-w-full">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin scrollbar-thumb-zinc-800">
+              {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full py-10 text-center space-y-3.5 max-w-sm mx-auto">
+                  <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-850 flex items-center justify-center text-zinc-700">
+                    <Bot className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest font-mono">Nenhum despacho ou gravação</h4>
+                    <p className="text-[10px] text-zinc-650 font-sans leading-relaxed mt-1">
+                      Este canal de {activeCategory.toUpperCase()} está ocioso. Digite uma mensagem, grave uma nota de voz real de reunião ou use @rodovar.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                messages.map((msg, index) => {
+                  const isMe = msg.userId === user.username;
+                  const isAi = msg.userId === 'rodovar_ai';
+                  const formattedTime = new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                  return (
+                    <div 
+                      key={msg.id || index}
+                      className={`flex items-start gap-3 max-w-[85%] ${isMe ? 'ml-auto flex-row-reverse' : ''}`}
+                    >
+                      {/* Character Avatar */}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold font-mono border uppercase shrink-0 ${
+                        isAi 
+                        ? 'bg-[#FFD600]/10 border-[#FFD600]/30 text-[#FFD600]' 
+                        : isMe 
+                        ? 'bg-zinc-900 border-zinc-800 text-[#FFD600]' 
+                        : 'bg-zinc-950 border-zinc-900 text-zinc-300'
+                      }`}>
+                        {isAi ? <Bot className="w-4 h-4 text-[#FFD600]" /> : msg.userName.charAt(0)}
+                      </div>
+
+                      <div className="space-y-1 w-full">
+                        {/* Name label meta strip */}
+                        <div className={`flex items-center gap-1.5 text-[9px] font-mono ${isMe ? 'justify-end' : ''}`}>
+                          <span className="font-extrabold text-zinc-300 uppercase tracking-wide">{msg.userName}</span>
+                          <span className="text-zinc-600 bg-zinc-900/60 border border-zinc-850 px-1 rounded text-[8px] tracking-wider uppercase">{msg.userRole}</span>
+                          <span className="text-zinc-600 flex items-center gap-0.5 font-sans"><Clock className="w-2.5 h-2.5" />{formattedTime}</span>
+                        </div>
+
+                        {/* Speech Bubble */}
+                        <div className={`p-3 rounded-xl text-xs leading-relaxed break-words font-sans relative group ${
+                          isAi 
+                          ? 'bg-[#121204] border border-yellow-950/40 text-yellow-101 shadow-[0_0_15px_rgba(255,214,0,0.03)]' 
+                          : isMe 
+                          ? 'bg-zinc-900 border border-zinc-850 text-zinc-200' 
+                          : 'bg-zinc-950 border border-zinc-905 text-zinc-400'
+                        }`}>
+                          
+                          {/* Options tool strip (Hover to show - highly elegant and low noise) */}
+                          <div className={`absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all bg-black/75 px-1.5 py-1 rounded-lg border border-zinc-800`}>
+                            {/* Forward Button */}
+                            <button
+                              onClick={() => handleOpenForward(msg)}
+                              className="text-zinc-400 hover:text-[#FFD600] transition-colors p-0.5 cursor-pointer"
+                              title="Compartilhar / Encaminhar carga"
+                            >
+                              <Share2 className="w-3 h-3" />
+                            </button>
+
+                            {/* Delete Button (Allowed for owner OR director moderator role) */}
+                            {(isMe || isDirector) && (
+                              <button
+                                onClick={() => handleDeleteMessage(msg.id)}
+                                className="text-zinc-500 hover:text-rose-500 transition-colors p-0.5 cursor-pointer"
+                                title="Deletar mensagem"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Render actual media elements depending on note type */}
+                          {msg.isVoiceNote ? (
+                            
+                            /* INTERACTIVE REAL VOICE PLAYER */
+                            <div className="space-y-2 py-1 max-w-sm">
+                              <div className="flex items-center gap-3 bg-zinc-950/90 border border-zinc-900 px-3 py-2.5 rounded-xl">
+                                <button
+                                  type="button"
+                                  onClick={() => msg.attachmentPreview && togglePlayAudio(msg.id, msg.attachmentPreview)}
+                                  className="w-8 h-8 rounded-full bg-[#FFD600] text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                                  title="Reproduzir nota de voz real"
+                                >
+                                  {currentlyPlayingMsgId === msg.id ? (
+                                    <Pause className="w-4 h-4 fill-black" />
+                                  ) : (
+                                    <Play className="w-4 h-4 fill-black ml-0.5" />
+                                  )}
+                                </button>
+                                
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 mb-1">
+                                    <span className="text-[#FFD600] font-bold">Nota de Voz Real</span>
+                                    <span>{currentlyPlayingMsgId === msg.id ? "Reproduzindo..." : "Áudio Pronto"}</span>
+                                  </div>
+                                  
+                                  {/* Simulated equalizer visual bar while this speech audio note is playing */}
+                                  <div className="h-4 flex items-center gap-[3px] overflow-hidden">
+                                    {Array.from({ length: 18 }).map((_, i) => (
+                                      <div
+                                        key={i}
+                                        className={`w-[3px] rounded-full bg-zinc-800 transition-all duration-300 ${
+                                          currentlyPlayingMsgId === msg.id 
+                                          ? 'bg-[#FFD600]' 
+                                          : ''
+                                        }`}
+                                        style={{
+                                          height: currentlyPlayingMsgId === msg.id 
+                                            ? `${Math.max(4, Math.floor(Math.sin((i + Date.now()) * 0.3) * 16))}%` 
+                                            : '25%'
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-zinc-500 italic m-0 px-1">Gravado em alta definição</p>
+                            </div>
+
+                          ) : (
+                            /* TEXT RENDERING */
+                            <p className="m-0 whitespace-pre-wrap">{msg.text}</p>
+                          )}
+
+                          {/* Attachment files rendering */}
+                          {msg.attachmentName && !msg.isVoiceNote && (
+                            <div className="mt-3 p-2.5 bg-zinc-950/85 border border-zinc-900 rounded-xl flex items-center gap-2 max-w-sm">
+                              {msg.attachmentType?.startsWith('image/') ? (
+                                <div className="w-10 h-10 rounded overflow-hidden shrink-0 border border-zinc-800 bg-zinc-900">
+                                  <img 
+                                    src={`data:${msg.attachmentType};base64,${msg.attachmentPreview}`} 
+                                    alt="Preview" 
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-10 h-10 rounded bg-zinc-900 flex items-center justify-center text-zinc-650 shrink-0 border border-zinc-850">
+                                  <FileText className="w-5 h-5 text-zinc-500" />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-mono text-zinc-300 truncate m-0 font-bold" title={msg.attachmentName}>{msg.attachmentName}</p>
+                                <p className="text-[8px] text-zinc-500 font-mono m-0 uppercase mt-0.5">Anexo ({msg.attachmentType?.substring(0, 10)})</p>
+                              </div>
+                              <a
+                                href={`data:${msg.attachmentType};base64,${msg.attachmentPreview}`}
+                                download={msg.attachmentName}
+                                className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#FFD600] hover:underline shrink-0 ml-1.5"
+                              >
+                                Baixar
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* AI Agent Loading bubble */}
+              {isAiLoading && (
+                <div className="flex items-start gap-3 max-w-[85%] animate-pulse">
+                  <div className="w-8 h-8 rounded-lg bg-[#FFD600]/10 border border-[#FFD600]/30 flex items-center justify-center animate-bounce">
+                    <Bot className="w-4 h-4 text-[#FFD600]" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[9px] font-mono">
+                      <span className="font-extrabold text-[#FFD600] tracking-wide uppercase">Agente Rodovar IA</span>
+                      <span className="text-zinc-650">Processando resposta inteligente...</span>
+                    </div>
+                    <div className="bg-[#121204] border border-yellow-950/30 p-3.5 rounded-xl flex items-center gap-2">
+                      <div className="flex gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Prompt input Form container */}
+            <form 
+              onSubmit={handleSendMessage} 
+              className="border border-zinc-850 rounded-2xl bg-zinc-950 mt-4 p-2 focus-within:border-[#FFD600]/35 transition-colors shrink-0 flex flex-col gap-1.5"
+            >
+              {/* Attachment preview panel */}
+              {attachment && (
+                <div className="bg-zinc-900 border border-zinc-850 rounded-xl p-2 flex items-center justify-between gap-3 text-xs text-zinc-300">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {attachment.mimeType.startsWith('image/') ? (
+                      <ImageIcon className="w-4 h-4 text-[#FFD600] shrink-0" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-[#FFD600] shrink-0" />
+                    )}
+                    <span className="font-mono text-[10px] text-zinc-300 truncate font-bold">{attachment.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAttachment(null)}
+                    className="p-1 text-zinc-550 hover:text-red-450 cursor-pointer"
+                    title="Remover anexo"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Audio recording preview panel */}
+              {voiceNoteData && (
+                <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-2.5 flex items-center justify-between gap-3 text-xs text-zinc-301">
+                  <div className="flex items-center gap-2.5">
+                    <Mic className="w-4 h-4 text-[#FFD600] shrink-0 animate-bounce" />
+                    <div>
+                      <p className="text-[10px] font-mono font-bold text-yellow-500 m-0">Novo Áudio Real Gravado</p>
+                      <p className="text-[8px] text-zinc-500 font-mono m-0 uppercase mt-0.5">Pronto para despacho de reunião secreta</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => togglePlayAudio('draft-audio', voiceNoteData.data)}
+                      className="px-2 py-1 bg-[#FFD600]/10 hover:bg-[#FFD600]/25 text-[#FFD600] rounded-lg text-[9px] font-mono uppercase font-bold"
+                    >
+                      {currentlyPlayingMsgId === 'draft-audio' ? 'Pausar' : 'Ouvir Rascunho'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVoiceNoteData(null)}
+                      className="p-1.5 text-zinc-550 hover:text-red-400 cursor-pointer"
+                      title="Deletar gravação"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5">
+                {/* File clip selector (Limit increased to 50MB) */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-2.5 bg-zinc-900 hover:bg-zinc-850 rounded-xl text-zinc-400 hover:text-[#FFD600] border border-zinc-850/60 transition-colors cursor-pointer shrink-0"
+                  title="Anexar arquivo de carga ou planilha (Máx 50MB)"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+                <input 
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept="image/*,.pdf,.xlsx,.csv,.txt"
+                />
+
+                {/* Input text field (or recording indicator) */}
+                {isRealVoiceRecording ? (
+                  <div className="flex-1 flex items-center gap-3 px-3 bg-red-950/20 rounded-xl border border-red-900/40 py-2.5 text-xs text-red-400 font-mono animate-pulse">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
+                    <span>GRAVANDO ÁUDIO REAL OPERACIONAL RODOVAR...</span>
+                    <span className="ml-auto text-white bg-red-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                      {Math.floor(voiceRecordTime / 60)}:{(voiceRecordTime % 60).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder={
+                      isSpeechToTextRecording 
+                      ? "Ouvindo e convertendo voz em texto..." 
+                      : activeCategory === 'diretoria' 
+                      ? "Escreva ou grave notas confidenciais..." 
+                      : "Envie instruções de frete ou use @rodovar..."
+                    }
+                    className="flex-1 bg-transparent border-0 ring-0 focus:outline-none focus:ring-0 text-xs text-zinc-100 placeholder-zinc-700 min-w-0 py-2"
+                  />
+                )}
+
+                {/* SpeechToText (WebSpeech dictation tool) */}
+                <button
+                  type="button"
+                  onClick={toggleSpeechToText}
+                  className={`p-2.5 rounded-xl border transition-colors cursor-pointer shrink-0 ${
+                    isSpeechToTextRecording 
+                    ? 'bg-emerald-950/25 text-emerald-500 border-emerald-900/60 animate-pulse' 
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-[#FFD600] border-zinc-850/60'
+                  }`}
+                  title="Ativar Ditado de Voz (converte fala para texto)"
+                >
+                  <Bot className={`w-4 h-4 ${isSpeechToTextRecording ? 'text-emerald-400 animate-spin' : ''}`} />
+                </button>
+
+                {/* REAL MICROPHONE VOICE NOTE RECORDER */}
+                {isRealVoiceRecording ? (
+                  <button
+                    type="button"
+                    onClick={stopRealVoiceRecording}
+                    className="p-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all cursor-pointer shrink-0 animate-bounce shadow-lg"
+                    title="Parar Gravação & Salvar"
+                  >
+                    <MicOff className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startRealVoiceRecording}
+                    className="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-red-500 border border-zinc-850/60 rounded-xl transition-colors cursor-pointer shrink-0"
+                    title="Gravar Áudio Real (Envio de Voz)"
+                  >
+                    <Mic className="w-4 h-4 text-rose-500" />
+                  </button>
+                )}
+
+                {/* Main Send button */}
+                <button
+                  type="submit"
+                  disabled={!inputText.trim() && !attachment && !voiceNoteData}
+                  className={`p-2.5 rounded-xl transition-all font-mono font-extrabold uppercase text-[10px] tracking-wider shrink-0 cursor-pointer ${
+                    inputText.trim() || attachment || voiceNoteData
+                    ? 'bg-[#FFD600] text-black hover:bg-[#ffe23b] hover:scale-[1.02] shadow-[0_0_15px_rgba(255,214,0,0.15)]'
+                    : 'bg-zinc-900 border border-zinc-850 text-zinc-650 cursor-not-allowed'
+                  }`}
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Dynamic Information Side Pane */}
+          <div className="hidden lg:flex w-72 bg-zinc-950 border-l border-zinc-905 p-5 flex-col justify-between shrink-0 overflow-y-auto">
+            
+            <div className="space-y-5">
+              
+              {/* Daily PIN Section for Directorate Tab */}
+              {activeCategory === 'diretoria' && (
+                <div className="bg-[#1a0e11] border border-rose-950/50 p-4 rounded-xl space-y-2.5 relative overflow-hidden">
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-rose-950/40">
+                    <ShieldCheck className="w-4 h-4 text-rose-500 shrink-0" />
+                    <h3 className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-rose-400 m-0">Auditório do Convite</h3>
+                  </div>
+                  
+                  <p className="text-[9px] text-zinc-400 leading-normal m-0 font-sans">
+                    Como diretor, repasse o código de reunião abaixo para convidar um colega a participar deste chat hoje:
+                  </p>
+
+                  <div className="bg-zinc-900/80 border border-zinc-850/90 rounded-lg p-2.5 flex items-center justify-between gap-1 mt-1">
+                    <span className="font-mono font-black text-rose-400 tracking-wider text-xs">
+                      {getDailyCode()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyDailyCode}
+                      className="p-1.5 bg-zinc-950 hover:bg-zinc-800 rounded text-zinc-400 hover:text-[#FFD600] cursor-pointer"
+                      title="Copiar Código de Reunião"
+                    >
+                      {copiedDailyCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* SECRET MEETING AUDIO ROOM INTERACTIVE WIDGET */}
+              <div className="bg-zinc-900/40 border border-zinc-900 p-4 rounded-xl space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
+                  <div className="flex items-center gap-1.5">
+                    <Headphones className="w-4 h-4 text-[#FFD600] shrink-0" />
+                    <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-300 m-0">Sala Secreta de Reunião</h3>
+                  </div>
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                </div>
+
+                {isConnectedToMeeting ? (
+                  <div className="space-y-3">
+                    <div className="p-2.5 bg-red-950/15 border border-red-900/40 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-mono font-black text-red-500 uppercase tracking-widest leading-none">CONEXÃO ATIVA</span>
+                        <span className="text-[8px] text-zinc-400 font-mono">Criptografado</span>
+                      </div>
+                      
+                      {/* Audio visualizer canvas */}
+                      <canvas 
+                        ref={canvasRef} 
+                        width={240} 
+                        height={55} 
+                        className="w-full h-[55px] bg-[#0a0a0a] rounded-lg border border-zinc-850"
+                      />
+                    </div>
+
+                    {/* Participants list */}
+                    <div className="space-y-1.5">
+                      <p className="text-[8px] font-mono uppercase tracking-widest text-zinc-500 m-0 font-bold">Membros Conectados:</p>
+                      
+                      <div className="space-y-1 max-h-24 overflow-y-auto">
+                        <div className="flex items-center justify-between text-[9px] font-mono bg-[#0c0c0c] p-1.5 border border-zinc-900 rounded">
+                          <span className="text-zinc-300">Você ({user.displayName})</span>
+                          <span className="text-[8px] text-emerald-400 bg-emerald-900/10 px-1 border border-emerald-900/30 uppercase rounded">Falando...</span>
+                        </div>
+                        {meetingParticipants.map((part, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-[9px] font-mono bg-zinc-950 p-1.5 border border-zinc-900 rounded">
+                            <span className="text-zinc-400">{part.name}</span>
+                            <span className={`text-[8px] px-1 rounded uppercase ${part.isSpeaking ? 'text-yellow-400 bg-yellow-900/10' : 'text-zinc-650 bg-zinc-900/50'}`}>
+                              {part.isSpeaking ? "Falando..." : "Mutado"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsMeetingMuted(!isMeetingMuted)}
+                        className={`flex-1 py-1.5 rounded-lg text-[9px] font-mono uppercase font-black tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 border ${
+                          isMeetingMuted 
+                          ? 'bg-rose-950/30 text-rose-500 border-rose-900/50' 
+                          : 'bg-zinc-900 text-zinc-300 border-zinc-850 hover:bg-zinc-800'
+                        }`}
+                      >
+                        {isMeetingMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                        <span>{isMeetingMuted ? "Silenciado" : "Silenciar"}</span>
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setIsConnectedToMeeting(false)}
+                        className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-mono uppercase font-black transition-colors cursor-pointer"
+                        title="Desconectar Sala"
+                      >
+                        Sair
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-zinc-500 font-sans leading-normal m-0">
+                      Inicie e participe de canais de transmissão de áudio corporativo secreto para debates com a central.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsConnectedToMeeting(true)}
+                      className="w-full bg-[#FFD600] text-[#0a0a0a] hover:bg-[#ffe23b] text-center font-mono font-black text-[10px] py-2 px-3 rounded-lg flex items-center justify-center gap-2 cursor-pointer shadow-lg hover:scale-[1.01] transition-all uppercase"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>Conectar ao Canal de Áudio</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Bot intelligence instructions */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2.5 border-b border-zinc-900">
+                  <Sparkles className="w-4 h-4 text-[#FFD600] shrink-0" />
+                  <h3 className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-300 m-0">IA Corporativa Rodovar</h3>
+                </div>
+
+                <p className="text-[10px] text-zinc-550 font-sans leading-relaxed m-0">
+                  A IA <strong className="text-[#FFD600] font-mono">@rodovar</strong> entende seus despacho de cargas e dados adjacentes em tempo real. Faça perguntas rápidas sobre as informações do painel:
+                </p>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickQuestion('Como podemos otimizar o tempo de escoamento e segurança da frota interestadual?')}
+                    className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
+                  >
+                    <span className="truncate">Segurança e escoamento</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickQuestion('Existe algum desvio de rota ativo nas últimas horas?')}
+                    className="w-full text-left p-2.5 bg-zinc-900/40 border border-zinc-900 hover:border-[#FFD600]/40 rounded-xl transition-all cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-white flex items-center justify-between group"
+                  >
+                    <span className="truncate">Verificação de desvios</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600] shrink-0 ml-1" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-zinc-900/30 border border-zinc-900 rounded-xl text-center space-y-1 mt-6">
+              <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-mono font-bold bg-[#FFD600]/10 text-[#FFD600] border border-[#FFD600]/20 uppercase">
+                Segurança Integral
+              </span>
+              <p className="text-[8.5px] text-zinc-550 font-mono m-0 leading-normal mt-1 leading-relaxed">
+                As comunicações e notas de voz transitam criptografadas em canais segregados.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SHARE / FORWARD MESSAGE POPUP MODAL */}
+      <AnimatePresence>
+        {showForwardModal && forwardMessageTarget && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-zinc-950 border border-zinc-850 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl font-sans"
+            >
+              <div className="bg-zinc-900 p-4 border-b border-zinc-805 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-[#FFD600]" />
+                  <h3 className="text-xs font-black uppercase text-white tracking-wider">Encaminhar Carga / Arquivo</h3>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowForwardModal(false);
+                    setForwardMessageTarget(null);
+                  }}
+                  className="text-zinc-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="bg-zinc-900 p-3 rounded-lg border border-zinc-850 space-y-1.5">
+                  <p className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Visualização da Mensagem:</p>
+                  <p className="text-xs text-zinc-300 italic truncate m-0">"{forwardMessageTarget.text}"</p>
+                  {forwardMessageTarget.attachmentName && (
+                    <span className="inline-block text-[8px] font-mono text-yellow-500 bg-yellow-500/10 px-1 py-0.5 rounded">
+                      📎 Com anexo: {forwardMessageTarget.attachmentName}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[9px] font-mono text-zinc-400 uppercase tracking-wider">Para qual canal deseja enviar?</p>
+                  
+                  <div className="grid grid-cols-1 gap-2">
+                    <button
+                      onClick={() => handleForwardMessage('comercial')}
+                      className="w-full text-left p-3.5 bg-zinc-900 hover:bg-zinc-850 rounded-xl border border-zinc-850 text-xs text-white font-bold transition-all cursor-pointer flex items-center justify-between group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-zinc-400 group-hover:text-[#FFD600]" /> 
+                        Grupo Comercial
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600]" />
+                    </button>
+
+                    <button
+                      onClick={() => handleForwardMessage('operacional')}
+                      className="w-full text-left p-3.5 bg-zinc-900 hover:bg-zinc-850 rounded-xl border border-zinc-850 text-xs text-white font-bold transition-all cursor-pointer flex items-center justify-between group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-zinc-400 group-hover:text-[#FFD600]" /> 
+                        Grupo Operacional
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-[#FFD600]" />
+                    </button>
+
+                    <button
+                      onClick={() => handleForwardMessage('diretoria')}
+                      className="w-full text-left p-3.5 bg-zinc-900 hover:bg-zinc-850 rounded-xl border border-zinc-850 text-xs text-rose-500 font-bold transition-all cursor-pointer flex items-center justify-between group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-zinc-400 group-hover:text-rose-500" /> 
+                        Grupo Secret Diretoria
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-zinc-650 group-hover:text-rose-500" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

@@ -840,7 +840,7 @@ export async function sendGroupChatMessage(msg: Omit<GroupChatMessage, 'id'> & {
 }
 
 export function subscribeToGroupChatRealtime(
-  category: 'comercial' | 'operacional' | 'ai',
+  category: GroupChatMessage['category'],
   callback: (messages: GroupChatMessage[]) => void
 ): () => void {
   const chatQuery = collection(db, CHAT_COLLECTION);
@@ -863,6 +863,12 @@ export function subscribeToGroupChatRealtime(
     callback(list);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, CHAT_COLLECTION);
+  });
+}
+
+export async function deleteGroupChatMessage(id: string): Promise<void> {
+  await deleteDoc(doc(db, CHAT_COLLECTION, id)).catch((error) => {
+    handleFirestoreError(error, OperationType.WRITE, `${CHAT_COLLECTION}/${id}`);
   });
 }
 
