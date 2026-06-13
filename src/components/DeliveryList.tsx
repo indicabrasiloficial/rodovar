@@ -70,65 +70,18 @@ export function parsePastedTextToDeliveries(text: string) {
   const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
   if (lines.length === 0) return [];
 
-  // Check if first line contains header keywords to skip them
-  let startIndex = 0;
-  const firstLine = lines[0].toLowerCase();
-  const keywords = ['data', 'vendedor', 'cliente', 'motorista', 'origem', 'destino', 'frete', 'status', 'prazo', 'obs'];
-  const matchedKeywords = keywords.filter(kw => firstLine.includes(kw));
-  
-  let columnIndexes: Record<string, number> = {};
-  if (matchedKeywords.length >= 3) {
-    startIndex = 1;
-    let headers = lines[0].split('\t');
-    if (headers.length < 5) headers = lines[0].split(';');
-    if (headers.length < 5) headers = lines[0].split(',');
-    headers = headers.map(h => h.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  // Clean number helper
+  const cleanNumber = (val: string) => {
+    if (!val) return 0;
+    let sanitized = val.replace(/R\$/gi, '').trim();
+    if (!sanitized) return 0;
 
-    headers.forEach((header, index) => {
-      if (header.includes('data') || header.includes('coleta') || header === 'dt' || header === 'dt.coleta' || header === 'dt_coleta') {
-        columnIndexes['data_coleta'] = index;
-      } else if (header.includes('vendedor') || header.includes('vend') || header === 'comercial') {
-        columnIndexes['vendedor'] = index;
-      } else if (header.includes('cliente') || header.includes('cli') || header === 'destinatario') {
-        columnIndexes['cliente'] = index;
-      } else if (header.includes('tel cliente') || header.includes('tel_cliente') || header.includes('contato cliente') || header.includes('tel cli') || header.includes('celular cliente') || header === 'contato_cli') {
-        columnIndexes['tel_cliente'] = index;
-      } else if (header.includes('motorista') || header.includes('mot') || header === 'condutor') {
-        columnIndexes['motorista'] = index;
-      } else if (header.includes('tel motorista') || header.includes('tel_motorista') || header.includes('contato motorista') || header.includes('tel mot') || header.includes('celular motorista') || header === 'contato_mot') {
-        columnIndexes['tel_motorista'] = index;
-      } else if (header.includes('origem') || header.includes('orig') || header === 'de') {
-        columnIndexes['origem'] = index;
-      } else if (header.includes('destino') || header.includes('dest') || header === 'para') {
-        columnIndexes['destino'] = index;
-      } else if (header.includes('valor da carga') || header.includes('valor carga') || header.includes('vlr carga') || header.includes('val carga') || header.includes('mercadoria') || header.includes('carga')) {
-        columnIndexes['valor_carga'] = index;
-      } else if (header.includes('frete empresa') || header.includes('frete emp') || header.includes('faturamento') || header.includes('frete_emp')) {
-        columnIndexes['frete_empresa'] = index;
-      } else if (header.includes('frete motorista') || header.includes('frete mot') || header.includes('custo motorista') || header.includes('frete_mot')) {
-        columnIndexes['frete_motorista'] = index;
-      } else if (header.includes('status') || header.includes('situacao') || header.includes('estado') || header === 'etapa') {
-        columnIndexes['status'] = index;
-      } else if (header.includes('prazo') || header.includes('previsao') || header.includes('entrega') || header === 'vencimento') {
-        columnIndexes['prazo'] = index;
-      } else if (header.includes('observacoes') || header.includes('obs') || header === 'observacao' || header === 'detalhes') {
-        columnIndexes['observacoes'] = index;
-      }
-    });
-  }
-
-  const dataLines = lines.slice(startIndex);
-  if (dataLines.length === 0) return [];
-
-  // Check format: Horizontal vs Vertical
-  let maxTabs = 0;
-  dataLines.forEach(l => {
-    const tabsCount = (l.match(/\t/g) || []).length;
-    if (tabsCount > maxTabs) maxTabs = tabsCount;
-  });
-
-  const isHorizontalExcel = maxTabs >= 4;
-  const results = [];
+    if (sanitized.includes(',')) {
+      sanitized = sanitized.replace(/\./g, '').replace(',', '.');
+    }
+    const num = parseFloat(sanitized);
+    return isNaN(num) ? 0 : num;
+  };
 
   const parseDateToISO = (val: string) => {
     if (!val) return new Date().toISOString().split('T')[0];
@@ -142,20 +95,15 @@ export function parsePastedTextToDeliveries(text: string) {
       }
       return `${y}-${m}-${d}`;
     }
-    return val;
-  };
-
-  const cleanNumber = (val: string) => {
-    if (!val) return 0;
-    let sanitized = val.replace(/R\$/gi, '').trim();
-    if (!sanitized) return 0;
-
-    if (sanitized.includes(',')) {
-      sanitized = sanitized.replace(/\./g, '')
-                           .replace(',', '.');
+    // Handle short format DD/MM
+    const shortMatch = val.match(/^(\d{1,2})\/(\d{1,2})$/);
+    if (shortMatch) {
+      const d = shortMatch[1].padStart(2, '0');
+      const m = shortMatch[2].padStart(2, '0');
+      const y = new Date().getFullYear();
+      return `${y}-${m}-${d}`;
     }
-    const num = parseFloat(sanitized);
-    return isNaN(num) ? 0 : num;
+    return val;
   };
 
   const parseStatusValue = (input: string): DeliveryStatus => {
@@ -180,166 +128,372 @@ export function parsePastedTextToDeliveries(text: string) {
     return 'coletando';
   };
 
-  if (isHorizontalExcel) {
-    for (let i = 0; i < dataLines.length; i++) {
-      const line = dataLines[i];
-      let parts = line.split('\t');
-      if (parts.length < 5) {
-        parts = line.split(';');
-      }
-      if (parts.length < 5) {
-        parts = line.split(',');
-      }
-      parts = parts.map(p => p.trim());
+  // Detect if the pasted text uses key-value structure
+  let containsKeyValue = false;
+  let kvCount = 0;
+  const testKeys = ['CLIENTE', 'MOTORISTA', 'ORIGEM', 'DESTINO', 'FRETE'];
+  for (const line of lines) {
+    if (testKeys.some(k => line.toUpperCase().includes(k + ':') || line.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().includes(k + ':'))) {
+      kvCount++;
+    }
+  }
+  if (kvCount >= 2) {
+    containsKeyValue = true;
+  }
 
-      if (parts.length >= 5) {
-        let val_data_coleta = '';
-        let val_vendedor = '';
-        let val_cliente = '';
-        let val_tel_cliente = '';
-        let val_motorista = '';
-        let val_tel_motorista = '';
-        let val_origem = '';
-        let val_destino = '';
-        let val_valor_carga = 0;
-        let val_frete_empresa = 0;
-        let val_frete_motorista = 0;
-        let val_status = 'coletando' as DeliveryStatus;
-        let val_prazo = '';
-        let val_observacoes = '';
+  const results = [];
 
-        if (Object.keys(columnIndexes).length >= 3) {
-          const getString = (key: string) => {
-            const idx = columnIndexes[key];
-            return idx !== undefined && idx < parts.length ? parts[idx] : '';
-          };
-          
-          val_data_coleta = getString('data_coleta');
-          val_vendedor = getString('vendedor');
-          val_cliente = getString('cliente');
-          val_tel_cliente = getString('tel_cliente');
-          val_motorista = getString('motorista');
-          val_tel_motorista = getString('tel_motorista');
-          val_origem = getString('origem');
-          val_destino = getString('destino');
-          val_valor_carga = cleanNumber(getString('valor_carga'));
-          val_frete_empresa = cleanNumber(getString('frete_empresa'));
-          val_frete_motorista = cleanNumber(getString('frete_motorista'));
-          val_status = parseStatusValue(getString('status'));
-          val_prazo = getString('prazo');
-          val_observacoes = getString('observacoes');
-        } else {
-          if (parts.length >= 14) {
-            val_data_coleta = parts[0] || '';
-            val_vendedor = parts[1] || '';
-            val_cliente = parts[2] || '';
-            val_tel_cliente = parts[3] || '';
-            val_motorista = parts[4] || '';
-            val_tel_motorista = parts[5] || '';
-            val_origem = parts[6] || '';
-            val_destino = parts[7] || '';
-            val_valor_carga = cleanNumber(parts[8]);
-            val_frete_empresa = cleanNumber(parts[9]);
-            val_frete_motorista = cleanNumber(parts[10]);
-            val_status = parseStatusValue(parts[11]);
-            val_prazo = parts[12] || '';
-            val_observacoes = parts[13] || '';
-          } else {
-            val_data_coleta = parts[0] || '';
-            val_vendedor = parts[1] || '';
-            val_cliente = parts[2] || '';
-            val_tel_cliente = parts[3] || '';
-            val_motorista = parts[4] || '';
-            val_tel_motorista = parts[5] || '';
-            val_origem = parts[6] || '';
-            val_destino = parts[7] || '';
-            val_frete_empresa = cleanNumber(parts[8] || '0');
-            val_frete_motorista = cleanNumber(parts[9] || '0');
-            val_status = parseStatusValue(parts[10] || '');
-            val_prazo = parts[11] || '';
-            val_observacoes = parts[12] || '';
-            val_valor_carga = 0;
-          }
+  if (containsKeyValue) {
+    const parseKeyValueLine = (line: string) => {
+      const cleanLine = line.trim();
+      
+      // 1. TEL CLIENTE
+      let match = cleanLine.match(/(?:TEL\s+CLIENTE|TELEFONE\s+CLIENTE|CONTATO\s+CLIENTE|TEL\s+CLI)[:\s]+(.*)/i);
+      if (match) return { key: 'tel_cliente', val: match[1].trim() };
+      
+      // 2. CLIENTE
+      match = cleanLine.match(/(?:CLIENTE)[:\s]+(.*)/i);
+      if (match) return { key: 'cliente', val: match[1].trim() };
+      
+      // 3. TEL MOTORISTA
+      match = cleanLine.match(/(?:TEL\s+MOTORISTA|TELEFONE\s+MOTORISTA|CONTATO\s+MOTORISTA|TEL\s+MOT)[:\s]+(.*)/i);
+      if (match) return { key: 'tel_motorista', val: match[1].trim() };
+      
+      // 4. MOTORISTA
+      match = cleanLine.match(/(?:MOTORISTA|CONDUTOR)[:\s]+(.*)/i);
+      if (match) return { key: 'motorista', val: match[1].trim() };
+      
+      // 5. DATA CARREGAMENTO
+      match = cleanLine.match(/(?:DATA\s+CARREGAMENTO|DATA\s+COLETA|DATA)[:\s]+(.*)/i);
+      if (match) return { key: 'data_coleta', val: match[1].trim() };
+      
+      // 6. COMERCIAL / VENDEDOR
+      match = cleanLine.match(/(?:COMERCIAL|VENDEDOR)[:\s]+(.*)/i);
+      if (match) return { key: 'vendedor', val: match[1].trim() };
+      
+      // 7. ORIGEM
+      match = cleanLine.match(/(?:ORIGEM)[:\s]+(.*)/i);
+      if (match) return { key: 'origem', val: match[1].trim() };
+      
+      // 8. DESTINO
+      match = cleanLine.match(/(?:DESTINO)[:\s]+(.*)/i);
+      if (match) return { key: 'destino', val: match[1].trim() };
+      
+      // 9. FRETE EMPRESA
+      match = cleanLine.match(/(?:FRETE\s+EMP(?:RESA)?|FATURAMENTO)[:\s]+(.*)/i);
+      if (match) return { key: 'frete_empresa', val: match[1].trim() };
+      
+      // 10. FRETE MOTORISTA
+      match = cleanLine.match(/(?:FRETE\s+MOT(?:ORISTA)?|CUSTO\s+MOT(?:ORISTA)?)[:\s]+(.*)/i);
+      if (match) return { key: 'frete_motorista', val: match[1].trim() };
+      
+      // 11. FAVORECIDO
+      match = cleanLine.match(/(?:FAVORECIDO)[:\s]+(.*)/i);
+      if (match) return { key: 'favorecido', val: match[1].trim() };
+      
+      // 12. CHAVE PIX
+      match = cleanLine.match(/(?:CHAVE\s+PIX|PIX)[:\s]+(.*)/i);
+      if (match) return { key: 'chave_pix', val: match[1].trim() };
+      
+      // 13. BANCO
+      match = cleanLine.match(/(?:BANCO)[:\s]+(.*)/i);
+      if (match) return { key: 'banco', val: match[1].trim() };
+      
+      // 14. OBS
+      match = cleanLine.match(/(?:OBS|OBSERVACOES)[:\s]+(.*)/i);
+      if (match) return { key: 'observacoes', val: match[1].trim() };
+      
+      return null;
+    };
+
+    const block: Record<string, string> = {};
+    let unparsedLines: string[] = [];
+
+    for (const line of lines) {
+      const parsed = parseKeyValueLine(line);
+      if (parsed) {
+        block[parsed.key] = parsed.val;
+      } else {
+        const trimmed = line.trim();
+        if (trimmed) {
+          unparsedLines.push(trimmed);
         }
-
-        results.push({
-          data_coleta: parseDateToISO(val_data_coleta),
-          vendedor: val_vendedor,
-          cliente: val_cliente,
-          tel_cliente: val_tel_cliente.replace(/\D/g, ''),
-          motorista: val_motorista,
-          tel_motorista: val_tel_motorista.replace(/\D/g, ''),
-          origem: val_origem,
-          destino: val_destino,
-          frete_empresa: val_frete_empresa,
-          frete_motorista: val_frete_motorista,
-          status: val_status,
-          prazo: parseDateToISO(val_prazo),
-          observacoes: val_observacoes,
-          valor_carga: val_valor_carga,
-          data: val_data_coleta,
-          obs: val_observacoes
-        });
       }
     }
-  } else {
-    let i = 0;
-    while (i < dataLines.length) {
-      const line1 = dataLines[i] || '';
-      const parts1 = line1.split('\t').map(p => p.trim());
-      const dataCol = parts1[0] || '';
-      const vendedorCol = parts1[1] || '';
 
-      const clienteCol = (dataLines[i + 1] || '').trim();
-      const telClienteCol = (dataLines[i + 2] || '').trim();
-      const motoristaCol = (dataLines[i + 3] || '').trim();
-      const telMotoristaCol = (dataLines[i + 4] || '').trim();
-      const origemCol = (dataLines[i + 5] || '').trim();
-      const destinoCol = (dataLines[i + 6] || '').trim();
+    const val_data_coleta = block.data_coleta || '';
+    const val_vendedor = block.vendedor || '';
+    const val_cliente = block.cliente || '';
+    const val_tel_cliente = block.tel_cliente || '';
+    const val_motorista = block.motorista || '';
+    const val_tel_motorista = block.tel_motorista || '';
+    const val_origem = block.origem || '';
+    const val_destino = block.destino || '';
+    const val_frete_empresa = cleanNumber(block.frete_empresa || '0');
+    const val_frete_motorista = cleanNumber(block.frete_motorista || '0');
+    const val_status = parseStatusValue(block.status || 'coletando');
+    const val_prazo = block.prazo || '';
 
-      const line8 = dataLines[i + 7] || '';
-      const parts8 = line8.split('\t').map(p => p.trim());
-      const freteEmpCol = parts8[0] || '';
-      const freteMotCol = parts8[1] || '';
-
-      const statusCol = (dataLines[i + 8] || '').trim();
-      const prazoCol = (dataLines[i + 9] || '').trim();
-
-      let obsCol = '';
-      let consumed = 10;
-      if (i + 10 < dataLines.length) {
-        const nextLine = dataLines[i + 10].trim();
-        const startsWithDate = /^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(nextLine);
-        if (!startsWithDate) {
-          obsCol = nextLine;
-          consumed = 11;
-        }
+    let mergedObs = block.observacoes || '';
+    const extraDetails = [];
+    if (block.favorecido) extraDetails.push(`Favorecido: ${block.favorecido}`);
+    if (block.chave_pix) extraDetails.push(`PIX: ${block.chave_pix}`);
+    if (block.banco) extraDetails.push(`Banco: ${block.banco}`);
+    if (extraDetails.length > 0) {
+      if (mergedObs) {
+        mergedObs += '\n' + extraDetails.join(' | ');
+      } else {
+        mergedObs = extraDetails.join(' | ');
       }
+    }
 
-      results.push({
-        data_coleta: parseDateToISO(dataCol),
-        vendedor: vendedorCol,
-        cliente: clienteCol,
-        tel_cliente: telClienteCol.replace(/\D/g, ''),
-        motorista: motoristaCol,
-        tel_motorista: telMotoristaCol.replace(/\D/g, ''),
-        origem: origemCol,
-        destino: destinoCol,
-        frete_empresa: cleanNumber(freteEmpCol),
-        frete_motorista: cleanNumber(freteMotCol),
-        status: parseStatusValue(statusCol),
-        prazo: parseDateToISO(prazoCol),
-        observacoes: obsCol,
-        valor_carga: 0,
-        data: dataCol,
-        obs: obsCol
+    if (unparsedLines.length > 0) {
+      const unparsedStr = unparsedLines.join('\n');
+      if (mergedObs) {
+        mergedObs += '\n-- Informações Adicionais --\n' + unparsedStr;
+      } else {
+        mergedObs = unparsedStr;
+      }
+    }
+
+    results.push({
+      data_coleta: parseDateToISO(val_data_coleta),
+      vendedor: val_vendedor,
+      cliente: val_cliente,
+      tel_cliente: val_tel_cliente.replace(/\D/g, ''),
+      motorista: val_motorista,
+      tel_motorista: val_tel_motorista.replace(/\D/g, ''),
+      origem: val_origem,
+      destino: val_destino,
+      frete_empresa: val_frete_empresa,
+      frete_motorista: val_frete_motorista,
+      status: val_status,
+      prazo: parseDateToISO(val_prazo),
+      observacoes: mergedObs,
+      valor_carga: 0,
+      data: val_data_coleta || new Date().toLocaleDateString('pt-BR').substring(0, 5),
+      obs: mergedObs
+    });
+  } else {
+    // Check if first line contains header keywords to skip them
+    let startIndex = 0;
+    const firstLine = lines[0].toLowerCase();
+    const keywords = ['data', 'vendedor', 'cliente', 'motorista', 'origem', 'destino', 'frete', 'status', 'prazo', 'obs'];
+    const matchedKeywords = keywords.filter(kw => firstLine.includes(kw));
+    
+    let columnIndexes: Record<string, number> = {};
+    if (matchedKeywords.length >= 3) {
+      startIndex = 1;
+      let headers = lines[0].split('\t');
+      if (headers.length < 5) headers = lines[0].split(';');
+      if (headers.length < 5) headers = lines[0].split(',');
+      headers = headers.map(h => h.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+
+      headers.forEach((header, index) => {
+        if (header.includes('data') || header.includes('coleta') || header === 'dt' || header === 'dt.coleta' || header === 'dt_coleta') {
+          columnIndexes['data_coleta'] = index;
+        } else if (header.includes('vendedor') || header.includes('vend') || header === 'comercial') {
+          columnIndexes['vendedor'] = index;
+        } else if (header.includes('cliente') || header.includes('cli') || header === 'destinatario') {
+          columnIndexes['cliente'] = index;
+        } else if (header.includes('tel cliente') || header.includes('tel_cliente') || header.includes('contato cliente') || header.includes('tel cli') || header.includes('celular cliente') || header === 'contato_cli') {
+          columnIndexes['tel_cliente'] = index;
+        } else if (header.includes('motorista') || header.includes('mot') || header === 'condutor') {
+          columnIndexes['motorista'] = index;
+        } else if (header.includes('tel motorista') || header.includes('tel_motorista') || header.includes('contato motorista') || header.includes('tel mot') || header.includes('celular motorista') || header === 'contato_mot') {
+          columnIndexes['tel_motorista'] = index;
+        } else if (header.includes('origem') || header.includes('orig') || header === 'de') {
+          columnIndexes['origem'] = index;
+        } else if (header.includes('destino') || header.includes('dest') || header === 'para') {
+          columnIndexes['destino'] = index;
+        } else if (header.includes('valor da carga') || header.includes('valor carga') || header.includes('vlr carga') || header.includes('val carga') || header.includes('mercadoria') || header.includes('carga')) {
+          columnIndexes['valor_carga'] = index;
+        } else if (header.includes('frete empresa') || header.includes('frete emp') || header.includes('faturamento') || header.includes('frete_emp')) {
+          columnIndexes['frete_empresa'] = index;
+        } else if (header.includes('frete motorista') || header.includes('frete mot') || header.includes('custo motorista') || header.includes('frete_mot')) {
+          columnIndexes['frete_motorista'] = index;
+        } else if (header.includes('status') || header.includes('situacao') || header.includes('estado') || header === 'etapa') {
+          columnIndexes['status'] = index;
+        } else if (header.includes('prazo') || header.includes('previsao') || header.includes('entrega') || header === 'vencimento') {
+          columnIndexes['prazo'] = index;
+        } else if (header.includes('observacoes') || header.includes('obs') || header === 'observacao' || header === 'detalhes') {
+          columnIndexes['observacoes'] = index;
+        }
+      });
+    }
+
+    const dataLines = lines.slice(startIndex);
+    if (dataLines.length > 0) {
+      let maxTabs = 0;
+      dataLines.forEach(l => {
+        const tabsCount = (l.match(/\t/g) || []).length;
+        if (tabsCount > maxTabs) maxTabs = tabsCount;
       });
 
-      i += consumed;
+      const isHorizontalExcel = maxTabs >= 4;
+
+      if (isHorizontalExcel) {
+        for (let i = 0; i < dataLines.length; i++) {
+          const line = dataLines[i];
+          let parts = line.split('\t');
+          if (parts.length < 5) {
+            parts = line.split(';');
+          }
+          if (parts.length < 5) {
+            parts = line.split(',');
+          }
+          parts = parts.map(p => p.trim());
+
+          if (parts.length >= 5) {
+            let val_data_coleta = '';
+            let val_vendedor = '';
+            let val_cliente = '';
+            let val_tel_cliente = '';
+            let val_motorista = '';
+            let val_tel_motorista = '';
+            let val_origem = '';
+            let val_destino = '';
+            let val_valor_carga = 0;
+            let val_frete_empresa = 0;
+            let val_frete_motorista = 0;
+            let val_status = 'coletando' as DeliveryStatus;
+            let val_prazo = '';
+            let val_observacoes = '';
+
+            if (Object.keys(columnIndexes).length >= 3) {
+              const getString = (key: string) => {
+                const idx = columnIndexes[key];
+                return idx !== undefined && idx < parts.length ? parts[idx] : '';
+              };
+              
+              val_data_coleta = getString('data_coleta');
+              val_vendedor = getString('vendedor');
+              val_cliente = getString('cliente');
+              val_tel_cliente = getString('tel_cliente');
+              val_motorista = getString('motorista');
+              val_tel_motorista = getString('tel_motorista');
+              val_origem = getString('origem');
+              val_destino = getString('destino');
+              val_valor_carga = cleanNumber(getString('valor_carga'));
+              val_frete_empresa = cleanNumber(getString('frete_empresa'));
+              val_frete_motorista = cleanNumber(getString('frete_motorista'));
+              val_status = parseStatusValue(getString('status'));
+              val_prazo = getString('prazo');
+              val_observacoes = getString('observacoes');
+            } else {
+              if (parts.length >= 14) {
+                val_data_coleta = parts[0] || '';
+                val_vendedor = parts[1] || '';
+                val_cliente = parts[2] || '';
+                val_tel_cliente = parts[3] || '';
+                val_motorista = parts[4] || '';
+                val_tel_motorista = parts[5] || '';
+                val_origem = parts[6] || '';
+                val_destino = parts[7] || '';
+                val_valor_carga = cleanNumber(parts[8]);
+                val_frete_empresa = cleanNumber(parts[9]);
+                val_frete_motorista = cleanNumber(parts[10]);
+                val_status = parseStatusValue(parts[11]);
+                val_prazo = parts[12] || '';
+                val_observacoes = parts[13] || '';
+              } else {
+                val_data_coleta = parts[0] || '';
+                val_vendedor = parts[1] || '';
+                val_cliente = parts[2] || '';
+                val_tel_cliente = parts[3] || '';
+                val_motorista = parts[4] || '';
+                val_tel_motorista = parts[5] || '';
+                val_origem = parts[6] || '';
+                val_destino = parts[7] || '';
+                val_frete_empresa = cleanNumber(parts[8] || '0');
+                val_frete_motorista = cleanNumber(parts[9] || '0');
+                val_status = parseStatusValue(parts[10] || '');
+                val_prazo = parts[11] || '';
+                val_observacoes = parts[12] || '';
+                val_valor_carga = 0;
+              }
+            }
+
+            results.push({
+              data_coleta: parseDateToISO(val_data_coleta),
+              vendedor: val_vendedor,
+              cliente: val_cliente,
+              tel_cliente: val_tel_cliente.replace(/\D/g, ''),
+              motorista: val_motorista,
+              tel_motorista: val_tel_motorista.replace(/\D/g, ''),
+              origem: val_origem,
+              destino: val_destino,
+              frete_empresa: val_frete_empresa,
+              frete_motorista: val_frete_motorista,
+              status: val_status,
+              prazo: parseDateToISO(val_prazo),
+              observacoes: val_observacoes,
+              valor_carga: val_valor_carga,
+              data: val_data_coleta,
+              obs: val_observacoes
+            });
+          }
+        }
+      } else {
+        let i = 0;
+        while (i < dataLines.length) {
+          const line1 = dataLines[i] || '';
+          const parts1 = line1.split('\t').map(p => p.trim());
+          const dataCol = parts1[0] || '';
+          const vendedorCol = parts1[1] || '';
+
+          const clienteCol = (dataLines[i + 1] || '').trim();
+          const telClienteCol = (dataLines[i + 2] || '').trim();
+          const motoristaCol = (dataLines[i + 3] || '').trim();
+          const telMotoristaCol = (dataLines[i + 4] || '').trim();
+          const origemCol = (dataLines[i + 5] || '').trim();
+          const destinoCol = (dataLines[i + 6] || '').trim();
+
+          const line8 = dataLines[i + 7] || '';
+          const parts8 = line8.split('\t').map(p => p.trim());
+          const freteEmpCol = parts8[0] || '';
+          const freteMotCol = parts8[1] || '';
+
+          const statusCol = (dataLines[i + 8] || '').trim();
+          const prazoCol = (dataLines[i + 9] || '').trim();
+
+          let obsCol = '';
+          let consumed = 10;
+          if (i + 10 < dataLines.length) {
+            const nextLine = dataLines[i + 10].trim();
+            const startsWithDate = /^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(nextLine);
+            if (!startsWithDate) {
+              obsCol = nextLine;
+              consumed = 11;
+            }
+          }
+
+          results.push({
+            data_coleta: parseDateToISO(dataCol),
+            vendedor: vendedorCol,
+            cliente: clienteCol,
+            tel_cliente: telClienteCol.replace(/\D/g, ''),
+            motorista: motoristaCol,
+            tel_motorista: telMotoristaCol.replace(/\D/g, ''),
+            origem: origemCol,
+            destino: destinoCol,
+            frete_empresa: cleanNumber(freteEmpCol),
+            frete_motorista: cleanNumber(freteMotCol),
+            status: parseStatusValue(statusCol),
+            prazo: parseDateToISO(prazoCol),
+            observacoes: obsCol,
+            valor_carga: 0,
+            data: dataCol,
+            obs: obsCol
+          });
+
+          i += consumed;
+        }
+      }
     }
   }
 
-  return results;
+  return results.filter(row => (row.origem && row.origem.trim() !== '') || (row.destino && row.destino.trim() !== ''));
 }
 
 // High-fidelity shimmer skeleton loading component for mobile viewport card decks

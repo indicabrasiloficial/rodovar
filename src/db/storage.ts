@@ -226,49 +226,27 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     }
   }
 
-  // Search existing for possible merged duplicates (fuzzy matching)
+  // Search existing for possible merged duplicates (100% match requirement)
   if (!entrega.id) {
-    let bestMatch: Entrega | null = null;
-    let highestScore = 0;
+    const exactMatch = cachedEntregas.find(existing => {
+      const origMatch = (existing.origem || '').trim().toLowerCase() === (entrega.origem || '').trim().toLowerCase();
+      const destMatch = (existing.destino || '').trim().toLowerCase() === (entrega.destino || '').trim().toLowerCase();
+      const dateMatch = (existing.data_coleta || '') === (entrega.data_coleta || '');
+      const clientMatch = (existing.cliente || '').trim().toLowerCase() === (entrega.cliente || '').trim().toLowerCase();
+      const motoristaMatch = (existing.motorista || '').trim().toLowerCase() === (entrega.motorista || '').trim().toLowerCase();
+      const vendedorMatch = (existing.vendedor || '').trim().toLowerCase() === (entrega.vendedor || '').trim().toLowerCase();
+      
+      const freteEmpMatch = Math.round(Number(existing.frete_empresa || 0)) === Math.round(Number(entrega.frete_empresa || 0));
+      const freteMotMatch = Math.round(Number(existing.frete_motorista || 0)) === Math.round(Number(entrega.frete_motorista || 0));
+      
+      const telClientMatch = (existing.tel_cliente || '').replace(/\D/g, '') === (entrega.tel_cliente || '').replace(/\D/g, '');
+      const telMotMatch = (existing.tel_motorista || '').replace(/\D/g, '') === (entrega.tel_motorista || '').replace(/\D/g, '');
 
-    for (const existing of cachedEntregas) {
-      let score = 0;
-      const origSim = getSimilarity(existing.origem, entrega.origem || '');
-      const destSim = getSimilarity(existing.destino, entrega.destino || '');
-      const dateMatch = existing.data_coleta === entrega.data_coleta;
+      return origMatch && destMatch && dateMatch && clientMatch && motoristaMatch && vendedorMatch && freteEmpMatch && freteMotMatch && telClientMatch && telMotMatch;
+    });
 
-      if (origSim >= 0.8 && destSim >= 0.8 && dateMatch) {
-        score += 3.0;
-        const vendSim = getSimilarity(existing.vendedor, entrega.vendedor || '');
-        if (vendSim >= 0.5) score += vendSim * 1.5;
-
-        const clientSim = getSimilarity(existing.cliente, entrega.cliente || '');
-        if (clientSim >= 0.5) score += clientSim * 1.5;
-
-        const motoristaSim = getSimilarity(existing.motorista, entrega.motorista || '');
-        if (motoristaSim >= 0.5) score += motoristaSim * 1.5;
-
-        const oldTelClient = (existing.tel_cliente || '').replace(/\D/g, '');
-        const newTelClient = (entrega.tel_cliente || '').replace(/\D/g, '');
-        if (oldTelClient && newTelClient && oldTelClient === newTelClient) {
-          score += 2.0;
-        }
-
-        const oldTelMot = (existing.tel_motorista || '').replace(/\D/g, '');
-        const newTelMot = (entrega.tel_motorista || '').replace(/\D/g, '');
-        if (oldTelMot && newTelMot && oldTelMot === newTelMot) {
-          score += 2.0;
-        }
-
-        if (score > highestScore) {
-          highestScore = score;
-          bestMatch = existing;
-        }
-      }
-    }
-
-    if (bestMatch && highestScore >= 3.2) {
-      entrega.id = bestMatch.id;
+    if (exactMatch) {
+      entrega.id = exactMatch.id;
     }
   }
 
