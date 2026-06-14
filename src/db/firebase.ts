@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInAnonymously } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, enableIndexedDbPersistence } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const config = {
@@ -17,6 +17,20 @@ const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig.f
 
 const app = initializeApp(config);
 export const db = getFirestore(app, databaseId); /* CRITICAL: The app will break without this line */
+
+// Enable offline IndexedDB persistence for robust local fallback when network is unavailable
+if (typeof window !== 'undefined') {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('Rodovar Monitora: Persistência falhou (múltiplas abas abertas).');
+    } else if (err.code === 'unimplemented') {
+      console.warn('Rodovar Monitora: O navegador atual não suporta persistência local.');
+    } else {
+      console.warn('Rodovar Monitora: Erro ao habilitar cache offline:', err);
+    }
+  });
+}
+
 export const auth = getAuth();
 
 // Auto authenticate anonymously if not logged in
@@ -34,14 +48,15 @@ export const signInWithGoogle = () => {
 
 export const logout = () => signOut(auth);
 
-// Validate Connection to Firestore on boot
+// Validate Connection to Firestore on boot with clean, non-crashing reporting
 async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
-    }
+    console.log("Rodovar Monitora: Conexão estritamente online com Firestore estabelecida com sucesso.");
+  } catch (error: any) {
+    const msg = error instanceof Error ? error.message : String(error);
+    const code = error?.code || 'unknown';
+    console.info(`Rodovar Monitora: Firestore operando no modo híbrido/offline cache sob demanda. (Causa: ${code} - ${msg})`);
   }
 }
 testConnection();

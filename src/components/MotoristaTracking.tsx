@@ -331,15 +331,28 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
 
               {/* Action Big Button */}
               {isSharing ? (
-                <button
-                  type="button"
-                  onClick={stopTracking}
-                  className="w-full py-4.5 bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer border border-red-600/20"
-                  id="driver-btn-stop-sharing"
-                >
-                  <StopCircle className="w-5 h-5 animate-pulse" />
-                  <span>PARAR RASTREAMENTO</span>
-                </button>
+                <div className="space-y-2" id="driver-stop-sharing-btn-container">
+                  <button
+                    type="button"
+                    disabled={delivery?.status !== 'entregue'}
+                    onClick={stopTracking}
+                    className={`w-full py-4.5 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 border ${
+                      delivery?.status === 'entregue' 
+                        ? 'bg-red-600 hover:bg-red-700 border-red-600/20 cursor-pointer' 
+                        : 'bg-zinc-800 border-zinc-700/50 cursor-not-allowed opacity-60'
+                    }`}
+                    id="driver-btn-stop-sharing"
+                  >
+                    <StopCircle className="w-5 h-5 animate-pulse" />
+                    <span>PARAR RASTREAMENTO</span>
+                  </button>
+                  {delivery?.status !== 'entregue' && (
+                    <p className="text-[10px] text-zinc-500 font-mono text-center bg-zinc-950/80 p-2.5 border border-zinc-900 rounded-xl leading-relaxed select-none" id="tracking-security-protocol-info">
+                      ⚠️ RASTREAMENTO COMPULSÓRIO EM TRÂNSITO<br />
+                      Bloqueado por protocolo de segurança da Rodovar até a confirmação de chegada no destino final (Status: Entregue).
+                    </p>
+                  )}
+                </div>
               ) : (
                 <button
                   type="button"

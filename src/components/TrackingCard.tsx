@@ -125,14 +125,16 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
           </h2>
         </div>
         
-        {/* Live indicator as requested by instructions */}
-        <div 
-          className={`flex items-center gap-1.5 border px-3 py-1.5 rounded-full text-xs font-bold font-mono shadow-sm ${indicator.color}`}
-          id="live-indicator-pill"
-        >
-          <span className={`w-2 h-2 rounded-full inline-block ${indicator.dotClass}`} />
-          <span className="text-[10px] uppercase tracking-wider font-extrabold">{indicator.text}</span>
-        </div>
+        {/* Live indicator only shown when actively AO VIVO */}
+        {indicator.text === '🟢 AO VIVO' && (
+          <div 
+            className={`flex items-center gap-1.5 border px-3 py-1.5 rounded-full text-xs font-bold font-mono shadow-sm ${indicator.color}`}
+            id="live-indicator-pill"
+          >
+            <span className={`w-2 h-2 rounded-full inline-block ${indicator.dotClass}`} />
+            <span className="text-[10px] uppercase tracking-wider font-extrabold">{indicator.text}</span>
+          </div>
+        )}
       </div>
 
       {/* Progress Bar Component integrated */}
