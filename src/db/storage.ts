@@ -498,6 +498,11 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     updated_at: new Date().toISOString()
   };
 
+  // Normalize vendor name to consistent trimmed uppercase
+  if (payload.vendedor) {
+    payload.vendedor = payload.vendedor.trim().toUpperCase();
+  }
+
   // Auto-generate trackingCode if not present (format: RDV + 4 digits, e.g. RDV0123)
   if (!payload.trackingCode) {
     let generated = '';
@@ -716,7 +721,9 @@ export function subscribeToScheduledRealtime(callback: (payload: { action: strin
 
 // Helpers for Auto-complete
 export function getUniqueVendedores(): string[] {
-  const list = cachedEntregas.map(e => e.vendedor).filter(Boolean);
+  const list = cachedEntregas
+    .map(e => e.vendedor ? e.vendedor.trim().toUpperCase() : '')
+    .filter(Boolean);
   return Array.from(new Set(list));
 }
 

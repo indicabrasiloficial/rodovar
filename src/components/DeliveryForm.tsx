@@ -281,7 +281,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
 
   // Handle Autocomplete fills
   const selectVendedor = (value: string) => {
-    setValue('vendedor', value);
+    setValue('vendedor', value.trim().toUpperCase());
     setShowVendedorSuggestions(false);
   };
 
