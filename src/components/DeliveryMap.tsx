@@ -117,10 +117,15 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
     const coordinatesSeen = new Set<string>();
     
     mapDeliveries.forEach(entrega => {
-      if (!entrega.lat || !entrega.lng) return;
-
       let lat = Number(entrega.lat);
       let lng = Number(entrega.lng);
+
+      if (entrega.localizacaoAtual && entrega.localizacaoAtual.lat && entrega.localizacaoAtual.lng) {
+        lat = Number(entrega.localizacaoAtual.lat);
+        lng = Number(entrega.localizacaoAtual.lng);
+      }
+
+      if (!lat || !lng) return;
       
       const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
       if (coordinatesSeen.has(coordKey)) {

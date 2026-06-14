@@ -26,6 +26,7 @@
         "canhoto_solicitado": { "type": "boolean" },
         "updated_at": { "type": "string", "format": "date-time" },
         "userId": { "type": "string" },
+        "trackingCode": { "type": "string" },
         "historico": {
           "type": "array",
           "description": "List of tracked action events made to this delivery",

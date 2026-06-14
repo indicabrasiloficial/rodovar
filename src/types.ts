@@ -44,6 +44,10 @@ export interface Entrega {
   cpf_motorista?: string;
   cpf_cnpj_cliente?: string;
   documentos?: DocumentoAnexo[];
+  trackingCode?: string;
+  cte?: string;
+  localizacaoAtual?: { lat: number; lng: number } | null;
+  ultimaAtualizacao?: string | null;
 }
 
 export interface DocumentoAnexo {

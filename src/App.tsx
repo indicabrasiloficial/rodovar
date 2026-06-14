@@ -18,6 +18,8 @@ import AgentManual from './components/AgentManual';
 import BlacklistManager from './components/BlacklistManager';
 import GroupChat from './components/GroupChat';
 import BackupRegistry from './components/BackupRegistry';
+import { Rastrear } from './components/Rastrear';
+import { MotoristaTracking } from './components/MotoristaTracking';
 
 import { 
   Truck, 
@@ -41,11 +43,12 @@ import {
   UserX,
   LayoutDashboard,
   Bot,
-  Database
+  Database,
+  Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'group_chat' | 'backup';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'group_chat' | 'backup' | 'rastrear' | 'motorista';
 
 
 export default function App() {
@@ -55,7 +58,7 @@ export default function App() {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const [entregas, setEntregas] = useState<Entrega[]>([]);
-  const [selectedView, setSelectedView] = useState<ViewMode>('list');
+  const [selectedView, setSelectedView] = useState<ViewMode>('rastrear');
   const [selectedEntregaId, setSelectedEntregaId] = useState<string | undefined>(undefined);
   const [editingEntregaId, setEditingEntregaId] = useState<string | undefined>(undefined);
 
@@ -89,6 +92,10 @@ export default function App() {
       }
     } else {
       setUser(null);
+    }
+    const path = window.location.pathname;
+    if (path.startsWith('/motorista/')) {
+      setSelectedView('motorista');
     }
     setIsAuthLoading(false);
     setEntregas(getEntregas());
@@ -386,9 +393,38 @@ export default function App() {
     );
   }
 
+  // Bypass login check for public tracking page
+  if (selectedView === 'rastrear') {
+    return (
+      <Rastrear 
+        userLogged={user}
+        onClose={() => {
+          setSelectedView('list');
+          window.history.pushState({ path: '/' }, '', '/');
+        }}
+        onAccessColaborador={() => {
+          setSelectedView('list');
+        }}
+      />
+    );
+  }
+
+  // Bypass login check for public driver live tracking page
+  if (selectedView === 'motorista') {
+    return (
+      <MotoristaTracking 
+        onClose={() => {
+          setSelectedView('rastrear');
+          window.history.pushState({ path: '/' }, '', '/');
+        }}
+      />
+    );
+  }
+
   if (!user) {
     return (
       <Login 
+        onBackToTracking={() => setSelectedView('rastrear')}
         onLoginSuccess={(userData) => {
           setUser(userData);
           // Personalized vocal greeting on successful login based on role
@@ -458,6 +494,20 @@ export default function App() {
             >
               <Truck className="w-4 h-4 shrink-0 text-inherit" />
               <span>Cargas</span>
+            </button>
+
+            {/* Nav Rastreio - Public tracking button as requested in Alteração 3 */}
+            <button
+              onClick={() => setSelectedView('rastrear')}
+              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+                selectedView === 'rastrear'
+                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+              }`}
+              id="nav-rastrear"
+            >
+              <Globe className="w-4 h-4 shrink-0 text-inherit" />
+              <span>Colaborador</span>
             </button>
 
             {/* Nav Dashboard - Highly Prominent Premium Highlighted Operational Button */}
@@ -760,6 +810,20 @@ export default function App() {
                 >
                   <Truck className="w-3.5 h-3.5 shrink-0" />
                   <span>Cargas</span>
+                </button>
+
+                {/* Nav Rastreamento Público (Alteração 3) */}
+                <button
+                  onClick={() => setSelectedView('rastrear')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'rastrear'
+                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                    : 'bg-zinc-900/20 border-transparent text-zinc-400 hover:text-[#FFD600]'
+                  }`}
+                  id="desktop-nav-rastrear"
+                >
+                  <Globe className="w-3.5 h-3.5 shrink-0" />
+                  <span>Colaborador</span>
                 </button>
 
                 {/* Nav Dashboard */}

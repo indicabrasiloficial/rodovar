@@ -4,9 +4,10 @@ import { Lock, User } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: (userData: { username: string; displayName: string; role: string }) => void;
+  onBackToTracking?: () => void;
 }
 
-export default function Login({ onLoginSuccess }: LoginProps) {
+export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +169,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             Acessar Sistema
           </button>
         </form>
+
+        {onBackToTracking && (
+          <div className="mt-5 text-center" id="back-to-truck-tracking-link-wrap">
+            <button
+              type="button"
+              onClick={onBackToTracking}
+              className="text-xs text-zinc-500 hover:text-[#FFD600] uppercase font-mono tracking-wider transition-colors cursor-pointer bg-transparent border-0 outline-none"
+              id="back-to-tracking-card-btn"
+            >
+              ← Voltar para Consulta de Frete
+            </button>
+          </div>
+        )}
       </motion.div>
 
       {/* Decorative clean footer */}

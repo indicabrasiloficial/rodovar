@@ -343,7 +343,18 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     km: existingDelivery?.km || 0,
     historico: existingDelivery?.historico || [],
     documentos: existingDelivery?.documentos || [],
-    userId: uid
+    userId: uid,
+    trackingCode: existingDelivery?.trackingCode || '',
+    cte: existingDelivery?.cte || '',
+    localizacaoAtual: existingDelivery?.localizacaoAtual !== undefined ? existingDelivery.localizacaoAtual : null,
+    ultimaAtualizacao: existingDelivery?.ultimaAtualizacao !== undefined ? existingDelivery.ultimaAtualizacao : null,
+    avaliacao_viagem: existingDelivery?.avaliacao_viagem !== undefined ? existingDelivery.avaliacao_viagem : null,
+    avaliacao_cliente: existingDelivery?.avaliacao_cliente !== undefined ? existingDelivery.avaliacao_cliente : null,
+    cpf_motorista: existingDelivery?.cpf_motorista || '',
+    cpf_cnpj_cliente: existingDelivery?.cpf_cnpj_cliente || '',
+    categoria_risco: existingDelivery?.categoria_risco || 'comum',
+    link_localizacao: existingDelivery?.link_localizacao || '',
+    valor_carga: existingDelivery?.valor_carga || 0
   };
 
   // Compile difference list
@@ -434,6 +445,10 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     if (entrega.observacoes !== undefined && entrega.observacoes !== existingDelivery.observacoes) {
       logs.push('Atualizou as observações de entrega');
     }
+    // Check cte
+    if (entrega.cte !== undefined && entrega.cte !== existingDelivery.cte) {
+      logs.push(entrega.cte ? `Vinculou o CT-e número "${entrega.cte}" à viagem.` : 'Removeu o número do CT-e da viagem.');
+    }
     // Check documentos
     if (entrega.documentos !== undefined) {
       const prevDocs = existingDelivery.documentos || [];
@@ -482,6 +497,24 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     historico: limitedHistoryList,
     updated_at: new Date().toISOString()
   };
+
+  // Auto-generate trackingCode if not present (format: RDV + 4 digits, e.g. RDV0123)
+  if (!payload.trackingCode) {
+    let generated = '';
+    for (let attempt = 0; attempt < 1000; attempt++) {
+      const codeNum = Math.floor(Math.random() * 10000);
+      const testCode = `RDV${codeNum.toString().padStart(4, '0')}`;
+      const isTaken = cachedEntregas.some(e => e.trackingCode === testCode);
+      if (!isTaken) {
+        generated = testCode;
+        break;
+      }
+    }
+    if (!generated) {
+      generated = `RDV${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+    payload.trackingCode = generated;
+  }
 
   // Enforce lowercase search normalization keys for ultra high speed server-side Firestore queries
   payload.search_origem = (payload.origem || '').toLowerCase().trim();

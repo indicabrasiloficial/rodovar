@@ -61,6 +61,7 @@ interface FormInputs {
   observacoes: string;
   link_localizacao: string;
   canhoto_solicitado: boolean;
+  cte: string;
 }
 
 export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick }: DeliveryFormProps) {
@@ -150,7 +151,8 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
       status: 'coletando',
       observacoes: '',
       link_localizacao: '',
-      canhoto_solicitado: false
+      canhoto_solicitado: false,
+      cte: ''
     }
   });
 
@@ -270,7 +272,8 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
           status: data.status,
           observacoes: data.observacoes,
           link_localizacao: data.link_localizacao || '',
-          canhoto_solicitado: data.canhoto_solicitado
+          canhoto_solicitado: data.canhoto_solicitado,
+          cte: data.cte || ''
         });
       }
     }
@@ -513,6 +516,18 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
                     id="form-input-prazo"
                   />
                   {errors.prazo && <p className="text-[10px] text-red-00 font-mono">{errors.prazo.message}</p>}
+                </div>
+
+                {/* Número do CT-e */}
+                <div className="space-y-1.5 sm:col-span-2 font-mono">
+                  <label className="text-xs text-gray-400 font-medium font-sans">Número do CT-e</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 35.123.456 ou Chave de Acesso"
+                    {...register('cte')}
+                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white uppercase focus:outline-none placeholder-gray-700"
+                    id="form-input-cte"
+                  />
                 </div>
               </div>
             </div>

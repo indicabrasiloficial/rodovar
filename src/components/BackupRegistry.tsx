@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Database, Download, Upload, AlertTriangle, CheckCircle2, RefreshCw, Calendar, FileText, ArrowLeft, ShieldAlert } from 'lucide-react';
-import { getEntregas, saveEntrega, getBlacklist, saveToBlacklist, getBlacklistClientes, saveToBlacklistClientes } from '../db/storage';
+import { getEntregas, saveEntrega, getBlacklist, saveToBlacklist, getBlacklistClientes, saveToBlacklistClientes, getScheduledMessages, saveScheduledMessage } from '../db/storage';
 
 interface BackupRegistryProps {
   onClose: () => void;
@@ -43,7 +43,8 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
         },
         entregas: getEntregas(),
         blacklist_motoristas: getBlacklist(),
-        blacklist_clientes: getBlacklistClientes()
+        blacklist_clientes: getBlacklistClientes(),
+        scheduled_messages: getScheduledMessages()
       };
 
       const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
@@ -102,6 +103,7 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
           entregasCount: payload.entregas?.length || 0,
           blacklistMotoristasCount: payload.blacklist_motoristas?.length || 0,
           blacklistClientesCount: payload.blacklist_clientes?.length || 0,
+          scheduledMessagesCount: payload.scheduled_messages?.length || 0,
           rawPayload: payload
         });
       } catch (err) {
@@ -124,6 +126,7 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
     try {
       const data = auditPreview.rawPayload;
       let restoredCount = 0;
+      let restoredMsgsCount = 0;
 
       // 1. Restore Deliveries
       if (Array.isArray(data.entregas)) {
@@ -147,9 +150,17 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
         });
       }
 
+      // 4. Restore Scheduled Messages
+      if (Array.isArray(data.scheduled_messages)) {
+        data.scheduled_messages.forEach((sm: any) => {
+          saveScheduledMessage(sm);
+          restoredMsgsCount++;
+        });
+      }
+
       setImportStatus({
         success: true,
-        message: `Restauração concluída! ${restoredCount} cargas e dados operacionais de blacklist consolidados com o banco Firestore.`
+        message: `Restauração concluída! ${restoredCount} cargas, ${restoredMsgsCount} mensagens agendadas e dados operacionais de blacklist consolidados simultaneamente.`
       });
 
       if (window.falarRodovar) {
@@ -335,7 +346,7 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-900">
                 <span className="text-zinc-500 font-mono text-[9px] block">CARGAS HISTÓRICAS</span>
                 <span className="text-[#FFD600] font-mono font-black text-base block mt-1">
@@ -345,13 +356,19 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
               <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-900">
                 <span className="text-zinc-500 font-mono text-[9px] block">BLACKLIST MOTORISTAS</span>
                 <span className="text-red-400 font-mono font-black text-base block mt-1">
-                  {auditPreview.blacklistMotoristasCount} cpfs/nomes
+                  {auditPreview.blacklistMotoristasCount} cpfs
                 </span>
               </div>
               <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-900">
                 <span className="text-zinc-500 font-mono text-[9px] block">BLACKLIST CLIENTES</span>
                 <span className="text-red-400 font-mono font-black text-base block mt-1">
-                  {auditPreview.blacklistClientesCount} cnpj/nomes
+                  {auditPreview.blacklistClientesCount} cnpjs
+                </span>
+              </div>
+              <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-900">
+                <span className="text-zinc-500 font-mono text-[9px] block">MENSAGENS AGENDADAS</span>
+                <span className="text-blue-400 font-mono font-black text-base block mt-1">
+                  {auditPreview.scheduledMessagesCount || 0} envios
                 </span>
               </div>
             </div>
