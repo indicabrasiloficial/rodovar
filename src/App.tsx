@@ -80,7 +80,7 @@ export default function App() {
     }
   };
 
-  // Load user session on start
+  // Load user session on start and sync in real-time
   useEffect(() => {
     const active = localStorage.getItem('rodovar_active_login_v2');
     if (active) {
@@ -98,7 +98,19 @@ export default function App() {
       setSelectedView('motorista');
     }
     setIsAuthLoading(false);
+    
+    // Initial load
     setEntregas(getEntregas());
+
+    // Listen to real-time updates from cloud Firestore
+    const handleRealtimeSync = () => {
+      setEntregas(getEntregas());
+    };
+    window.addEventListener('rodovar_realtime_event', handleRealtimeSync);
+
+    return () => {
+      window.removeEventListener('rodovar_realtime_event', handleRealtimeSync);
+    };
   }, []);
 
   const handleLogout = () => {

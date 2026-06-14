@@ -1,13 +1,54 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Entrega } from '../types';
 import { TrackingProgressBar } from './TrackingProgressBar';
 import { Calendar, MapPin, Milestone, Sparkles, Navigation2 } from 'lucide-react';
+import DeliveryMap from './DeliveryMap';
 
 interface TrackingCardProps {
   carga: Entrega;
 }
 
 export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
+  const [resolvedAddress, setResolvedAddress] = useState<string>('');
+  const [isResolvingAddress, setIsResolvingAddress] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!carga.localizacaoAtual || !carga.localizacaoAtual.lat || !carga.localizacaoAtual.lng) {
+      setResolvedAddress('');
+      return;
+    }
+
+    let isMounted = true;
+    const fetchAddress = async () => {
+      setIsResolvingAddress(true);
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${carga.localizacaoAtual!.lat}&lon=${carga.localizacaoAtual!.lng}`;
+        const res = await fetch(url, {
+          headers: {
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'User-Agent': `RodovarMonitoraClient/${carga.trackingCode}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data && data.display_name) {
+            setResolvedAddress(data.display_name);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching address via Nominatim:', err);
+      } finally {
+        if (isMounted) setIsResolvingAddress(false);
+      }
+    };
+
+    fetchAddress();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [carga.localizacaoAtual?.lat, carga.localizacaoAtual?.lng, carga.trackingCode]);
+
   const formatStatus = (status: string) => {
     switch (status) {
       case 'coletando': return 'Coletando';
@@ -127,6 +168,48 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
           </div>
         </div>
       </div>
+
+      {/* Rastreamento Ativo por Satélite (Mapa e Endereço Físico) */}
+      {carga.localizacaoAtual && (
+        <div className="space-y-4 mb-6" id="realtime-satellite-tracking-section">
+          {/* Mapa ao Vivo */}
+          <div className="w-full h-[280px] rounded-xl overflow-hidden border border-[#FFD700]/20 shadow-inner relative" id="client-realtime-map">
+            <DeliveryMap entregas={[carga]} selectedId={carga.id} singleView={true} />
+          </div>
+
+          {/* Endereço por Satélite */}
+          <div className="bg-[#121212] border border-[#FFD700]/15 rounded-xl p-4 relative overflow-hidden" id="active-address-section">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-[#FFD700]/5 blur-lg rounded-full pointer-events-none" />
+            
+            <span className="text-[10px] uppercase font-mono tracking-widest text-[#FFD700] block font-bold mb-2 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FFD700] animate-pulse" />
+              Localização Próxima do Motorista (Rastreamento via Satélite)
+            </span>
+            
+            <div className="flex items-start gap-3">
+              <div className="bg-[#FFD700]/10 border border-[#FFD700]/15 p-2 rounded-xl text-[#FFD700] flex items-center justify-center shrink-0">
+                <Navigation2 className="w-4 h-4 animate-bounce" />
+              </div>
+              <div className="min-w-0 flex-1">
+                {resolvedAddress ? (
+                  <p className="text-xs font-semibold text-zinc-200 leading-relaxed text-wrap">{resolvedAddress}</p>
+                ) : isResolvingAddress ? (
+                  <p className="text-xs text-zinc-500 font-mono animate-pulse">Obtendo endereço exato do satélite...</p>
+                ) : (
+                  <p className="text-xs text-zinc-400 font-mono">
+                    Latitude: {carga.localizacaoAtual.lat.toFixed(6)} | Longitude: {carga.localizacaoAtual.lng.toFixed(6)}
+                  </p>
+                )}
+                {carga.ultimaAtualizacao && (
+                  <span className="text-[9px] font-mono text-zinc-500 block mt-1.5">
+                    Sincronizado há {Math.max(0, Math.floor((new Date().getTime() - new Date(carga.ultimaAtualizacao).getTime()) / (1000 * 60)))} min às {new Date(carga.ultimaAtualizacao).toLocaleTimeString('pt-BR')} (Horário de Brasília)
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Specific public fields (NO SENSITIVE info allowed) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4" id="tracking-card-fields-grid">

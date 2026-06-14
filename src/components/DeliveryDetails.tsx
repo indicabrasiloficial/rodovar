@@ -301,20 +301,18 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     }
   };
 
-  // Load latest values
+  // Load latest values with live subscription
   useEffect(() => {
-    const details = getEntregaById(entregaId);
-    if (details) {
-      if (!details.trackingCode) {
-        // Enforce auto-generation and immediately save the newly stamped object
-        const healed = saveEntrega(details);
-        setEntrega(healed);
-        setLocLinkInput(healed.link_localizacao || '');
-      } else {
+    const handleSyncChange = () => {
+      const details = getEntregaById(entregaId);
+      if (details) {
         setEntrega(details);
         setLocLinkInput(details.link_localizacao || '');
       }
-    }
+    };
+
+    handleSyncChange();
+    window.addEventListener('rodovar_realtime_event', handleSyncChange);
 
     // Load clicked scripts for this delivery
     const stored = localStorage.getItem(`clicked_scripts_${entregaId}`);
@@ -327,6 +325,10 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     } else {
       setClickedScripts([]);
     }
+
+    return () => {
+      window.removeEventListener('rodovar_realtime_event', handleSyncChange);
+    };
   }, [entregaId]);
 
   const markScriptAsClicked = (scriptKey: string) => {
@@ -511,6 +513,35 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     );
   };
 
+  const isDriverDisconnected = () => {
+    if (entrega.status === 'entregue') return false;
+    if (!entrega.ultimaAtualizacao) return true;
+    try {
+      const now = new Date();
+      const lastUpdate = new Date(entrega.ultimaAtualizacao);
+      const diffMs = now.getTime() - lastUpdate.getTime();
+      const diffMin = Math.floor(diffMs / (1000 * 60));
+      return diffMin >= 5;
+    } catch {
+      return true;
+    }
+  };
+
+  const isDesconectado = isDriverDisconnected();
+
+  const handleNotifyDisconnectedDriver = () => {
+    const linkDriver = `${window.location.origin}/motorista/${entrega.trackingCode}`;
+    const descText = `Olá ${entrega.motorista}! Identificamos no Rodovar Monitora que a transmissão do seu rastreamento do GPS perdeu conexão ou foi desativada.
+
+Por favor, acesse o link: ${linkDriver} e clique no botão "ATIVAR RASTREAMENTO AO VIVO" para restabelecer a telemetria em tempo real da sua viagem de forma segura. Obrigado e boa viagem!`;
+    
+    clickWhatsApp(entrega.tel_motorista, descText);
+    
+    if (window.falarRodovar) {
+      window.falarRodovar(`Disparando mensagem de reaviso de telemetria via WhatsApp para o motorista ${entrega.motorista}.`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header navigations */}
@@ -586,6 +617,45 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
           </a>
         </div>
       </div>
+
+      {/* ALERTA DE PERDA DE SINAL / MOTORISTA DESCONECTADO */}
+      {isDesconectado && (
+        <div 
+          className="bg-red-950/25 border-2 border-red-500/40 rounded-xl p-5 shadow-[0_0_20px_rgba(239,68,68,0.08)] relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-5"
+          id="operator-disconnection-alert-box"
+        >
+          {/* Fundo sutil decorativo */}
+          <div className="absolute -top-12 -left-12 w-32 h-32 bg-red-500/10 blur-2xl rounded-full pointer-events-none" />
+          
+          <div className="flex items-start gap-3.5 z-10 w-full md:w-auto" id="alert-text-wrapper">
+            <div className="bg-red-500/20 border border-red-500/35 p-2.5 rounded-xl text-red-400 shrink-0 flex items-center justify-center shadow-lg">
+              <AlertTriangle className="w-5 h-5 shrink-0 animate-bounce" />
+            </div>
+            <div>
+              <h3 className="text-xs uppercase font-mono tracking-widest text-red-400 font-extrabold leading-none mb-1.5 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                ⚠️ MOTORISTA DESCONECTADO / FORA DA REDE
+              </h3>
+              <p className="text-xs text-zinc-305 leading-normal max-w-xl">
+                O motorista <strong className="text-white font-black">{entrega.motorista}</strong> não está compartilhando a geolocalização ativa (ou o sinal caiu há mais de 5 minutos). O cliente e o operador perderam a sincronização em tempo real!
+              </p>
+              <span className="text-[10px] font-mono text-red-420 block mt-2 font-semibold">
+                Última transmissão registrada: {entrega.ultimaAtualizacao ? `${new Date(entrega.ultimaAtualizacao).toLocaleDateString('pt-BR')} às ${new Date(entrega.ultimaAtualizacao).toLocaleTimeString('pt-BR')}` : 'Nenhuma transmissão recebida'}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleNotifyDisconnectedDriver}
+            className="w-full md:w-auto px-5 py-3 bg-red-650 hover:bg-red-700 text-white text-xs font-black uppercase rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 shadow-[0_4px_15px_rgba(239,68,68,0.25)] z-10 font-sans shrink-0"
+            id="notify-disconnected-driver-btn"
+          >
+            <MessageSquare className="w-4 h-4 text-white" />
+            <span>AVISAR MOTORISTA NOVAMENTE</span>
+          </button>
+        </div>
+      )}
 
       {/* Bloco de Rastreamento Público do Motorista (Rastreamento Ao Vivo) */}
       <div 
