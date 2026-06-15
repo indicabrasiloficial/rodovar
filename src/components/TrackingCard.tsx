@@ -249,9 +249,22 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
 
         {carga.cte && (
           <div className="bg-zinc-950/30 border border-zinc-900 p-3.5 rounded-xl font-mono col-span-1 md:col-span-4" id="field-cte-display">
-            <span className="text-[10px] uppercase text-zinc-500 font-bold font-sans block mb-1">CT-e Vinculado</span>
-            <div className="text-white text-xs select-all break-all selection:bg-[#FFD700] selection:text-black">
-              {carga.cte}
+            <span className="text-[10px] uppercase text-zinc-500 font-bold font-sans block mb-2 flex items-center gap-1.5">
+              <span>{carga.cte.includes(',') || carga.cte.includes(';') ? 'CT-es Vinculados' : 'CT-e Vinculado'}</span>
+              <span className="bg-[#FFD700]/10 text-[#FFD700] px-1.5 py-0.5 rounded text-[8px] font-mono leading-none border border-[#FFD700]/20 font-bold">
+                {carga.cte.split(/[,;]+/).filter(Boolean).length}
+              </span>
+            </span>
+            <div className="flex flex-wrap gap-2 text-white text-xs">
+              {carga.cte.split(/[,;]+/).map(c => c.trim()).filter(Boolean).map((item, idx) => (
+                <span 
+                  key={idx} 
+                  className="bg-[#121212] border border-[#FFD700]/25 text-zinc-200 px-2.5 py-1 rounded-lg text-[11px] font-bold font-mono tracking-tight shadow-sm hover:border-[#FFD700]/50 transition-colors cursor-text select-all"
+                  title="Clique para selecionar/copiar"
+                >
+                  📄 {item}
+                </span>
+              ))}
             </div>
           </div>
         )}

@@ -520,14 +520,20 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
 
                 {/* Número do CT-e */}
                 <div className="space-y-1.5 sm:col-span-2 font-mono">
-                  <label className="text-xs text-gray-400 font-medium font-sans">Número do CT-e</label>
+                  <label className="text-xs text-zinc-400 font-medium font-sans flex justify-between items-center">
+                    <span>Número(s) do(s) CT-e(s)</span>
+                    <span className="text-[9px] text-[#FFD600] uppercase font-bold tracking-wider">Suporta Múltiplos</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="Ex: 35.123.456 ou Chave de Acesso"
+                    placeholder="Ex: 35.123.456, 35.123.457 (separe por vírgula)"
                     {...register('cte')}
                     className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white uppercase focus:outline-none placeholder-gray-700"
                     id="form-input-cte"
                   />
+                  <span className="text-[9px] text-zinc-500 font-sans block leading-none">
+                    Registre quantos CT-es forem necessários separando os números por vírgula.
+                  </span>
                 </div>
               </div>
             </div>

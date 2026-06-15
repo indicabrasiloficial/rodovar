@@ -244,9 +244,20 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
                 </div>
                 
                 {delivery.cte && (
-                  <div className="text-right">
-                    <span className="text-[8px] uppercase font-mono text-zinc-500 block">Nº CT-e</span>
-                    <span className="text-xs font-bold font-mono text-cyan-400">{delivery.cte}</span>
+                  <div className="text-right flex flex-col items-end gap-1 max-w-[200px]">
+                    <span className="text-[8px] uppercase font-mono text-zinc-500 block leading-none mb-0.5">
+                      {delivery.cte.includes(',') || delivery.cte.includes(';') ? 'Nºs CT-es' : 'Nº CT-e'}
+                    </span>
+                    <div className="flex flex-wrap gap-1 justify-end">
+                      {delivery.cte.split(/[,;]+/).map(c => c.trim()).filter(Boolean).map((item, idx) => (
+                        <span 
+                          key={idx} 
+                          className="text-[10px] font-black font-mono text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/20 leading-tight block text-right"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

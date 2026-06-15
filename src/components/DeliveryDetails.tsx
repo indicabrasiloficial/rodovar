@@ -306,8 +306,15 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     const handleSyncChange = () => {
       const details = getEntregaById(entregaId);
       if (details) {
-        setEntrega(details);
-        setLocLinkInput(details.link_localizacao || '');
+        if (!details.trackingCode) {
+          // Enforce auto-generation and immediately save the newly stamped object
+          const healed = saveEntrega(details);
+          setEntrega(healed);
+          setLocLinkInput(healed.link_localizacao || '');
+        } else {
+          setEntrega(details);
+          setLocLinkInput(details.link_localizacao || '');
+        }
       }
     };
 
@@ -672,9 +679,20 @@ Por favor, acesse o link: ${linkDriver} e clique no botão "ATIVAR RASTREAMENTO 
               <span className="text-sm font-black font-mono text-cyan-400 tracking-tight bg-black px-2 py-0.5 rounded border border-zinc-900 shadow-inner">
                 {entrega.trackingCode || 'Mapeando...'}
               </span>
-              <span className="text-[10px] text-zinc-500 font-medium">
-                {entrega.cte ? `CT-e vinculado: ${entrega.cte}` : "Compartilhe o link com o motorista para iniciar o rastreamento por satélite"}
-              </span>
+              {entrega.cte ? (
+                <div className="flex flex-wrap items-center gap-1.5 max-w-[400px]">
+                  <span className="text-[10px] text-zinc-500 font-medium mr-0.5">CT-e(s) vinculado(s):</span>
+                  {entrega.cte.split(/[,;]+/).map(c => c.trim()).filter(Boolean).map((item, idx) => (
+                    <span key={idx} className="bg-cyan-950/30 text-cyan-400 font-black font-mono px-1.5 py-0.5 rounded border border-cyan-500/15 text-[10px] shadow-sm select-all">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[10px] text-zinc-500 font-medium">
+                  Compartilhe o link com o motorista para iniciar o rastreamento por satélite
+                </span>
+              )}
             </div>
           </div>
         </div>
