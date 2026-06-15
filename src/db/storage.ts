@@ -491,9 +491,17 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   // Limit history messages to a standard safe threshold of 40 entries to prevent unbounded storage
   const limitedHistoryList = rawHistoryList.slice(-40);
 
+  // Clean entrega of undefined properties to prevent spreading them over basePayload defaults
+  const cleanEntrega: any = {};
+  Object.keys(entrega).forEach(key => {
+    if ((entrega as any)[key] !== undefined) {
+      cleanEntrega[key] = (entrega as any)[key];
+    }
+  });
+
   const payload: any = {
     ...basePayload,
-    ...entrega,
+    ...cleanEntrega,
     historico: limitedHistoryList,
     updated_at: new Date().toISOString()
   };

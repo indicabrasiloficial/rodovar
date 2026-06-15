@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../db/firebase';
 import { Entrega } from '../types';
+import { findCityCoords } from '../utils/distance';
 import { 
   Truck, 
   MapPin, 
@@ -229,11 +230,46 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       const activeDelivery = latestDeliveryRef.current;
       if (activeDelivery && activeDelivery.id) {
         try {
+          let targetStatus = activeDelivery.status || 'coletando';
+
+          // Proximity arrival checking to destination city
+          if (activeDelivery.destino) {
+            try {
+              const destCoords = findCityCoords(activeDelivery.destino);
+              if (destCoords) {
+                const R = 6371; // Earth's radius in km
+                const dLat = (destCoords.lat - lat) * Math.PI / 180;
+                const dLng = (destCoords.lng - lng) * Math.PI / 180;
+                const a = 
+                  Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat * Math.PI / 180) * Math.cos(destCoords.lat * Math.PI / 180) * 
+                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const distanceKm = R * c;
+
+                if (distanceKm <= 1.5 && activeDelivery.status !== 'entregue') {
+                  targetStatus = 'entregue';
+                  if (window.falarRodovar) {
+                    window.falarRodovar("Chegamos ao destino! Localização de destino alcançada com sucesso.");
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn('Error checking proximity target coordinates:', err);
+            }
+          }
+
+          // Automatically transitions status of route to transito if they're starting out
+          if (targetStatus !== 'entregue' && targetStatus !== 'em_transito') {
+            targetStatus = 'em_transito';
+          }
+
           // Direct real-time upload to Firestore
           const docRef = doc(db, 'entregas', activeDelivery.id);
           await updateDoc(docRef, {
             localizacaoAtual: { lat, lng },
-            ultimaAtualizacao: nowStr
+            ultimaAtualizacao: nowStr,
+            status: targetStatus
           });
           setIsSharing(true);
           setGpsError(null); // Clear any transient GPS error on success
