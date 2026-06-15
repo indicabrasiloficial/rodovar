@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../db/firebase';
 import { Entrega } from '../types';
 import { TrackingCard } from './TrackingCard';
@@ -40,36 +40,83 @@ export const Rastrear: React.FC<RastrearProps> = ({ onClose, userLogged, onAcces
     setLoading(true);
     setError(null);
 
+    let unsubscribeQuery: (() => void) | null = null;
+    let unsubscribeDoc: (() => void) | null = null;
+
+    const handleDataFound = (docId: string, docData: any) => {
+      setCarga({
+        id: docId,
+        ...docData
+      } as Entrega);
+      setError(null);
+      setLoading(false);
+    };
+
     const q = query(
       collection(db, 'entregas'),
       where('trackingCode', '==', searchCode)
     );
 
-    const unsubscribe = onSnapshot(
+    unsubscribeQuery = onSnapshot(
       q,
       (snapshot) => {
-        setLoading(false);
         if (!snapshot.empty) {
           const docSnap = snapshot.docs[0];
-          const data = docSnap.data();
-          setCarga({
-            id: docSnap.id,
-            ...data
-          } as Entrega);
-          setError(null);
+          handleDataFound(docSnap.id, docSnap.data());
         } else {
-          setCarga(null);
-          setError('Código de rastreio não encontrado. Verifique os dígitos e tente novamente.');
+          // Fallback: Check if user typed a direct database path ID in either lowercase or case-sensitive match
+          const docRef = doc(db, 'entregas', searchCode);
+          if (unsubscribeDoc) return;
+
+          unsubscribeDoc = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+              handleDataFound(docSnap.id, docSnap.data());
+            } else {
+              const docRefLower = doc(db, 'entregas', searchCode.toLowerCase());
+              onSnapshot(docRefLower, (docSnapLower) => {
+                if (docSnapLower.exists()) {
+                  handleDataFound(docSnapLower.id, docSnapLower.data());
+                } else {
+                  setCarga(null);
+                  setError('Código de rastreio não encontrado. Verifique os dígitos e tente novamente.');
+                  setLoading(false);
+                }
+              }, () => {
+                setCarga(null);
+                setError('Código de rastreio não encontrado. Verifique os dígitos e tente novamente.');
+                setLoading(false);
+              });
+            }
+          }, (err) => {
+            console.error('Error listening to fallback doc in search:', err);
+            setCarga(null);
+            setError('Código de rastreio não encontrado. Verifique os dígitos e tente novamente.');
+            setLoading(false);
+          });
         }
       },
       (err) => {
-        console.error('Error listening to public tracking code:', err);
-        setError('Erro de conexão ao carregar os dados de rastreamento.');
-        setLoading(false);
+        console.error('Error listening to public tracking code query:', err);
+        // Fallback directly to direct ID query
+        const docRef = doc(db, 'entregas', searchCode);
+        unsubscribeDoc = onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            handleDataFound(docSnap.id, docSnap.data());
+          } else {
+            setError('Erro de conexão ao carregar os dados de rastreamento.');
+            setLoading(false);
+          }
+        }, () => {
+          setError('Erro de conexão ao carregar os dados de rastreamento.');
+          setLoading(false);
+        });
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribeQuery) unsubscribeQuery();
+      if (unsubscribeDoc) unsubscribeDoc();
+    };
   }, [searchCode]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {

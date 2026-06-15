@@ -24,6 +24,7 @@ interface MotoristaTrackingProps {
 
 export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose }) => {
   const [trackingCode, setTrackingCode] = useState('');
+  const [rawCode, setRawCode] = useState('');
   const [delivery, setDelivery] = useState<Entrega | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,53 +121,103 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   // Extract code from pathname (/motorista/RDV0123)
   useEffect(() => {
     const pathname = window.location.pathname;
-    const match = pathname.match(/^\/motorista\/([a-zA-Z0-9]+)/);
+    const match = pathname.match(/^\/motorista\/([a-zA-Z0-9\-_]+)/);
     if (match && match[1]) {
-      setTrackingCode(match[1].toUpperCase().trim());
+      const codeValue = match[1].trim();
+      setTrackingCode(codeValue.toUpperCase());
+      setRawCode(codeValue);
     } else {
       setError('Código de rastreio inválido fornecido na URL.');
       setLoading(false);
     }
   }, []);
 
-  // Set up real-time listener to Firestore for this trackingCode
+  // Set up real-time listener to Firestore for this trackingCode and rawCode format
   useEffect(() => {
-    if (!trackingCode) return;
+    if (!trackingCode && !rawCode) return;
 
     setLoading(true);
     setError(null);
 
+    let unsubscribeQuery: (() => void) | null = null;
+    let unsubscribeDoc: (() => void) | null = null;
+
+    const handleDataFound = (docId: string, docData: any) => {
+      setDelivery({
+        id: docId,
+        ...docData
+      } as Entrega);
+      setError(null);
+      setLoading(false);
+    };
+
+    // First try standard trackingCode column search on Firestore
     const q = query(
       collection(db, 'entregas'),
       where('trackingCode', '==', trackingCode)
     );
 
-    const unsubscribe = onSnapshot(
+    unsubscribeQuery = onSnapshot(
       q,
       (snapshot) => {
-        setLoading(false);
         if (!snapshot.empty) {
           const docSnap = snapshot.docs[0];
-          const data = docSnap.data();
-          setDelivery({
-            id: docSnap.id,
-            ...data
-          } as Entrega);
-          setError(null);
+          handleDataFound(docSnap.id, docSnap.data());
         } else {
-          setDelivery(null);
-          setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
+          // Fallback: Check if the provided trace matches a case-sensitive / case-insensitive direct Firestore document path ID
+          const docRef = doc(db, 'entregas', rawCode);
+          if (unsubscribeDoc) return;
+
+          unsubscribeDoc = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+              handleDataFound(docSnap.id, docSnap.data());
+            } else {
+              // Try lowercase direct ID fallback (Standard format: ent-xyz123)
+              const docRefLower = doc(db, 'entregas', rawCode.toLowerCase());
+              onSnapshot(docRefLower, (docSnapLower) => {
+                if (docSnapLower.exists()) {
+                  handleDataFound(docSnapLower.id, docSnapLower.data());
+                } else {
+                  setDelivery(null);
+                  setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
+                  setLoading(false);
+                }
+              }, () => {
+                setDelivery(null);
+                setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
+                setLoading(false);
+              });
+            }
+          }, (err) => {
+            console.error('Error listening to fallback doc:', err);
+            setDelivery(null);
+            setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
+            setLoading(false);
+          });
         }
       },
       (err) => {
-        console.error('Error listening to driver delivery doc:', err);
-        setError('Erro de conexão ao carregar os dados da viagem.');
-        setLoading(false);
+        console.error('Error listening to driver delivery query:', err);
+        // Direct document path access on connection timeout or missing composite indices warnings
+        const docRef = doc(db, 'entregas', rawCode);
+        unsubscribeDoc = onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            handleDataFound(docSnap.id, docSnap.data());
+          } else {
+            setError('Erro de conexão ao carregar os dados da viagem.');
+            setLoading(false);
+          }
+        }, () => {
+          setError('Erro de conexão ao carregar os dados da viagem.');
+          setLoading(false);
+        });
       }
     );
 
     return () => {
-      unsubscribe();
+      if (unsubscribeQuery) unsubscribeQuery();
+      if (unsubscribeDoc) unsubscribeDoc();
+      
       // Clean up watch position and locks on unmount
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
@@ -193,7 +244,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         audioCtxRef.current = null;
       }
     };
-  }, [trackingCode]);
+  }, [trackingCode, rawCode]);
 
   // Handle Geolocation Sharing (With multi-layered anti-sleep hacks for background tracking)
   const startTracking = () => {
