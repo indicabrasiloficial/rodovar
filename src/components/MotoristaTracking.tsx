@@ -36,6 +36,16 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   const watchIdRef = useRef<number | null>(null);
   const wakeLockRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const latestDeliveryRef = useRef<Entrega | null>(null);
+  const heartbeatIntervalRef = useRef<any>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+
+  // Synchronize dynamic delivery collection state to our mutable reference to avoid React closure locks
+  useEffect(() => {
+    latestDeliveryRef.current = delivery;
+  }, [delivery]);
 
   // Base64 micro silent WAV track loop (keeps browser audio context alive and prevents OS freeze)
   const SILENT_SOUND = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAAAAAA==";
@@ -62,6 +72,49 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       wakeLockRef.current = null;
     }
   };
+
+  const startWebAudioKeepAlive = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      
+      const ctx = new AudioContextClass();
+      audioCtxRef.current = ctx;
+      
+      // Dynamic micro synthesizer bypass: Plays infrasound at 15Hz (inaudible/sub-audible)
+      // This establishes an active Media Playback Session under Android or iOS.
+      // The OS will grant background CPU cycles preventing standard GPS sleep triggers.
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(15, ctx.currentTime);
+      
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, ctx.currentTime); // Inaudible to human ear, fully active to mobile OS
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      oscillatorRef.current = osc;
+      gainNodeRef.current = gain;
+      console.log('Rodovar Monitora: Background Web Audio Synth loop established');
+    } catch (err) {
+      console.warn('Rodovar Monitora: Background audio context exception ignored:', err);
+    }
+  };
+
+  // Automated visibility listener: re-request lock if screen lights back up or tab is foregrounded
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isSharing) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isSharing]);
 
   // Extract code from pathname (/motorista/RDV0123)
   useEffect(() => {
@@ -117,15 +170,31 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
       releaseWakeLock();
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      if (oscillatorRef.current) {
+        try {
+          oscillatorRef.current.stop();
+        } catch (e) {}
+        oscillatorRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        try {
+          audioCtxRef.current.close();
+        } catch (e) {}
+        audioCtxRef.current = null;
+      }
     };
   }, [trackingCode]);
 
-  // Handle Geolocation Sharing
+  // Handle Geolocation Sharing (With multi-layered anti-sleep hacks for background tracking)
   const startTracking = () => {
     setGpsError(null);
 
@@ -157,9 +226,11 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       const nowStr = new Date().toISOString();
       setLastTime(nowStr);
 
-      if (delivery && delivery.id) {
+      const activeDelivery = latestDeliveryRef.current;
+      if (activeDelivery && activeDelivery.id) {
         try {
-          const docRef = doc(db, 'entregas', delivery.id);
+          // Direct real-time upload to Firestore
+          const docRef = doc(db, 'entregas', activeDelivery.id);
           await updateDoc(docRef, {
             localizacaoAtual: { lat, lng },
             ultimaAtualizacao: nowStr
@@ -191,22 +262,44 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
     };
 
     try {
-      // Trigger user-initiated silent audio keeps alive play (crucial bypass for Android/iOS tabs freeze)
+      // 1. Trigger user-initiated silent audio keeps alive play (crucial bypass for Android/iOS tabs freeze)
       if (!audioRef.current) {
         const audio = document.createElement('audio');
         audio.src = SILENT_SOUND;
         audio.loop = true;
-        // Set properties for silent play background
         audio.volume = 0.05;
         audioRef.current = audio;
       }
-      audioRef.current.play().catch(e => console.log('Audio keep-alive allowed offline:', e));
+      audioRef.current.play().catch(e => console.log('Audio keep-alive allowed outline:', e));
 
-      // Trigger user-initiated screen wake lock (prevents phone lock and sensor standby)
+      // 2. Trigger infrasound Web Audio API Session to secure high-priority background execution in mobile browsers
+      startWebAudioKeepAlive();
+
+      // 3. Trigger user-initiated screen wake lock (prevents phone lock and sensor standby)
       requestWakeLock();
 
+      // 4. Start active streaming watchPosition listener
       const id = navigator.geolocation.watchPosition(successCallback, errorCallback, options);
       watchIdRef.current = id;
+
+      // 5. Build an aggressive double heartbeat. Many mobile browsers sleep passive watchPosition callbacks if screen is off.
+      // Launching active getCurrentPosition calls every 25 seconds requests direct hardware satellite refresh.
+      heartbeatIntervalRef.current = setInterval(() => {
+        if (navigator.geolocation && watchIdRef.current !== null) {
+          navigator.geolocation.getCurrentPosition(
+            successCallback, 
+            (fallbackErr) => {
+              console.warn('Rodovar Background: Fallback active GPS heartrate pulse skipped:', fallbackErr.message);
+            }, 
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0
+            }
+          );
+        }
+      }, 25000);
+
       setIsSharing(true);
     } catch (err: any) {
       setGpsError('Falha ao iniciar captura física: ' + (err.message || 'Erro desconhecido'));
@@ -214,10 +307,18 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   };
 
   const stopTracking = () => {
+    // Clear GPS watch
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
+    
+    // Clear Redundant Heartbeat Fallback
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+
     setIsSharing(false);
     
     // Release keeps alive audio and screen wake locks
@@ -225,6 +326,20 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
+    }
+
+    // Release and stop background Web Audio context
+    if (oscillatorRef.current) {
+      try {
+        oscillatorRef.current.stop();
+      } catch (e) {}
+      oscillatorRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      try {
+        audioCtxRef.current.close();
+      } catch (e) {}
+      audioCtxRef.current = null;
     }
 
     if (window.falarRodovar) {
