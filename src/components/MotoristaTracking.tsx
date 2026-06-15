@@ -214,8 +214,8 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
 
     const options: PositionOptions = {
       enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0
+      timeout: 30000,      // Robust timeout (30 seconds) for background GPS resolution
+      maximumAge: 10000    // Allow a 10s age buffer which heavily satisfies OS/browser battery efficiency limits
     };
 
     const successCallback = async (position: GeolocationPosition) => {
@@ -236,29 +236,29 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
             ultimaAtualizacao: nowStr
           });
           setIsSharing(true);
+          setGpsError(null); // Clear any transient GPS error on success
         } catch (err: any) {
           console.error('Error writing positions to Firestore:', err);
-          setGpsError('Falha ao sincronizar posição com o servidor central: ' + (err.message || 'Sem permissão'));
+          setGpsError('Sincronização pendente: ' + (err.message || 'Sem conexão'));
         }
       }
     };
 
     const errorCallback = (err: GeolocationPositionError) => {
-      console.error('GPS WatchPosition error:', err);
-      let errorMsg = 'Permissão de GPS negada. Ative a localização nas configurações do seu celular.';
-      if (err.code === err.POSITION_UNAVAILABLE) {
-        errorMsg = 'Sinal de GPS indisponível. Vá para um local aberto.';
+      console.warn('Rodovar GPS Background Alert (Retaining active monitoring state):', err);
+      let errorMsg = 'Buscando sinal de satélite GPS...';
+      if (err.code === err.PERMISSION_DENIED) {
+        errorMsg = 'Permissão de GPS necessária. Ative a localização nas configurações do celular.';
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        errorMsg = 'Sinal de GPS fraco. Aguardando conexão de satélite externa...';
       } else if (err.code === err.TIMEOUT) {
-        errorMsg = 'Tempo limite esgotado ao buscar localização GPS.';
+        errorMsg = 'Tempo limite esgotado. Sintonizando satélite em segundo plano...';
       }
       setGpsError(errorMsg);
-      // We do not silently stop tracking on temporary timeouts to ensure continuous tracing attempt
-      if (err.code !== err.TIMEOUT) {
-        stopTracking();
-      }
-      if (window.falarRodovar) {
-        window.falarRodovar("Ocorreu um erro com o seu sinal de GPS. Por favor verifique o sinal e tente novamente.");
-      }
+      
+      // CRITICAL SECURITY FIX: We NEVER trigger stopTracking() here! 
+      // If the browser background window or OS temporarily suspends GPS hardware access,
+      // we must retain that sharing is active, allowing continuous background chimes and wake locks to keep trying.
     };
 
     try {
@@ -272,6 +272,30 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       }
       audioRef.current.play().catch(e => console.log('Audio keep-alive allowed outline:', e));
 
+      // Register official system media controls so OS doesn't sleep the media playback tab
+      if ('mediaSession' in navigator) {
+        try {
+          (navigator as any).mediaSession.metadata = new (window as any).MediaMetadata({
+            title: 'RODOVAR MONITORA',
+            artist: 'Rastreamento Satélite Ativo (Em Segundo Plano)',
+            album: 'Central de Monitoramento Digital',
+            artwork: [
+              { src: '/favicon.ico', sizes: '512x512', type: 'image/png' }
+            ]
+          });
+          
+          (navigator as any).mediaSession.setActionHandler('play', () => {
+            if (audioRef.current) audioRef.current.play().catch(() => {});
+          });
+          (navigator as any).mediaSession.setActionHandler('pause', () => {
+            // Keep background play active even if lock screen player tries to pause
+            if (audioRef.current) audioRef.current.play().catch(() => {});
+          });
+        } catch (mErr) {
+          console.warn('MediaSession configurations skipped:', mErr);
+        }
+      }
+
       // 2. Trigger infrasound Web Audio API Session to secure high-priority background execution in mobile browsers
       startWebAudioKeepAlive();
 
@@ -283,22 +307,23 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       watchIdRef.current = id;
 
       // 5. Build an aggressive double heartbeat. Many mobile browsers sleep passive watchPosition callbacks if screen is off.
-      // Launching active getCurrentPosition calls every 25 seconds requests direct hardware satellite refresh.
+      // Launching active getCurrentPosition calls every 15 seconds requests direct hardware satellite refresh to keep GPS warm.
       heartbeatIntervalRef.current = setInterval(() => {
         if (navigator.geolocation && watchIdRef.current !== null) {
           navigator.geolocation.getCurrentPosition(
             successCallback, 
             (fallbackErr) => {
               console.warn('Rodovar Background: Fallback active GPS heartrate pulse skipped:', fallbackErr.message);
+              // Do NOT trigger stopTracking() on heartbeat error as well
             }, 
             {
               enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0
+              timeout: 15000,
+              maximumAge: 10000
             }
           );
         }
-      }, 25000);
+      }, 15000);
 
       setIsSharing(true);
     } catch (err: any) {
