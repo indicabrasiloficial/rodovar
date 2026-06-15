@@ -19,15 +19,47 @@ const MESSAGES_COLLECTION = 'scheduled_messages';
 const BLACKLIST_COLLECTION = 'blacklist_motoristas';
 const BLACKLIST_CLIENTS_COLLECTION = 'blacklist_clientes';
 
-// Memory caches
-let cachedEntregas: Entrega[] = [];
-let cachedScheduledMessages: any[] = [];
-let cachedBlacklist: BlacklistMotorista[] = [];
-let cachedBlacklistClientes: BlacklistCliente[] = [];
+// Memory caches with localized localStorage recovery fallback
+let cachedEntregas: Entrega[] = (() => {
+  try {
+    const raw = localStorage.getItem('rodovar_cached_entregas_fallback');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+})();
+
+let cachedScheduledMessages: any[] = (() => {
+  try {
+    const raw = localStorage.getItem('rodovar_cached_scheduled_messages_fallback');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+})();
+
+let cachedBlacklist: BlacklistMotorista[] = (() => {
+  try {
+    const raw = localStorage.getItem('rodovar_cached_blacklist_fallback');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+})();
+
+let cachedBlacklistClientes: BlacklistCliente[] = (() => {
+  try {
+    const raw = localStorage.getItem('rodovar_cached_blacklist_clientes_fallback');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+})();
 
 // Custom events matching original design
 const REALTIME_EVENT = 'rodovar_realtime_event';
 const SCHEDULED_REALTIME_EVENT = 'rodovar_scheduled_realtime_event';
+const BLACKLIMIT_QUOTA_EVENT = 'rodovar_quota_exceeded_event';
 const BLACKLIST_REALTIME_EVENT = 'rodovar_blacklist_realtime_event';
 const BLACKLIST_CLIENTS_REALTIME_EVENT = 'rodovar_blacklist_clientes_realtime_event';
 
@@ -45,11 +77,14 @@ const entregasQuery = query(collection(db, ENTREGAS_COLLECTION), firestoreOrderB
 onSnapshot(entregasQuery, async (snapshot) => {
   if (snapshot.empty) {
     cachedEntregas = [];
+    try {
+      localStorage.setItem('rodovar_cached_entregas_fallback', JSON.stringify([]));
+    } catch {}
     window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
     return;
   }
 
-  cachedEntregas = [];
+  const newEntregas: Entrega[] = [];
   snapshot.forEach(docSnap => {
     // Actively purge any preset seed IDs created automatically in previous versions
     const seedIds = ['ent-1', 'ent-2', 'ent-3', 'ent-4', 'ent-5'];
@@ -90,7 +125,7 @@ onSnapshot(entregasQuery, async (snapshot) => {
     let freteMot = data.frete_motorista !== undefined ? Number(data.frete_motorista) : 0;
     let valCarga = data.valor_carga !== undefined ? Number(data.valor_carga) : 0;
 
-    cachedEntregas.push({
+    newEntregas.push({
       id: docSnap.id,
       ...data,
       lat: latVal || -23.5505,
@@ -102,19 +137,36 @@ onSnapshot(entregasQuery, async (snapshot) => {
     } as Entrega);
   });
 
+  cachedEntregas = newEntregas;
+
   // Sort by updated_at or created_at descending
   cachedEntregas.sort((a, b) => new Date(b.created_at || b.updated_at).getTime() - new Date(a.created_at || a.updated_at).getTime());
 
+  // Save to persistent localStorage cache
+  try {
+    localStorage.setItem('rodovar_cached_entregas_fallback', JSON.stringify(cachedEntregas));
+  } catch (err) {
+    console.warn('Erro ao salvar cache de entregas:', err);
+  }
+
   // Trigger standard local Custom Event so React re-renders synchronously
   window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-}, (error) => {
-  handleFirestoreError(error, OperationType.GET, ENTREGAS_COLLECTION);
+}, (error: any) => {
+  const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
+  if (isQuotaExceeded) {
+    console.warn('Rodovar Monitora: Cota diária do Firebase excedida. Ativando exibição em cache off-line.');
+    (window as any).rodovar_quota_exceeded = true;
+    window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
+    window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+  } else {
+    handleFirestoreError(error, OperationType.GET, ENTREGAS_COLLECTION);
+  }
 });
 
 // Listen to scheduled messages (entire collection for shared multi-user workspace)
 const messagesQuery = collection(db, MESSAGES_COLLECTION);
 onSnapshot(messagesQuery, (snapshot) => {
-  cachedScheduledMessages = [];
+  const newMessages: any[] = [];
   snapshot.forEach(docSnap => {
     // Actively purge preset seed messages
     const seedMsgIds = ['sch-1', 'sch-2'];
@@ -123,54 +175,96 @@ onSnapshot(messagesQuery, (snapshot) => {
       return; // skip caching
     }
 
-    cachedScheduledMessages.push({
+    newMessages.push({
       id: docSnap.id,
       ...docSnap.data()
     });
   });
 
+  cachedScheduledMessages = newMessages;
   cachedScheduledMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Save cache fallback
+  try {
+    localStorage.setItem('rodovar_cached_scheduled_messages_fallback', JSON.stringify(cachedScheduledMessages));
+  } catch {}
 
   // Trigger standard local Custom Event
   window.dispatchEvent(new CustomEvent(SCHEDULED_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-}, (error) => {
-  handleFirestoreError(error, OperationType.GET, MESSAGES_COLLECTION);
+}, (error: any) => {
+  const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
+  if (isQuotaExceeded) {
+    console.warn('Rodovar Monitora: Cota diária do Firebase para mensagens excedida.');
+    (window as any).rodovar_quota_exceeded = true;
+    window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
+    window.dispatchEvent(new CustomEvent(SCHEDULED_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+  } else {
+    handleFirestoreError(error, OperationType.GET, MESSAGES_COLLECTION);
+  }
 });
 
 // Listen to blacklist motoristas
 const blacklistQuery = collection(db, BLACKLIST_COLLECTION);
 onSnapshot(blacklistQuery, (snapshot) => {
-  cachedBlacklist = [];
+  const newBlacklist: BlacklistMotorista[] = [];
   snapshot.forEach(docSnap => {
-    cachedBlacklist.push({
+    newBlacklist.push({
       id: docSnap.id,
       ...docSnap.data()
     } as BlacklistMotorista);
   });
+  cachedBlacklist = newBlacklist;
   // Sort by created_at descending
   cachedBlacklist.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // Save cache fallback
+  try {
+    localStorage.setItem('rodovar_cached_blacklist_fallback', JSON.stringify(cachedBlacklist));
+  } catch {}
+
   // Trigger standard local Custom Event
   window.dispatchEvent(new CustomEvent(BLACKLIST_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-}, (error) => {
-  handleFirestoreError(error, OperationType.GET, BLACKLIST_COLLECTION);
+}, (error: any) => {
+  const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
+  if (isQuotaExceeded) {
+    (window as any).rodovar_quota_exceeded = true;
+    window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
+    window.dispatchEvent(new CustomEvent(BLACKLIST_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+  } else {
+    handleFirestoreError(error, OperationType.GET, BLACKLIST_COLLECTION);
+  }
 });
 
 // Listen to blacklist clientes
 const blacklistClientesQuery = collection(db, BLACKLIST_CLIENTS_COLLECTION);
 onSnapshot(blacklistClientesQuery, (snapshot) => {
-  cachedBlacklistClientes = [];
+  const newBlacklistClientes: BlacklistCliente[] = [];
   snapshot.forEach(docSnap => {
-    cachedBlacklistClientes.push({
+    newBlacklistClientes.push({
       id: docSnap.id,
       ...docSnap.data()
     } as BlacklistCliente);
   });
+  cachedBlacklistClientes = newBlacklistClientes;
   // Sort by created_at descending
   cachedBlacklistClientes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // Save cache fallback
+  try {
+    localStorage.setItem('rodovar_cached_blacklist_clientes_fallback', JSON.stringify(cachedBlacklistClientes));
+  } catch {}
+
   // Trigger standard local Custom Event
   window.dispatchEvent(new CustomEvent(BLACKLIST_CLIENTS_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
-}, (error) => {
-  handleFirestoreError(error, OperationType.GET, BLACKLIST_CLIENTS_COLLECTION);
+}, (error: any) => {
+  const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
+  if (isQuotaExceeded) {
+    (window as any).rodovar_quota_exceeded = true;
+    window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
+    window.dispatchEvent(new CustomEvent(BLACKLIST_CLIENTS_REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+  } else {
+    handleFirestoreError(error, OperationType.GET, BLACKLIST_CLIENTS_COLLECTION);
+  }
 });
 
 // Sync data retrievers
@@ -491,17 +585,9 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   // Limit history messages to a standard safe threshold of 40 entries to prevent unbounded storage
   const limitedHistoryList = rawHistoryList.slice(-40);
 
-  // Clean entrega of undefined properties to prevent spreading them over basePayload defaults
-  const cleanEntrega: any = {};
-  Object.keys(entrega).forEach(key => {
-    if ((entrega as any)[key] !== undefined) {
-      cleanEntrega[key] = (entrega as any)[key];
-    }
-  });
-
   const payload: any = {
     ...basePayload,
-    ...cleanEntrega,
+    ...entrega,
     historico: limitedHistoryList,
     updated_at: new Date().toISOString()
   };
@@ -1014,9 +1100,28 @@ export function subscribeToGroupChatRealtime(
     // Client-side sort by timestamp ascending to ensure perfect linear timelines
     list.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     
+    // Persist cache fallback
+    try {
+      localStorage.setItem(`rodovar_cached_chat_${category}_fallback`, JSON.stringify(list));
+    } catch {}
+
     callback(list);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, CHAT_COLLECTION);
+  }, (error: any) => {
+    const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
+    if (isQuotaExceeded) {
+      console.warn(`Rodovar Monitora: Cota diária do Firebase para chat (${category}) excedida.`);
+      (window as any).rodovar_quota_exceeded = true;
+      window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
+      try {
+        const raw = localStorage.getItem(`rodovar_cached_chat_${category}_fallback`);
+        const fallbackMsgs = raw ? JSON.parse(raw) : [];
+        callback(fallbackMsgs);
+      } catch {
+        callback([]);
+      }
+    } else {
+      handleFirestoreError(error, OperationType.GET, CHAT_COLLECTION);
+    }
   });
 }
 

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../db/firebase';
 import { Entrega } from '../types';
-import { findCityCoords } from '../utils/distance';
 import { 
   Truck, 
   MapPin, 
@@ -24,7 +23,6 @@ interface MotoristaTrackingProps {
 
 export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose }) => {
   const [trackingCode, setTrackingCode] = useState('');
-  const [rawCode, setRawCode] = useState('');
   const [delivery, setDelivery] = useState<Entrega | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,103 +119,53 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   // Extract code from pathname (/motorista/RDV0123)
   useEffect(() => {
     const pathname = window.location.pathname;
-    const match = pathname.match(/^\/motorista\/([a-zA-Z0-9\-_]+)/);
+    const match = pathname.match(/^\/motorista\/([a-zA-Z0-9]+)/);
     if (match && match[1]) {
-      const codeValue = match[1].trim();
-      setTrackingCode(codeValue.toUpperCase());
-      setRawCode(codeValue);
+      setTrackingCode(match[1].toUpperCase().trim());
     } else {
       setError('Código de rastreio inválido fornecido na URL.');
       setLoading(false);
     }
   }, []);
 
-  // Set up real-time listener to Firestore for this trackingCode and rawCode format
+  // Set up real-time listener to Firestore for this trackingCode
   useEffect(() => {
-    if (!trackingCode && !rawCode) return;
+    if (!trackingCode) return;
 
     setLoading(true);
     setError(null);
 
-    let unsubscribeQuery: (() => void) | null = null;
-    let unsubscribeDoc: (() => void) | null = null;
-
-    const handleDataFound = (docId: string, docData: any) => {
-      setDelivery({
-        id: docId,
-        ...docData
-      } as Entrega);
-      setError(null);
-      setLoading(false);
-    };
-
-    // First try standard trackingCode column search on Firestore
     const q = query(
       collection(db, 'entregas'),
       where('trackingCode', '==', trackingCode)
     );
 
-    unsubscribeQuery = onSnapshot(
+    const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
+        setLoading(false);
         if (!snapshot.empty) {
           const docSnap = snapshot.docs[0];
-          handleDataFound(docSnap.id, docSnap.data());
+          const data = docSnap.data();
+          setDelivery({
+            id: docSnap.id,
+            ...data
+          } as Entrega);
+          setError(null);
         } else {
-          // Fallback: Check if the provided trace matches a case-sensitive / case-insensitive direct Firestore document path ID
-          const docRef = doc(db, 'entregas', rawCode);
-          if (unsubscribeDoc) return;
-
-          unsubscribeDoc = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-              handleDataFound(docSnap.id, docSnap.data());
-            } else {
-              // Try lowercase direct ID fallback (Standard format: ent-xyz123)
-              const docRefLower = doc(db, 'entregas', rawCode.toLowerCase());
-              onSnapshot(docRefLower, (docSnapLower) => {
-                if (docSnapLower.exists()) {
-                  handleDataFound(docSnapLower.id, docSnapLower.data());
-                } else {
-                  setDelivery(null);
-                  setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
-                  setLoading(false);
-                }
-              }, () => {
-                setDelivery(null);
-                setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
-                setLoading(false);
-              });
-            }
-          }, (err) => {
-            console.error('Error listening to fallback doc:', err);
-            setDelivery(null);
-            setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
-            setLoading(false);
-          });
+          setDelivery(null);
+          setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
         }
       },
       (err) => {
-        console.error('Error listening to driver delivery query:', err);
-        // Direct document path access on connection timeout or missing composite indices warnings
-        const docRef = doc(db, 'entregas', rawCode);
-        unsubscribeDoc = onSnapshot(docRef, (docSnap) => {
-          if (docSnap.exists()) {
-            handleDataFound(docSnap.id, docSnap.data());
-          } else {
-            setError('Erro de conexão ao carregar os dados da viagem.');
-            setLoading(false);
-          }
-        }, () => {
-          setError('Erro de conexão ao carregar os dados da viagem.');
-          setLoading(false);
-        });
+        console.error('Error listening to driver delivery doc:', err);
+        setError('Erro de conexão ao carregar os dados da viagem.');
+        setLoading(false);
       }
     );
 
     return () => {
-      if (unsubscribeQuery) unsubscribeQuery();
-      if (unsubscribeDoc) unsubscribeDoc();
-      
+      unsubscribe();
       // Clean up watch position and locks on unmount
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
@@ -244,7 +192,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         audioCtxRef.current = null;
       }
     };
-  }, [trackingCode, rawCode]);
+  }, [trackingCode]);
 
   // Handle Geolocation Sharing (With multi-layered anti-sleep hacks for background tracking)
   const startTracking = () => {
@@ -266,8 +214,8 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
 
     const options: PositionOptions = {
       enableHighAccuracy: true,
-      timeout: 30000,      // Robust timeout (30 seconds) for background GPS resolution
-      maximumAge: 10000    // Allow a 10s age buffer which heavily satisfies OS/browser battery efficiency limits
+      timeout: 15000,
+      maximumAge: 0
     };
 
     const successCallback = async (position: GeolocationPosition) => {
@@ -281,71 +229,36 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       const activeDelivery = latestDeliveryRef.current;
       if (activeDelivery && activeDelivery.id) {
         try {
-          let targetStatus = activeDelivery.status || 'coletando';
-
-          // Proximity arrival checking to destination city
-          if (activeDelivery.destino) {
-            try {
-              const destCoords = findCityCoords(activeDelivery.destino);
-              if (destCoords) {
-                const R = 6371; // Earth's radius in km
-                const dLat = (destCoords.lat - lat) * Math.PI / 180;
-                const dLng = (destCoords.lng - lng) * Math.PI / 180;
-                const a = 
-                  Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                  Math.cos(lat * Math.PI / 180) * Math.cos(destCoords.lat * Math.PI / 180) * 
-                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                const distanceKm = R * c;
-
-                if (distanceKm <= 1.5 && activeDelivery.status !== 'entregue') {
-                  targetStatus = 'entregue';
-                  if (window.falarRodovar) {
-                    window.falarRodovar("Chegamos ao destino! Localização de destino alcançada com sucesso.");
-                  }
-                }
-              }
-            } catch (err) {
-              console.warn('Error checking proximity target coordinates:', err);
-            }
-          }
-
-          // Automatically transitions status of route to transito if they're starting out
-          if (targetStatus !== 'entregue' && targetStatus !== 'em_transito') {
-            targetStatus = 'em_transito';
-          }
-
           // Direct real-time upload to Firestore
           const docRef = doc(db, 'entregas', activeDelivery.id);
           await updateDoc(docRef, {
             localizacaoAtual: { lat, lng },
-            ultimaAtualizacao: nowStr,
-            status: targetStatus
+            ultimaAtualizacao: nowStr
           });
           setIsSharing(true);
-          setGpsError(null); // Clear any transient GPS error on success
         } catch (err: any) {
           console.error('Error writing positions to Firestore:', err);
-          setGpsError('Sincronização pendente: ' + (err.message || 'Sem conexão'));
+          setGpsError('Falha ao sincronizar posição com o servidor central: ' + (err.message || 'Sem permissão'));
         }
       }
     };
 
     const errorCallback = (err: GeolocationPositionError) => {
-      console.warn('Rodovar GPS Background Alert (Retaining active monitoring state):', err);
-      let errorMsg = 'Buscando sinal de satélite GPS...';
-      if (err.code === err.PERMISSION_DENIED) {
-        errorMsg = 'Permissão de GPS necessária. Ative a localização nas configurações do celular.';
-      } else if (err.code === err.POSITION_UNAVAILABLE) {
-        errorMsg = 'Sinal de GPS fraco. Aguardando conexão de satélite externa...';
+      console.error('GPS WatchPosition error:', err);
+      let errorMsg = 'Permissão de GPS negada. Ative a localização nas configurações do seu celular.';
+      if (err.code === err.POSITION_UNAVAILABLE) {
+        errorMsg = 'Sinal de GPS indisponível. Vá para um local aberto.';
       } else if (err.code === err.TIMEOUT) {
-        errorMsg = 'Tempo limite esgotado. Sintonizando satélite em segundo plano...';
+        errorMsg = 'Tempo limite esgotado ao buscar localização GPS.';
       }
       setGpsError(errorMsg);
-      
-      // CRITICAL SECURITY FIX: We NEVER trigger stopTracking() here! 
-      // If the browser background window or OS temporarily suspends GPS hardware access,
-      // we must retain that sharing is active, allowing continuous background chimes and wake locks to keep trying.
+      // We do not silently stop tracking on temporary timeouts to ensure continuous tracing attempt
+      if (err.code !== err.TIMEOUT) {
+        stopTracking();
+      }
+      if (window.falarRodovar) {
+        window.falarRodovar("Ocorreu um erro com o seu sinal de GPS. Por favor verifique o sinal e tente novamente.");
+      }
     };
 
     try {
@@ -359,30 +272,6 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       }
       audioRef.current.play().catch(e => console.log('Audio keep-alive allowed outline:', e));
 
-      // Register official system media controls so OS doesn't sleep the media playback tab
-      if ('mediaSession' in navigator) {
-        try {
-          (navigator as any).mediaSession.metadata = new (window as any).MediaMetadata({
-            title: 'RODOVAR MONITORA',
-            artist: 'Rastreamento Satélite Ativo (Em Segundo Plano)',
-            album: 'Central de Monitoramento Digital',
-            artwork: [
-              { src: '/favicon.ico', sizes: '512x512', type: 'image/png' }
-            ]
-          });
-          
-          (navigator as any).mediaSession.setActionHandler('play', () => {
-            if (audioRef.current) audioRef.current.play().catch(() => {});
-          });
-          (navigator as any).mediaSession.setActionHandler('pause', () => {
-            // Keep background play active even if lock screen player tries to pause
-            if (audioRef.current) audioRef.current.play().catch(() => {});
-          });
-        } catch (mErr) {
-          console.warn('MediaSession configurations skipped:', mErr);
-        }
-      }
-
       // 2. Trigger infrasound Web Audio API Session to secure high-priority background execution in mobile browsers
       startWebAudioKeepAlive();
 
@@ -394,23 +283,22 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       watchIdRef.current = id;
 
       // 5. Build an aggressive double heartbeat. Many mobile browsers sleep passive watchPosition callbacks if screen is off.
-      // Launching active getCurrentPosition calls every 15 seconds requests direct hardware satellite refresh to keep GPS warm.
+      // Launching active getCurrentPosition calls every 25 seconds requests direct hardware satellite refresh.
       heartbeatIntervalRef.current = setInterval(() => {
         if (navigator.geolocation && watchIdRef.current !== null) {
           navigator.geolocation.getCurrentPosition(
             successCallback, 
             (fallbackErr) => {
               console.warn('Rodovar Background: Fallback active GPS heartrate pulse skipped:', fallbackErr.message);
-              // Do NOT trigger stopTracking() on heartbeat error as well
             }, 
             {
               enableHighAccuracy: true,
-              timeout: 15000,
-              maximumAge: 10000
+              timeout: 10000,
+              maximumAge: 0
             }
           );
         }
-      }, 15000);
+      }, 25000);
 
       setIsSharing(true);
     } catch (err: any) {

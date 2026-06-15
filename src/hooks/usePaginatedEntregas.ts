@@ -118,6 +118,59 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
     setLoading(true);
     setIndexWarning(null);
 
+    const loadLocalFallback = () => {
+      try {
+        const raw = localStorage.getItem('rodovar_cached_entregas_fallback');
+        let items: Entrega[] = raw ? JSON.parse(raw) : [];
+        
+        // Apply filters locally in fallback mode
+        if (filters.status && filters.status !== 'all') {
+          items = items.filter(e => e.status === filters.status);
+        }
+        if (filters.dataColeta) {
+          items = items.filter(e => e.data_coleta === filters.dataColeta);
+        }
+        if (filters.vendedor?.trim()) {
+          const v = filters.vendedor.toLowerCase().trim();
+          items = items.filter(e => (e.vendedor || '').toLowerCase().includes(v));
+        }
+        if (filters.origem.trim()) {
+          const o = filters.origem.toLowerCase().trim();
+          items = items.filter(e => (e.origem || '').toLowerCase().includes(o));
+        }
+        if (filters.destino.trim()) {
+          const d = filters.destino.toLowerCase().trim();
+          items = items.filter(e => (e.destino || '').toLowerCase().includes(d));
+        }
+        if (filters.cliente.trim()) {
+          const c = filters.cliente.toLowerCase().trim();
+          items = items.filter(e => (e.cliente || '').toLowerCase().includes(c));
+        }
+        if (filters.search.trim()) {
+          const s = filters.search.toLowerCase().trim();
+          items = items.filter(e => 
+            (e.motorista || '').toLowerCase().includes(s) ||
+            (e.vendedor || '').toLowerCase().includes(s) ||
+            (e.cliente || '').toLowerCase().includes(s) ||
+            (e.origem || '').toLowerCase().includes(s) ||
+            (e.destino || '').toLowerCase().includes(s) ||
+            (e.observacoes || '').toLowerCase().includes(s) ||
+            (e.id || '').toLowerCase().includes(s)
+          );
+        }
+
+        setPages({ 0: items });
+        setTotalCount(items.length);
+      } catch (err) {
+        console.error("Local fallback error:", err);
+        setPages({ 0: [] });
+        setTotalCount(0);
+      }
+      setHasMore(false);
+      setLoading(false);
+      setLoadingMore(false);
+    };
+
     const hasSearchFilters = !!(
       filters.search.trim() || 
       filters.origem.trim() || 
@@ -127,6 +180,13 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
     );
 
     const loadInitialPage = async () => {
+      // If we already know the Firestore quota is exceeded during this browser session,
+      // bypass network calls and fetch instantly from persistent localStorage fallback cache.
+      if ((window as any).rodovar_quota_exceeded === true) {
+        loadLocalFallback();
+        return;
+      }
+
       try {
         const queryBase = buildQueryBase();
 
@@ -185,10 +245,18 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
             setHasMore(false);
             setLoading(false);
             setLoadingMore(false);
-          }, (error) => {
-            console.error("Firestore advanced search error:", error);
-            handleFirestoreError(error, OperationType.LIST, ENTREGAS_COLLECTION);
-            setLoading(false);
+          }, (error: any) => {
+            const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
+            if (isQuotaExceeded) {
+              console.warn("Rodovar: Quota diária esgotada no advanced search. Entrando em modo offline.");
+              (window as any).rodovar_quota_exceeded = true;
+              window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
+              loadLocalFallback();
+            } else {
+              console.error("Firestore advanced search error:", error);
+              handleFirestoreError(error, OperationType.LIST, ENTREGAS_COLLECTION);
+              setLoading(false);
+            }
           });
 
           unsubscribesRef.current.push(unsubscribe);
@@ -197,7 +265,7 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
           try {
             const countSnap = await getCountFromServer(queryBase);
             setTotalCount(countSnap.data().count);
-          } catch (err) {
+          } catch (err: any) {
             console.warn('Error fetching server-side matches count:', err);
             setTotalCount(null);
           }
@@ -224,17 +292,32 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
             } else {
               setHasMore(true);
             }
-          }, (error) => {
-            console.error("Firestore page 1 snapshot error:", error);
-            handleFirestoreError(error, OperationType.LIST, ENTREGAS_COLLECTION);
-            setLoading(false);
+          }, (error: any) => {
+            const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
+            if (isQuotaExceeded) {
+              console.warn("Rodovar: Quota diária esgotada no snapshot inicial. Entrando em modo offline.");
+              (window as any).rodovar_quota_exceeded = true;
+              window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
+              loadLocalFallback();
+            } else {
+              console.error("Firestore page 1 snapshot error:", error);
+              handleFirestoreError(error, OperationType.LIST, ENTREGAS_COLLECTION);
+              setLoading(false);
+            }
           });
 
           unsubscribesRef.current.push(unsubscribe);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error setting up paginated data fetch:", err);
-        setLoading(false);
+        const isQuotaExceeded = err && (err.code === 'resource-exhausted' || err.message?.includes('Quota exceeded') || err.message?.includes('quota-exceeded'));
+        if (isQuotaExceeded) {
+          (window as any).rodovar_quota_exceeded = true;
+          window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
+          loadLocalFallback();
+        } else {
+          setLoading(false);
+        }
       }
     };
 

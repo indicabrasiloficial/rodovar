@@ -188,7 +188,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
 
       // Simple WhatsApp links
-      const telMot = (entrega.tel_motorista || '').replace(/\D/g, '');
+      const telMot = entrega.tel_motorista.replace(/\D/g, '');
       const whatsMsg = `Olá ${entrega.motorista}! Tudo bem? Sou o ${getActiveUserName()} da Rodovar. Me envia o link de localização dessa viagem para ${entrega.destino}?`;
       const waUrl = `https://wa.me/55${telMot}?text=${encodeURIComponent(whatsMsg)}`;
 

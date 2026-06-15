@@ -292,10 +292,10 @@ export function useVoice(
         let msg = '';
         
         if (state.pendingActionType === 'motorista') {
-          phone = (entrega.tel_motorista || '').replace(/\D/g, '');
+          phone = entrega.tel_motorista.replace(/\D/g, '');
           msg = `Olá ${entrega.motorista}! Tudo bem? Poderia me enviar sua localização em tempo real agora? Preciso informar ao cliente o status da carga. Grato!`;
         } else {
-          phone = (entrega.tel_cliente || '').replace(/\D/g, '');
+          phone = entrega.tel_cliente.replace(/\D/g, '');
           msg = `Olá! Aqui é o ${getActiveUserFullName()} da Rodovar Transportadora. Sua carga está a caminho! O motorista ${entrega.motorista} está em deslocamento e chegará até ${entrega.prazo}. Qualquer dúvida estou à disposição.`;
         }
 

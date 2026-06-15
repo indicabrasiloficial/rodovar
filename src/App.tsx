@@ -62,6 +62,10 @@ export default function App() {
   const [selectedEntregaId, setSelectedEntregaId] = useState<string | undefined>(undefined);
   const [editingEntregaId, setEditingEntregaId] = useState<string | undefined>(undefined);
 
+  const [firestoreQuotaExceeded, setFirestoreQuotaExceeded] = useState(() => {
+    return (window as any).rodovar_quota_exceeded === true;
+  });
+
   // Filter states maintained in parent to support Voice query syncs
   const [searchFilter, setSearchFilter] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | undefined>(undefined);
@@ -108,8 +112,14 @@ export default function App() {
     };
     window.addEventListener('rodovar_realtime_event', handleRealtimeSync);
 
+    const handleQuotaExceeded = () => {
+      setFirestoreQuotaExceeded(true);
+    };
+    window.addEventListener('rodovar_quota_exceeded_event', handleQuotaExceeded);
+
     return () => {
       window.removeEventListener('rodovar_realtime_event', handleRealtimeSync);
+      window.removeEventListener('rodovar_quota_exceeded_event', handleQuotaExceeded);
     };
   }, []);
 
@@ -987,6 +997,27 @@ export default function App() {
 
       {/* Main Container structure */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6 font-sans">
+        {firestoreQuotaExceeded && (
+          <div className="mb-6 p-4 rounded-xl bg-amber-950/20 border border-amber-900/60 text-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in" id="rodovar-quota-banner">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="text-[10px] uppercase font-mono font-black tracking-widest block text-amber-400">COTA DIÁRIA DO FIREBASE ESGOTADA (EXCEEDED)</span>
+                <p className="text-xs text-zinc-300 leading-relaxed font-sans mt-0.5">
+                  Prezado Operador, o limite gratuito do Firebase se esgotou para hoje. Ativamos o <strong>Módulo de Resiliência Local (Off-line)</strong> com as informações salvas no seu navegador, permitindo que você continue acompanhando as rotas logísticas e cargas normalmente. Amanhã a cota do servidor se renovará de forma totalmente automática!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                window.location.reload();
+              }}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[10px] uppercase font-mono rounded cursor-pointer whitespace-nowrap self-end sm:self-center transition-colors"
+            >
+              🔄 Tentar Reconectar
+            </button>
+          </div>
+        )}
         <div className="min-h-[500px]">
           {renderCurrentView()}
         </div>
