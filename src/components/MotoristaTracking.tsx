@@ -34,6 +34,34 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   const [lastTime, setLastTime] = useState<string | null>(null);
   
   const watchIdRef = useRef<number | null>(null);
+  const wakeLockRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Base64 micro silent WAV track loop (keeps browser audio context alive and prevents OS freeze)
+  const SILENT_SOUND = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAAAAAA==";
+
+  const requestWakeLock = async () => {
+    if ('wakeLock' in navigator) {
+      try {
+        const sentinel = await (navigator as any).wakeLock.request('screen');
+        wakeLockRef.current = sentinel;
+        console.log('Rodovar Monitora: Screen Wake Lock activated');
+      } catch (err) {
+        console.warn('Rodovar Monitora: Screen Wake Lock ignored:', err);
+      }
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      try {
+        wakeLockRef.current.release();
+      } catch (err) {
+        console.error(err);
+      }
+      wakeLockRef.current = null;
+    }
+  };
 
   // Extract code from pathname (/motorista/RDV0123)
   useEffect(() => {
@@ -85,9 +113,14 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
 
     return () => {
       unsubscribe();
-      // Clean up watch position on unmount
+      // Clean up watch position and locks on unmount
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      releaseWakeLock();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
       }
     };
   }, [trackingCode]);
@@ -148,13 +181,30 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         errorMsg = 'Tempo limite esgotado ao buscar localização GPS.';
       }
       setGpsError(errorMsg);
-      stopTracking();
+      // We do not silently stop tracking on temporary timeouts to ensure continuous tracing attempt
+      if (err.code !== err.TIMEOUT) {
+        stopTracking();
+      }
       if (window.falarRodovar) {
         window.falarRodovar("Ocorreu um erro com o seu sinal de GPS. Por favor verifique o sinal e tente novamente.");
       }
     };
 
     try {
+      // Trigger user-initiated silent audio keeps alive play (crucial bypass for Android/iOS tabs freeze)
+      if (!audioRef.current) {
+        const audio = document.createElement('audio');
+        audio.src = SILENT_SOUND;
+        audio.loop = true;
+        // Set properties for silent play background
+        audio.volume = 0.05;
+        audioRef.current = audio;
+      }
+      audioRef.current.play().catch(e => console.log('Audio keep-alive allowed offline:', e));
+
+      // Trigger user-initiated screen wake lock (prevents phone lock and sensor standby)
+      requestWakeLock();
+
       const id = navigator.geolocation.watchPosition(successCallback, errorCallback, options);
       watchIdRef.current = id;
       setIsSharing(true);
@@ -169,6 +219,14 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       watchIdRef.current = null;
     }
     setIsSharing(false);
+    
+    // Release keeps alive audio and screen wake locks
+    releaseWakeLock();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
     if (window.falarRodovar) {
       window.falarRodovar("Compartilhamento de rastreio encerrado pelo motorista.");
     }

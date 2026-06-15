@@ -74,12 +74,17 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       let initialZoom = 4;
 
       if (singleView && mapDeliveries.length === 1) {
-        initialCenter = [mapDeliveries[0].lat, mapDeliveries[0].lng];
+        const item = mapDeliveries[0];
+        const latVal = (item.localizacaoAtual && item.localizacaoAtual.lat) ? Number(item.localizacaoAtual.lat) : Number(item.lat);
+        const lngVal = (item.localizacaoAtual && item.localizacaoAtual.lng) ? Number(item.localizacaoAtual.lng) : Number(item.lng);
+        initialCenter = [latVal, lngVal];
         initialZoom = 8;
       } else if (selectedId) {
         const selected = mapDeliveries.find(e => e.id === selectedId);
         if (selected) {
-          initialCenter = [selected.lat, selected.lng];
+          const latVal = (selected.localizacaoAtual && selected.localizacaoAtual.lat) ? Number(selected.localizacaoAtual.lat) : Number(selected.lat);
+          const lngVal = (selected.localizacaoAtual && selected.localizacaoAtual.lng) ? Number(selected.localizacaoAtual.lng) : Number(selected.lng);
+          initialCenter = [latVal, lngVal];
           initialZoom = 6;
         }
       }
@@ -255,11 +260,18 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
     // 5. Instantly pan or zoom smoothly to selected elements
     if (singleView && mapDeliveries.length === 1) {
-      map.setView([mapDeliveries[0].lat, mapDeliveries[0].lng], 8);
+      const item = mapDeliveries[0];
+      const latVal = (item.localizacaoAtual && item.localizacaoAtual.lat) ? Number(item.localizacaoAtual.lat) : Number(item.lat);
+      const lngVal = (item.localizacaoAtual && item.localizacaoAtual.lng) ? Number(item.localizacaoAtual.lng) : Number(item.lng);
+      const currentZoom = map.getZoom() || 8;
+      map.setView([latVal, lngVal], currentZoom);
     } else if (selectedId) {
       const selected = mapDeliveries.find(e => e.id === selectedId);
       if (selected) {
-        map.setView([selected.lat, selected.lng], 6);
+        const latVal = (selected.localizacaoAtual && selected.localizacaoAtual.lat) ? Number(selected.localizacaoAtual.lat) : Number(selected.lat);
+        const lngVal = (selected.localizacaoAtual && selected.localizacaoAtual.lng) ? Number(selected.localizacaoAtual.lng) : Number(selected.lng);
+        const currentZoom = map.getZoom() || 6;
+        map.setView([latVal, lngVal], currentZoom);
       }
     } else if (activeMarkers.length > 1) {
       const group = L.featureGroup(activeMarkers);
