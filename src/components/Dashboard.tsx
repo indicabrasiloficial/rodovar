@@ -32,6 +32,7 @@ interface DashboardProps {
   entregas: Entrega[];
   onSelectDelivery: (id: string) => void;
   voiceHook: any; // Return value of useVoice state
+  onFilterCargas?: (status: string) => void;
 }
 
 const statusColorMap: Record<string, string> = {
@@ -47,7 +48,7 @@ const statusLabelMap: Record<string, string> = {
   parado: 'Parado',
   entregue: 'Entregue'
 };
-export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: DashboardProps) {
+export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFilterCargas }: DashboardProps) {
   const [voiceQueryInput, setVoiceQueryInput] = useState('');
 
   // Handle storing dismissed alert identifiers
@@ -655,7 +656,10 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
       {/* Grid of Key Metric cards (Custom High Density without financial metrics) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {/* Metric Total */}
-        <div className="bg-[#121212] border border-zinc-800 hover:border-zinc-700 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-total col-span-2 md:col-span-1">
+        <div 
+          onClick={() => onFilterCargas?.('all')}
+          className="bg-[#121212] border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/40 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-total col-span-2 md:col-span-1 cursor-pointer"
+        >
           <div className="flex justify-between items-start">
             <span className="text-[11px] uppercase tracking-wider font-mono text-gray-500">Total de Cargas</span>
             <div className="p-1 px-1.5 rounded-md bg-zinc-900 text-gray-400 font-mono text-[10px] border border-zinc-800">CARGAS</div>
@@ -667,7 +671,10 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
         </div>
 
         {/* Metric Coletando */}
-        <div className="bg-[#121212] border border-zinc-800 hover:border-blue-900/50 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-collecting">
+        <div 
+          onClick={() => onFilterCargas?.('coletando')}
+          className="bg-[#121212] border border-zinc-800 hover:border-blue-900/50 hover:bg-blue-950/10 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-collecting cursor-pointer"
+        >
           <div className="flex justify-between items-start">
             <span className="text-[11px] uppercase tracking-wider font-mono text-blue-400">Coletando</span>
             <Package className="w-4 h-4 text-blue-400" />
@@ -679,38 +686,47 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook }: Das
         </div>
 
         {/* Metric Transit */}
-        <div className="bg-[#121212] border border-zinc-800 hover:border-[#FFD600]/50 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-transit">
+        <div 
+          onClick={() => onFilterCargas?.('em_transito')}
+          className="bg-[#121212] border border-zinc-800 hover:border-[#FFD600]/50 hover:bg-[#FFD600]/5 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-transit cursor-pointer"
+        >
           <div className="flex justify-between items-start">
             <span className="text-[11px] uppercase tracking-wider font-mono text-[#FFD600]">Trânsito</span>
             <Navigation className="w-4 h-4 text-[#FFD600] animate-pulse" />
           </div>
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-2xl md:text-3xl font-extrabold font-sans text-white">{metrics.emTransito}</span>
-            <span className="text-[10px] font-bold text-[#FFD600] bg-[#FFD600]/10 px-1.5 py-0.5 rounded font-mono">EM ATIVIDADES</span>
+            <span className="text-[10px] font-bold text-[#FFD600] bg-[#FFD600]/10 px-1.5 py-0.5 rounded font-mono font-black">EM ATIVIDADES</span>
           </div>
         </div>
 
         {/* Metric Stopped */}
-        <div className="bg-[#121212] border border-zinc-800 hover:border-red-900/50 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-stopped">
+        <div 
+          onClick={() => onFilterCargas?.('parado')}
+          className="bg-[#121212] border border-zinc-800 hover:border-red-900/50 hover:bg-red-950/10 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-stopped cursor-pointer"
+        >
           <div className="flex justify-between items-start">
             <span className="text-[11px] uppercase tracking-wider font-mono text-red-400">Bloqueadas / Paradas</span>
             <AlertTriangle className="w-4 h-4 text-red-500" />
           </div>
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-2xl md:text-3xl font-extrabold font-sans text-white">{metrics.paradas}</span>
-            <span className="text-[10px] font-bold text-red-400 bg-red-950/30 px-1.5 py-0.5 rounded font-mono">REQUER ATENÇÃO</span>
+            <span className="text-[10px] font-bold text-red-400 bg-red-950/30 px-1.5 py-0.5 rounded font-mono font-black">REQUER ATENÇÃO</span>
           </div>
         </div>
 
         {/* Metric Delivered */}
-        <div className="bg-[#121212] border border-zinc-800 hover:border-emerald-900/50 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-completed">
+        <div 
+          onClick={() => onFilterCargas?.('entregue')}
+          className="bg-[#121212] border border-zinc-800 hover:border-emerald-900/50 hover:bg-emerald-950/10 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-completed cursor-pointer"
+        >
           <div className="flex justify-between items-start">
             <span className="text-[11px] uppercase tracking-wider font-mono text-emerald-400">Entregues</span>
             <CheckCircle className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-2xl md:text-3xl font-extrabold font-sans text-white">{metrics.entregues}</span>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/30 px-1.5 py-0.5 rounded font-mono">CONCLUÍDAS</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/30 px-1.5 py-0.5 rounded font-mono font-black">CONCLUÍDAS</span>
           </div>
         </div>
       </div>

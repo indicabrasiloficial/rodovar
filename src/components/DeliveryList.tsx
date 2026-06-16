@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
 import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores } from '../db/storage';
 import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
@@ -601,6 +601,19 @@ export default function DeliveryList({
   const [vendedorFilter, setVendedorFilter] = useState('');
   const [isComercialOpen, setIsComercialOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Phone clipboard copy helper with visual indicator state
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const handleCopyPhone = (e: React.MouseEvent, phone: string, idKey: string) => {
+    e.stopPropagation();
+    if (!phone) return;
+    // Strip non-numeric/spurious formatting if desired, or keep as plain text. Let's write the display format.
+    navigator.clipboard.writeText(phone);
+    setCopiedId(idKey);
+    setTimeout(() => {
+      setCopiedId(null);
+    }, 1500);
+  };
 
   // Dynamically populate vendedor names from our central DB sync cache
   const vendedoresList = useMemo(() => {
@@ -1286,23 +1299,65 @@ export default function DeliveryList({
 
                     {/* Middle Row: Key Info Grid */}
                     <div className="grid grid-cols-2 gap-3 text-xs bg-zinc-950/40 border border-zinc-900/60 p-3 rounded-lg" onClick={() => onSelectDelivery(e.id)}>
-                      <div>
-                        <span className="text-gray-555 font-mono block text-[9px] uppercase tracking-wider text-gray-500">Cliente</span>
-                        <span className="font-semibold text-gray-300 block truncate max-w-full">{e.cliente}</span>
-                        <span className="text-[10px] text-gray-400 font-mono block mt-0.5">{e.tel_cliente}</span>
+                      <div onClick={(ev) => ev.stopPropagation()} className="cursor-default">
+                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider font-bold">Cliente</span>
+                        <span className="font-semibold text-gray-300 block truncate max-w-full mb-1">{e.cliente}</span>
+                        <div 
+                          onClick={(ev) => handleCopyPhone(ev, e.tel_cliente || '', `${e.id}-cli-phone`)}
+                          className={`inline-flex items-center gap-1.5 text-[10px] font-mono px-1.5 py-0.5 rounded border transition-all duration-200 cursor-pointer ${
+                            copiedId === `${e.id}-cli-phone`
+                              ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800'
+                              : 'bg-zinc-900/65 border-zinc-800 hover:border-zinc-700 text-gray-400 hover:text-white'
+                          }`}
+                          title="Clique para copiar"
+                        >
+                          {copiedId === `${e.id}-cli-phone` ? (
+                            <>
+                              <CheckCircle className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                              <span className="font-bold text-[9px]">Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>{e.tel_cliente || 'Sem Número'}</span>
+                              {e.tel_cliente && <Clipboard className="w-2.5 h-2.5 text-zinc-500" />}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div onClick={(ev) => ev.stopPropagation()} className="cursor-default">
+                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider font-bold">Motorista</span>
+                        <span className="font-semibold text-gray-300 block truncate max-w-full mb-1">{e.motorista}</span>
+                        <div 
+                          onClick={(ev) => handleCopyPhone(ev, e.tel_motorista || '', `${e.id}-mot-phone`)}
+                          className={`inline-flex items-center gap-1.5 text-[10px] font-mono px-1.5 py-0.5 rounded border transition-all duration-200 cursor-pointer ${
+                            copiedId === `${e.id}-mot-phone`
+                              ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800'
+                              : 'bg-zinc-900/65 border-zinc-800 hover:border-zinc-700 text-gray-400 hover:text-white'
+                          }`}
+                          title="Clique para copiar"
+                        >
+                          {copiedId === `${e.id}-mot-phone` ? (
+                            <>
+                              <CheckCircle className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                              <span className="font-bold text-[9px]">Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>{e.tel_motorista || 'Sem Número'}</span>
+                              {e.tel_motorista && <Clipboard className="w-2.5 h-2.5 text-zinc-500" />}
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div>
-                        <span className="text-gray-555 font-mono block text-[9px] uppercase tracking-wider text-gray-500">Motorista</span>
-                        <span className="font-semibold text-gray-300 block truncate max-w-full">{e.motorista}</span>
-                        <span className="text-[10px] text-gray-400 font-mono block mt-0.5">{e.tel_motorista}</span>
+                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider">Coleta</span>
+                        <span className="font-mono text-gray-350 block mt-1">{e.data_coleta}</span>
                       </div>
                       <div>
-                        <span className="text-gray-555 font-mono block text-[9px] uppercase tracking-wider text-gray-500 font-bold">Coleta</span>
-                        <span className="font-mono text-gray-350 block">{e.data_coleta}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider text-[#FFD600]">Prazo</span>
-                        <span className="font-mono text-[#FFD600] block">{e.prazo}</span>
+                        <span className="text-[#FFD600] font-mono block text-[9.5px] uppercase tracking-wider font-extrabold">Prazo</span>
+                        <div className="mt-0.5 inline-flex items-center gap-1 bg-[#FFD600]/15 border border-[#FFD600]/30 rounded px-2 py-0.5 text-[#FFD600] font-mono text-[11px] font-black">
+                          <span>{e.prazo}</span>
+                        </div>
                       </div>
                       <div className="col-span-2 border-t border-zinc-900/40 pt-2 grid grid-cols-2 gap-2 text-[10px] font-sans">
                         <div>
@@ -1463,9 +1518,12 @@ export default function DeliveryList({
 
                         {/* Dates */}
                         <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
-                          <div className="flex flex-col gap-0.5">
-                            <div className="text-gray-300 font-mono font-medium">Coleta: {e.data_coleta}</div>
-                            <div className="text-[10px] text-gray-500 font-mono">Prazo: {e.prazo}</div>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="text-zinc-400 font-mono text-[10.5px]">Coleta: {e.data_coleta}</div>
+                            <div className="inline-flex items-center gap-1 bg-[#FFD600]/15 border border-[#FFD600]/30 text-[#FFD600] font-mono text-[11px] font-black px-2 py-0.5 rounded w-fit" title="Prazo Limite de Entrega">
+                              <span className="text-[9px] uppercase font-bold opacity-80">Prazo:</span>
+                              <span>{e.prazo}</span>
+                            </div>
                           </div>
                         </td>
 
@@ -1473,7 +1531,29 @@ export default function DeliveryList({
                         <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
                           <div className="flex flex-col">
                             <span className="font-semibold text-gray-200">{e.cliente}</span>
-                            <span className="text-[10px] text-gray-500 font-mono">{e.tel_cliente}</span>
+                            <div className="mt-1" onClick={(ev) => ev.stopPropagation()}>
+                              <div 
+                                onClick={(ev) => handleCopyPhone(ev, e.tel_cliente || '', `${e.id}-dt-cli`)}
+                                className={`inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border transition-all duration-200 cursor-pointer ${
+                                  copiedId === `${e.id}-dt-cli`
+                                    ? 'bg-emerald-950/40 text-emerald-400 border-emerald-855'
+                                    : 'bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 text-gray-400 hover:text-white'
+                                }`}
+                                title="Clique para copiar telefone do cliente"
+                              >
+                                {copiedId === `${e.id}-dt-cli` ? (
+                                  <>
+                                    <CheckCircle className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                                    <span className="font-bold text-[9px]">Copiado!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>{e.tel_cliente || 'Sem Número'}</span>
+                                    {e.tel_cliente && <Clipboard className="w-2.5 h-2.5 text-zinc-500" />}
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </td>
 
@@ -1481,7 +1561,29 @@ export default function DeliveryList({
                         <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
                           <div className="flex flex-col">
                             <span className="font-semibold text-gray-200">{e.motorista}</span>
-                            <span className="text-[10px] text-gray-500 font-mono">{e.tel_motorista}</span>
+                            <div className="mt-1" onClick={(ev) => ev.stopPropagation()}>
+                              <div 
+                                onClick={(ev) => handleCopyPhone(ev, e.tel_motorista || '', `${e.id}-dt-mot`)}
+                                className={`inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border transition-all duration-200 cursor-pointer ${
+                                  copiedId === `${e.id}-dt-mot`
+                                    ? 'bg-emerald-950/40 text-emerald-400 border-emerald-855'
+                                    : 'bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 text-gray-400 hover:text-white'
+                                }`}
+                                title="Clique para copiar telefone do motorista"
+                              >
+                                {copiedId === `${e.id}-dt-mot` ? (
+                                  <>
+                                    <CheckCircle className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                                    <span className="font-bold text-[9px]">Copiado!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>{e.tel_motorista || 'Sem Número'}</span>
+                                    {e.tel_motorista && <Clipboard className="w-2.5 h-2.5 text-zinc-500" />}
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </td>
 

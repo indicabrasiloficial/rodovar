@@ -280,6 +280,10 @@ export default function App() {
             entregas={entregas} 
             onSelectDelivery={handleSelectDelivery}
             voiceHook={voice}
+            onFilterCargas={(status) => {
+              setStatusFilter(status);
+              setSelectedView('list');
+            }}
           />
         );
       case 'list':
