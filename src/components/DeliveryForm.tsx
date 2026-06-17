@@ -33,7 +33,9 @@ import {
   ShieldAlert,
   TrendingUp,
   AlertCircle,
-  Clipboard
+  Clipboard,
+  MapPin,
+  MessageSquare
 } from 'lucide-react';
 
 interface DeliveryFormProps {
@@ -68,6 +70,8 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
   const isEditMode = !!entregaId;
   const [isStatusBlocked, setIsStatusBlocked] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [showLocReminderModal, setShowLocReminderModal] = useState(false);
+  const [savedEntregaData, setSavedEntregaData] = useState<Entrega | null>(null);
 
   const [activeUser, setActiveUser] = useState({ username: 'sistema', displayName: 'Sistema', role: 'Operador Rodovar' });
   const [isLockedByAnother, setIsLockedByAnother] = useState(false);
@@ -362,7 +366,12 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
       }
     }
 
-    onSaved(saved.id);
+    if (!payload.link_localizacao) {
+      setSavedEntregaData({ ...saved, ...payload } as Entrega);
+      setShowLocReminderModal(true);
+    } else {
+      onSaved(saved.id);
+    }
   };
 
   if (isLockedByAnother && lockedUserInfo) {
@@ -417,6 +426,26 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
       </div>
     );
   }
+
+  const handleProceedWithoutLoc = () => {
+    if (savedEntregaData) {
+      onSaved(savedEntregaData.id);
+    }
+    setShowLocReminderModal(false);
+  };
+
+  const handleRequestLocViaWhatsApp = () => {
+    if (savedEntregaData) {
+      const cleanPhone = (savedEntregaData.tel_cliente || '').replace(/\D/g, '');
+      const clientName = savedEntregaData.cliente || 'Parceiro';
+      const msg = `Olá ${clientName}! Sou ${activeUser.displayName} da Rodovar. Acabamos de cadastrar o frete com destino ao seu endereço em ${savedEntregaData.destino}. O motorista ${savedEntregaData.motorista} está iniciando o processo de coleta hoje. Poderia nos enviar um link da localização exata do Google Maps por aqui para agilizarmos a sua entrega? Obrigado, aguardo!`;
+      const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+      
+      onSaved(savedEntregaData.id);
+    }
+    setShowLocReminderModal(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -989,6 +1018,82 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
         </div>
 
       </form>
+
+      {showLocReminderModal && savedEntregaData && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in" id="location-reminder-modal-overlay">
+          <div className="bg-[#0c0c0c] border-2 border-amber-500/50 rounded-2xl max-w-md w-full p-6 shadow-[0_0_50px_rgba(245,158,11,0.2)] space-y-6 relative overflow-hidden" id="location-reminder-modal-container">
+            {/* Ambient Background decoration */}
+            <div className="absolute -top-16 -right-16 w-32 h-32 bg-amber-500/10 blur-2xl rounded-full pointer-events-none" />
+            
+            <div className="flex items-start gap-4">
+              <div className="bg-amber-500/20 border border-amber-500/40 p-3 rounded-xl text-[#FFD600] shrink-0 animate-bounce">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <span className="text-[10px] uppercase font-mono tracking-widest text-[#FFD600] font-black block">
+                  🛡️ PROCESSO DE QUALIDADE RODOVAR
+                </span>
+                <h3 className="text-sm font-black uppercase text-white font-mono tracking-wide leading-tight">
+                  PEDIR LOGÍSTICA DE LOCALIZAÇÃO!
+                </h3>
+              </div>
+            </div>
+
+            <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-3.5 text-xs text-zinc-300 font-sans">
+              <p className="leading-relaxed">
+                Para que o monitoramento funcione de forma automática e integrada no mapa, precisamos do link de localização exata do Google Maps do cliente de entrega.
+              </p>
+              <div className="border-t border-zinc-900 pt-3 flex flex-col gap-2 font-mono text-[11px]">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-zinc-500 font-bold uppercase text-[9px]">Cliente:</span>
+                  <span className="text-[#FFD600] font-black truncate max-w-[200px]">{savedEntregaData.cliente}</span>
+                </div>
+                {savedEntregaData.tel_cliente && (
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-zinc-500 font-bold uppercase text-[9px]">Telefone:</span>
+                    <span className="text-zinc-300 font-semibold">{savedEntregaData.tel_cliente}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-zinc-500 font-bold uppercase text-[9px]">Entrega Destino:</span>
+                  <span className="text-zinc-350 truncate max-w-[200px]">{savedEntregaData.destino}</span>
+                </div>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-zinc-500 font-bold uppercase text-[9px]">Motorista:</span>
+                  <span className="text-zinc-350 font-bold truncate max-w-[200px]">{savedEntregaData.motorista}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] text-zinc-400 font-medium leading-relaxed font-sans">
+                Clique abaixo para enviar agora no WhatsApp do cliente o pedido formal de link de localização do estabelecimento.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleProceedWithoutLoc}
+                  className="w-full sm:flex-1 py-3 px-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 hover:border-zinc-700 text-zinc-400 hover:text-white transition rounded-xl font-mono text-xs font-black uppercase cursor-pointer text-center"
+                  id="reminder-proceed-without-btn"
+                >
+                  Continuar sem pedir
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={handleRequestLocViaWhatsApp}
+                  className="w-full sm:flex-1 py-3 px-4 bg-[#FFD600] hover:bg-[#ffe23b] text-black transition rounded-xl font-mono text-xs font-black uppercase cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(255,214,0,0.25)]"
+                  id="reminder-whatsapp-request-btn"
+                >
+                  <MessageSquare className="w-4 h-4 shrink-0 text-black" />
+                  <span>Pedir via WhatsApp</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

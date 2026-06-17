@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../db/firebase';
 import { Entrega } from '../types';
 import { TrackingCard } from './TrackingCard';
+import DeliveryMap from './DeliveryMap';
 import { Search, ArrowLeft, ShieldAlert, AlertCircle, Loader2 } from 'lucide-react';
 
 interface RastrearProps {
@@ -212,8 +213,27 @@ export const Rastrear: React.FC<RastrearProps> = ({ onClose, userLogged, onAcces
           )}
 
           {!loading && carga && (
-            <div className="animate-fade-in" id="card-holder-anim">
+            <div className="animate-fade-in space-y-6" id="card-holder-anim">
               <TrackingCard carga={carga} />
+              
+              {/* Mapa Local de Localização da Carga */}
+              <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-5 shadow-lg space-y-4">
+                <h4 className="font-extrabold text-xs uppercase tracking-wider font-mono text-zinc-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#FFD700] animate-pulse" />
+                  Percurso Autorizado / Mapa Local
+                </h4>
+                <div className="w-full h-80 rounded-xl overflow-hidden border border-zinc-900 shadow-inner">
+                  <DeliveryMap 
+                    entregas={[carga]} 
+                    selectedId={carga.id}
+                    singleView={true}
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[10px] uppercase font-mono text-zinc-500 px-1">
+                  <span>Origem: {carga.origem}</span>
+                  <span>Destino: {carga.destino}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>

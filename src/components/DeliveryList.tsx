@@ -3,6 +3,7 @@ import { Entrega, DeliveryStatus } from '../types';
 import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores } from '../db/storage';
 import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
 import { getDeliveryKm } from '../utils/distance';
+import { formatDateBR, formatRegistrationTime } from '../utils/date';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
@@ -922,6 +923,61 @@ export default function DeliveryList({
     return `Olá! Sou o ${getActiveUserFullName()} da Rodovar Transportadora. Sua carga para ${entrega.destino} está a caminho. O motorista ${entrega.motorista} está em deslocamento com previsão para ${entrega.prazo}. Qualquer dúvida estou por aqui!`;
   };
 
+  const handleDirectRequestClientLoc = (ev: React.MouseEvent, e: Entrega) => {
+    ev.stopPropagation();
+    const cleanPhone = (e.tel_cliente || '').replace(/\D/g, '');
+    const clientName = e.cliente || 'Parceiro';
+    let msg = '';
+    if (e.status === 'coletando') {
+      msg = `Olá ${clientName}! Sou o ${getActiveUserFullName()} da Rodovar. Nosso motorista ${e.motorista} já está iniciando a coleta da sua mercadoria com destino a ${e.destino}. Por favor, envie-nos o link exato da sua localização de entrega no Google de forma a garantir que o motorista faça a entrega com máxima precisão e rapidez. Muito obrigado!`;
+    } else {
+      msg = `Olá ${clientName}! Sou o ${getActiveUserFullName()} da Rodovar. Tudo bem? Poderia nos agilizar o envio do link do Google Maps da sua localização de entrega para a rota com destino a ${e.destino}? Assim já cadastramos no roteirizador do motorista. Agradecemos pela parceria!`;
+    }
+    const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const renderLocationReminderBadge = (e: Entrega) => {
+    if (e.status === 'entregue') return null;
+    if (e.link_localizacao && e.link_localizacao.trim().startsWith('http')) return null;
+
+    if (e.status === 'coletando') {
+      return (
+        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap" onClick={(ev) => ev.stopPropagation()} id={`loc-critical-alert-${e.id}`}>
+          <span className="bg-red-500/15 border border-red-500/40 text-red-400 font-mono text-[9px] font-black uppercase px-2 py-0.5 rounded flex items-center gap-1 shadow-[0_0_10px_rgba(239,68,68,0.1)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+            ⚠️ CRÍTICO: PEDIR LOCALIZAÇÃO AO CLIENTE! (COLETA INICIADA)
+          </span>
+          <button
+            type="button"
+            onClick={(ev) => handleDirectRequestClientLoc(ev, e)}
+            className="bg-red-650 hover:bg-red-700 hover:scale-[1.03] active:scale-[0.97] text-white font-mono text-[8.5px] font-black uppercase px-2 py-0.5 rounded border border-red-600 cursor-pointer flex items-center gap-1 shadow transition-all"
+            title="Enviar WhatsApp solicitando Localização"
+          >
+            <Phone className="w-2.5 h-2.5" /> Pedir Agora
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap" onClick={(ev) => ev.stopPropagation()} id={`loc-pending-alert-${e.id}`}>
+        <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-[9px] font-bold uppercase px-1.5 py-0.5 rounded flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+          ⚠️ PENDENTE: PEDIR LOCALIZAÇÃO AO CLIENTE
+        </span>
+        <button
+          type="button"
+          onClick={(ev) => handleDirectRequestClientLoc(ev, e)}
+          className="bg-amber-500/15 hover:bg-[#FFD600] text-amber-400 hover:text-black font-mono text-[8.5px] font-bold uppercase px-1.5 py-0.5 rounded border border-amber-500/20 hover:border-transparent cursor-pointer flex items-center gap-1 shadow transition-all"
+          title="Fazer Cobrança via WhatsApp"
+        >
+          <Phone className="w-2.5 h-2.5" /> Solicitar
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Top action toolbar */}
@@ -1287,7 +1343,13 @@ export default function DeliveryList({
                           </div>
                           <p className="text-[10px] text-gray-400 font-mono m-0">
                             Vend: {e.vendedor || 'Sem registro'} • <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
+                            {e.created_at && (
+                              <>
+                                <span className="text-zinc-650"> •</span> Hora Cad: <span className="text-zinc-300 font-bold">{formatRegistrationTime(e.created_at)}</span>
+                              </>
+                            )}
                           </p>
+                          {renderLocationReminderBadge(e)}
                         </div>
                       </div>
                       
@@ -1351,12 +1413,12 @@ export default function DeliveryList({
                       </div>
                       <div>
                         <span className="text-gray-500 font-mono block text-[9px] uppercase tracking-wider">Coleta</span>
-                        <span className="font-mono text-gray-350 block mt-1">{e.data_coleta}</span>
+                        <span className="font-mono text-gray-300 block mt-1 font-bold text-[11px]">{formatDateBR(e.data_coleta)}</span>
                       </div>
                       <div>
-                        <span className="text-[#FFD600] font-mono block text-[9.5px] uppercase tracking-wider font-extrabold">Prazo</span>
-                        <div className="mt-0.5 inline-flex items-center gap-1 bg-[#FFD600]/15 border border-[#FFD600]/30 rounded px-2 py-0.5 text-[#FFD600] font-mono text-[11px] font-black">
-                          <span>{e.prazo}</span>
+                        <span className="text-[#FFD600] font-mono block text-[10px] uppercase tracking-wider font-black">Prazo Limite</span>
+                        <div className="mt-1 inline-flex items-center gap-1.5 bg-[#FFD600]/20 border-2 border-[#FFD600] rounded-lg px-2.5 py-1 text-[#FFD600] font-mono text-[13px] font-black shadow-[0_0_10px_rgba(255,214,0,0.15)]">
+                          <span>{formatDateBR(e.prazo)}</span>
                         </div>
                       </div>
                       <div className="col-span-2 border-t border-zinc-900/40 pt-2 grid grid-cols-2 gap-2 text-[10px] font-sans">
@@ -1508,21 +1570,28 @@ export default function DeliveryList({
                               <ArrowRight className="w-3 h-3 text-zinc-500" />
                               <span className="text-[#FFD600]">{e.destino}</span>
                             </div>
-                            <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1.5">
+                            <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1.5 flex-wrap">
                               <span>Vend: {e.vendedor || 'Sem registro'}</span>
-                              <span className="text-zinc-600">•</span>
+                              <span className="text-zinc-650">•</span>
                               <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
+                              {e.created_at && (
+                                <>
+                                  <span className="text-zinc-650">•</span>
+                                  <span>Hora Cad: <span className="text-zinc-300 font-bold">{formatRegistrationTime(e.created_at)}</span></span>
+                                </>
+                              )}
                             </div>
+                            {renderLocationReminderBadge(e)}
                           </div>
                         </td>
 
                         {/* Dates */}
                         <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
                           <div className="flex flex-col gap-1.5">
-                            <div className="text-zinc-400 font-mono text-[10.5px]">Coleta: {e.data_coleta}</div>
-                            <div className="inline-flex items-center gap-1 bg-[#FFD600]/15 border border-[#FFD600]/30 text-[#FFD600] font-mono text-[11px] font-black px-2 py-0.5 rounded w-fit" title="Prazo Limite de Entrega">
-                              <span className="text-[9px] uppercase font-bold opacity-80">Prazo:</span>
-                              <span>{e.prazo}</span>
+                            <div className="text-zinc-300 font-mono text-[11px] font-bold">Coleta: {formatDateBR(e.data_coleta)}</div>
+                            <div className="inline-flex items-center gap-1.5 bg-[#FFD600]/20 border-2 border-[#FFD600] text-[#FFD600] font-mono text-xs font-black px-2.5 py-1 rounded-lg w-fit shadow-[0_0_8px_rgba(255,214,0,0.15)]" title="Prazo Limite de Entrega">
+                              <span className="text-[9px] uppercase font-black opacity-90">Prazo:</span>
+                              <span className="text-[12px]">{formatDateBR(e.prazo)}</span>
                             </div>
                           </div>
                         </td>

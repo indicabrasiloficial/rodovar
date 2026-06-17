@@ -16,7 +16,6 @@ import ChangePasswordModal from './components/ChangePasswordModal';
 import EmployeeRegistration from './components/EmployeeRegistration';
 import AgentManual from './components/AgentManual';
 import BlacklistManager from './components/BlacklistManager';
-import GroupChat from './components/GroupChat';
 import BackupRegistry from './components/BackupRegistry';
 import { Rastrear } from './components/Rastrear';
 import { MotoristaTracking } from './components/MotoristaTracking';
@@ -48,7 +47,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'group_chat' | 'backup' | 'rastrear' | 'motorista';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista';
 
 
 export default function App() {
@@ -380,18 +379,6 @@ export default function App() {
         return (
           <BlacklistManager currentUser={user} />
         );
-      case 'group_chat':
-        return (
-          <GroupChat 
-            user={user}
-            isSpeechMuted={isSpeechMuted}
-            onSpeak={(text) => {
-              if (window.falarRodovar) {
-                window.falarRodovar(text);
-              }
-            }}
-          />
-        );
       case 'backup':
         if (!user || (user.username !== 'master' && user.role !== 'Master')) {
           return <div className="text-center p-12 text-red-500 font-mono font-bold uppercase tracking-wider">Acesso Negado: Apenas o perfil Master tem acesso ao Backup Central.</div>;
@@ -548,20 +535,6 @@ export default function App() {
             >
               <LayoutDashboard className="w-4 h-4 shrink-0 text-inherit" />
               <span>Painel</span>
-            </button>
-
-            {/* Nav Group Chat - Professional Group Chat as requested */}
-            <button
-              onClick={() => setSelectedView('group_chat')}
-              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
-                selectedView === 'group_chat'
-                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
-                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
-              }`}
-              id="nav-group_chat"
-            >
-              <Bot className="w-4 h-4 shrink-0 text-inherit" />
-              <span>Chat Grupo</span>
             </button>
 
             {/* Nav Stats */}
@@ -864,20 +837,6 @@ export default function App() {
                 >
                   <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
                   <span>Painel</span>
-                </button>
-
-                {/* Nav Group Chat */}
-                <button
-                  onClick={() => setSelectedView('group_chat')}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
-                    selectedView === 'group_chat'
-                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
-                    : 'bg-zinc-900/20 border-transparent text-zinc-400 hover:text-[#FFD600]'
-                  }`}
-                  id="desktop-nav-group-chat"
-                >
-                  <Bot className="w-3.5 h-3.5 shrink-0" />
-                  <span>Chat Grupo</span>
                 </button>
               </div>
             </div>

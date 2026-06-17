@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
 import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats } from '../db/storage';
 import { getDeliveryKm } from '../utils/distance';
+import { formatDateBR } from '../utils/date';
 import { 
   ArrowLeft,
   Calendar, 
@@ -140,7 +141,6 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [clickedScripts, setClickedScripts] = useState<string[]>([]);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [copiedDriverLink, setCopiedDriverLink] = useState(false);
 
   const copyTrackingToClipboard = () => {
     if (!entrega?.trackingCode) return;
@@ -149,18 +149,6 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     setTimeout(() => setCopiedCode(false), 2000);
     if (window.falarRodovar) {
       window.falarRodovar("Código de rastreamento copiado com sucesso!");
-    }
-  };
-
-  const copyDriverLinkToClipboard = () => {
-    if (!entrega?.trackingCode) return;
-    const origin = window.location.origin;
-    const link = `${origin}/motorista/${entrega.trackingCode}`;
-    navigator.clipboard.writeText(link);
-    setCopiedDriverLink(true);
-    setTimeout(() => setCopiedDriverLink(false), 2000);
-    if (window.falarRodovar) {
-      window.falarRodovar("Link do motorista copiado com sucesso!");
     }
   };
 
@@ -520,35 +508,6 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     );
   };
 
-  const isDriverDisconnected = () => {
-    if (entrega.status === 'entregue') return false;
-    if (!entrega.ultimaAtualizacao) return true;
-    try {
-      const now = new Date();
-      const lastUpdate = new Date(entrega.ultimaAtualizacao);
-      const diffMs = now.getTime() - lastUpdate.getTime();
-      const diffMin = Math.floor(diffMs / (1000 * 60));
-      return diffMin >= 5;
-    } catch {
-      return true;
-    }
-  };
-
-  const isDesconectado = isDriverDisconnected();
-
-  const handleNotifyDisconnectedDriver = () => {
-    const linkDriver = `${window.location.origin}/motorista/${entrega.trackingCode}`;
-    const descText = `Olá ${entrega.motorista}! Identificamos no Rodovar Monitora que a transmissão do seu rastreamento do GPS perdeu conexão ou foi desativada.
-
-Por favor, acesse o link: ${linkDriver} e clique no botão "ATIVAR RASTREAMENTO AO VIVO" para restabelecer a telemetria em tempo real da sua viagem de forma segura. Obrigado e boa viagem!`;
-    
-    clickWhatsApp(entrega.tel_motorista, descText);
-    
-    if (window.falarRodovar) {
-      window.falarRodovar(`Disparando mensagem de reaviso de telemetria via WhatsApp para o motorista ${entrega.motorista}.`);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Header navigations */}
@@ -621,111 +580,6 @@ Por favor, acesse o link: ${linkDriver} e clique no botão "ATIVAR RASTREAMENTO 
           >
             <ExternalLink className="w-3.5 h-3.5 shrink-0" />
             <span>Abrir Link do Cliente</span>
-          </a>
-        </div>
-      </div>
-
-      {/* ALERTA DE PERDA DE SINAL / MOTORISTA DESCONECTADO */}
-      {isDesconectado && (
-        <div 
-          className="bg-red-950/25 border-2 border-red-500/40 rounded-xl p-5 shadow-[0_0_20px_rgba(239,68,68,0.08)] relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-5"
-          id="operator-disconnection-alert-box"
-        >
-          {/* Fundo sutil decorativo */}
-          <div className="absolute -top-12 -left-12 w-32 h-32 bg-red-500/10 blur-2xl rounded-full pointer-events-none" />
-          
-          <div className="flex items-start gap-3.5 z-10 w-full md:w-auto" id="alert-text-wrapper">
-            <div className="bg-red-500/20 border border-red-500/35 p-2.5 rounded-xl text-red-400 shrink-0 flex items-center justify-center shadow-lg">
-              <AlertTriangle className="w-5 h-5 shrink-0 animate-bounce" />
-            </div>
-            <div>
-              <h3 className="text-xs uppercase font-mono tracking-widest text-red-400 font-extrabold leading-none mb-1.5 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                ⚠️ MOTORISTA DESCONECTADO / FORA DA REDE
-              </h3>
-              <p className="text-xs text-zinc-305 leading-normal max-w-xl">
-                O motorista <strong className="text-white font-black">{entrega.motorista}</strong> não está compartilhando a geolocalização ativa (ou o sinal caiu há mais de 5 minutos). O cliente e o operador perderam a sincronização em tempo real!
-              </p>
-              <span className="text-[10px] font-mono text-red-420 block mt-2 font-semibold">
-                Última transmissão registrada: {entrega.ultimaAtualizacao ? `${new Date(entrega.ultimaAtualizacao).toLocaleDateString('pt-BR')} às ${new Date(entrega.ultimaAtualizacao).toLocaleTimeString('pt-BR')}` : 'Nenhuma transmissão recebida'}
-              </span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleNotifyDisconnectedDriver}
-            className="w-full md:w-auto px-5 py-3 bg-red-650 hover:bg-red-700 text-white text-xs font-black uppercase rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 shadow-[0_4px_15px_rgba(239,68,68,0.25)] z-10 font-sans shrink-0"
-            id="notify-disconnected-driver-btn"
-          >
-            <MessageSquare className="w-4 h-4 text-white" />
-            <span>AVISAR MOTORISTA NOVAMENTE</span>
-          </button>
-        </div>
-      )}
-
-      {/* Bloco de Rastreamento Público do Motorista (Rastreamento Ao Vivo) */}
-      <div 
-        className="bg-[#121212] border border-cyan-500/30 rounded-xl p-4.5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_0_15px_rgba(6,182,212,0.05)]"
-        id="driver-tracking-public-block"
-      >
-        <div className="flex items-center gap-3">
-          <div className="bg-cyan-500/10 border border-cyan-500/20 p-2 rounded-xl text-cyan-400">
-            <Truck className="w-4 h-4 animate-pulse shrink-0" />
-          </div>
-          <div>
-            <h3 className="text-[10px] uppercase font-mono tracking-widest text-cyan-400 font-bold leading-none">Rastreio Ao Vivo (Motorista)</h3>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-sm font-black font-mono text-cyan-400 tracking-tight bg-black px-2 py-0.5 rounded border border-zinc-900 shadow-inner">
-                {entrega.trackingCode || 'Mapeando...'}
-              </span>
-              {entrega.cte ? (
-                <div className="flex flex-wrap items-center gap-1.5 max-w-[400px]">
-                  <span className="text-[10px] text-zinc-500 font-medium mr-0.5">CT-e(s) vinculado(s):</span>
-                  {entrega.cte.split(/[,;]+/).map(c => c.trim()).filter(Boolean).map((item, idx) => (
-                    <span key={idx} className="bg-cyan-950/30 text-cyan-400 font-black font-mono px-1.5 py-0.5 rounded border border-cyan-500/15 text-[10px] shadow-sm select-all">
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-[10px] text-zinc-500 font-medium">
-                  Compartilhe o link com o motorista para iniciar o rastreamento por satélite
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5 w-full md:w-auto" id="driver-tracking-actions-wrap">
-          <button
-            type="button"
-            onClick={copyDriverLinkToClipboard}
-            className="flex-1 md:flex-none px-4 py-2 bg-zinc-950 border border-zinc-800 hover:border-cyan-500/35 hover:text-white text-zinc-300 text-xs font-bold uppercase rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
-            id="copy-driver-link-btn"
-          >
-            {copiedDriverLink ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400 font-extrabold">Link Copiado!</span>
-              </>
-            ) : (
-              <>
-                <Share2 className="w-3.5 h-3.5 text-zinc-400" />
-                <span>Copiar Link do Motorista</span>
-              </>
-            )}
-          </button>
-
-          <a
-            href={`/motorista/${entrega.trackingCode}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 md:flex-none px-4 py-2 bg-cyan-500 hover:bg-cyan-455 text-[#0a0a0a] text-xs font-black uppercase rounded-lg transition-all transform hover:scale-[1.02] cursor-pointer flex items-center justify-center gap-1.5 shadow-md font-sans"
-            id="open-driver-tracking-link"
-          >
-            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-            <span>Painel do Motorista</span>
           </a>
         </div>
       </div>
@@ -938,19 +792,23 @@ Por favor, acesse o link: ${linkDriver} e clique no botão "ATIVAR RASTREAMENTO 
               </div>
 
               {/* Box Dates */}
-              <div className="bg-zinc-950/50 p-4 border border-zinc-900 rounded-xl space-y-3">
+              <div className="bg-zinc-950/55 p-4 border border-zinc-900 rounded-xl space-y-3">
                 <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] flex items-center gap-1.5 font-bold">
                   <Calendar className="w-4 h-4" />
                   Datas e Agendamento
                 </span>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-gray-500 font-mono block uppercase text-[9px]">DATA COLETA</span>
-                    <span className="text-gray-300 font-mono font-bold text-sm block mt-0.5">{entrega.data_coleta}</span>
+                    <span className="text-gray-400 font-mono block uppercase text-[9.5px] font-bold">DATA COLETA</span>
+                    <span className="text-gray-200 font-mono font-bold text-[16px] block mt-1 bg-zinc-900 border border-zinc-800 px-3 py-1 rounded-xl w-fit">
+                      {formatDateBR(entrega.data_coleta)}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-gray-500 font-mono block uppercase text-[9px]">PRAZO LIMITE</span>
-                    <span className="text-[#FFD600] font-mono font-bold text-sm block mt-0.5">{entrega.prazo}</span>
+                    <span className="text-[#FFD600] font-mono block uppercase text-[9.5px] font-black">PRAZO LIMITE</span>
+                    <span className="text-[#FFD600] font-mono font-black text-[18px] block mt-1 bg-[#FFD600]/15 border-2 border-[#FFD600] px-3 py-1 rounded-xl w-fit shadow-[0_0_15px_rgba(255,214,0,0.15)] animate-pulse">
+                      {formatDateBR(entrega.prazo)}
+                    </span>
                   </div>
                 </div>
               </div>
