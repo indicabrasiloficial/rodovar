@@ -22,7 +22,8 @@ import {
   Clipboard,
   Trash2,
   Lock,
-  Truck
+  Truck,
+  Printer
 } from 'lucide-react';
 
 interface DeliveryListProps {
@@ -105,6 +106,13 @@ export function parsePastedTextToDeliveries(text: string) {
       return `${y}-${m}-${d}`;
     }
     return val;
+  };
+
+  const cleanVendedorName = (name: string): string => {
+    if (!name) return '';
+    // Split by slashes, backslashes, or dashes to keep only the first name
+    const parts = name.split(/[\/\-\\]/);
+    return (parts[0] || '').trim().toUpperCase();
   };
 
   const parseStatusValue = (input: string): DeliveryStatus => {
@@ -264,7 +272,7 @@ export function parsePastedTextToDeliveries(text: string) {
 
     results.push({
       data_coleta: parseDateToISO(val_data_coleta),
-      vendedor: val_vendedor,
+      vendedor: cleanVendedorName(val_vendedor),
       cliente: val_cliente,
       tel_cliente: val_tel_cliente.replace(/\D/g, ''),
       motorista: val_motorista,
@@ -422,7 +430,7 @@ export function parsePastedTextToDeliveries(text: string) {
 
             results.push({
               data_coleta: parseDateToISO(val_data_coleta),
-              vendedor: val_vendedor,
+              vendedor: cleanVendedorName(val_vendedor),
               cliente: val_cliente,
               tel_cliente: val_tel_cliente.replace(/\D/g, ''),
               motorista: val_motorista,
@@ -476,7 +484,7 @@ export function parsePastedTextToDeliveries(text: string) {
 
           results.push({
             data_coleta: parseDateToISO(dataCol),
-            vendedor: vendedorCol,
+            vendedor: cleanVendedorName(vendedorCol),
             cliente: clienteCol,
             tel_cliente: telClienteCol.replace(/\D/g, ''),
             motorista: motoristaCol,
@@ -570,6 +578,369 @@ function DesktopSkeletonRow() {
   );
 }
 
+// Modern, high-performance HTML print delivery document router
+function printDeliveries(entregas: Entrega[], options: { showFinance: boolean; showObs: boolean; showSignature: boolean }) {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert('Por favor, permita pop-ups para imprimir as rotas.');
+    return;
+  }
+
+  const dateStr = new Date().toLocaleString('pt-BR');
+  
+  // Calculate statistics
+  const totalCargas = entregas.length;
+  const totalKm = entregas.reduce((acc, curr) => {
+    const kmVal = curr.km !== undefined && curr.km > 0 
+      ? Number(curr.km) 
+      : 0;
+    return acc + kmVal;
+  }, 0);
+  
+  const totalFreteEmp = entregas.reduce((acc, curr) => acc + (Number(curr.frete_empresa) || 0), 0);
+  const totalFreteMot = entregas.reduce((acc, curr) => acc + (Number(curr.frete_motorista) || 0), 0);
+  const saldoLiquido = totalFreteEmp - totalFreteMot;
+
+  let cardsHtml = '';
+  entregas.forEach((e, idx) => {
+    const statusText = e.status === 'entregue' ? 'Entregue ✅' : 
+                       e.status === 'em_transito' ? 'Previsão de Entrega' : 
+                       e.status === 'parado' ? 'Parado 🛑' : 'Coletando 📦';
+    
+    cardsHtml += `
+      <div class="route-card">
+        <div class="card-header">
+          <span class="route-number">ROTA #${String(idx + 1).padStart(2, '0')}</span>
+          <span class="route-status ${e.status}">${statusText}</span>
+        </div>
+        
+        <div class="card-grid">
+          <div class="grid-col">
+            <p><strong>Origem:</strong> ${e.origem || 'Não informada'}</p>
+            <p><strong>Destino:</strong> ${e.destino || 'Não informado'}</p>
+            <p><strong>Carga / KM:</strong> ${e.km ? e.km.toLocaleString('pt-BR') : '0'} km</p>
+            <p><strong>Vendedor (Comercial):</strong> ${e.vendedor || 'Sem Registro'}</p>
+          </div>
+          <div class="grid-col">
+            <p><strong>Cliente:</strong> ${e.cliente || 'Sem cadastro'} ${e.tel_cliente ? `(${e.tel_cliente})` : ''}</p>
+            <p><strong>Motorista:</strong> ${e.motorista || 'Sem cadastro'} ${e.tel_motorista ? `(${e.tel_motorista})` : ''}</p>
+            <p><strong>Data de Coleta:</strong> ${e.data_coleta ? new Date(e.data_coleta + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A'}</p>
+            ${e.prazo ? `<p><strong>Prazo de Entrega:</strong> ${new Date(e.prazo + 'T00:00:00').toLocaleDateString('pt-BR')}</p>` : ''}
+          </div>
+        </div>
+
+        ${options.showFinance ? `
+        <div class="finance-strip">
+          <div class="fin-item"><strong>Frete Empresa:</strong> R$ ${Number(e.frete_empresa || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="fin-item"><strong>Frete Motorista:</strong> R$ ${Number(e.frete_motorista || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="fin-item saldo"><strong>Saldo Líquido:</strong> R$ ${Number((e.frete_empresa || 0) - (e.frete_motorista || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        </div>
+        ` : ''}
+
+        ${options.showObs && e.observacoes ? `
+        <div class="obs-box">
+          <strong>Observações:</strong>
+          <pre>${e.observacoes}</pre>
+        </div>
+        ` : ''}
+
+        ${options.showSignature ? `
+        <div class="signature-row">
+          <div class="sig-col">
+            <div class="sig-line"></div>
+            <p>Assinatura do Motorista</p>
+          </div>
+          <div class="sig-col">
+            <div class="sig-line"></div>
+            <p>Assinatura do Recebedor / Cliente</p>
+          </div>
+        </div>
+        ` : ''}
+      </div>
+    `;
+  });
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Roteiro de Entregas - Rodovar Monitora</title>
+      <style>
+        body {
+          font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+          color: #111;
+          background-color: #fff;
+          margin: 0;
+          padding: 30px;
+          line-height: 1.5;
+        }
+        @media print {
+          body { padding: 0; }
+          .no-print { display: none !important; }
+        }
+        
+        .print-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 2px solid #ddd;
+          padding-bottom: 12px;
+          margin-bottom: 25px;
+        }
+        .logo-area h1 {
+          font-size: 24px;
+          font-weight: 800;
+          margin: 0;
+          color: #000;
+          letter-spacing: -0.5px;
+        }
+        .logo-area span {
+          font-size: 11px;
+          text-transform: uppercase;
+          color: #666;
+          letter-spacing: 1.5px;
+          font-weight: 600;
+        }
+        .meta-area {
+          text-align: right;
+          font-size: 11px;
+          color: #555;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 15px;
+          background: #f8f9fa;
+          border: 1px solid #e9ecef;
+          padding: 15px;
+          border-radius: 8px;
+          margin-bottom: 30px;
+        }
+        .stat-card-title {
+          font-size: 10px;
+          text-transform: uppercase;
+          color: #6c757d;
+          font-weight: bold;
+          margin-bottom: 4px;
+        }
+        .stat-card-val {
+          font-size: 16px;
+          font-weight: bold;
+          color: #111;
+        }
+
+        /* Route Card */
+        .route-card {
+          border: 1px solid #dee2e6;
+          border-radius: 8px;
+          padding: 20px;
+          margin-bottom: 25px;
+          page-break-inside: avoid;
+          background: #ffffff;
+        }
+        .card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid #e9ecef;
+          padding-bottom: 10px;
+          margin-bottom: 15px;
+        }
+        .route-number {
+          font-size: 15px;
+          font-weight: bold;
+          font-family: monospace;
+          background: #000;
+          color: #fff;
+          padding: 2px 8px;
+          border-radius: 4px;
+        }
+        .route-status {
+          font-size: 11px;
+          font-weight: bold;
+          text-transform: uppercase;
+          padding: 3px 8px;
+          border-radius: 20px;
+          border: 1px solid transparent;
+        }
+        .route-status.coletando { background: #e8f4fd; color: #1d88e5; border-color: #b3e5fc; }
+        .route-status.em_transito { background: #fff8e1; color: #f57f17; border-color: #ffe082; }
+        .route-status.parado { background: #ffebee; color: #c62828; border-color: #ffcdd2; }
+        .route-status.entregue { background: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }
+
+        .card-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 15px;
+        }
+        .grid-col p {
+          margin: 6px 0;
+          font-size: 13px;
+        }
+
+        /* Finance Strip */
+        .finance-strip {
+          display: flex;
+          justify-content: space-between;
+          background: #f8f9fa;
+          border: 1px dashed #ced4da;
+          padding: 10px 15px;
+          border-radius: 6px;
+          margin-bottom: 15px;
+          font-size: 12.5px;
+        }
+        .fin-item.saldo {
+          color: #2e7d32;
+          font-weight: bold;
+        }
+
+        /* Observations */
+        .obs-box {
+          background: #fbfbfb;
+          border-left: 3px solid #6c757d;
+          padding: 10px 15px;
+          margin-bottom: 15px;
+          border-radius: 0 4px 4px 0;
+        }
+        .obs-box strong {
+          display: block;
+          font-size: 11px;
+          color: #495057;
+          margin-bottom: 4px;
+        }
+        .obs-box pre {
+          margin: 0;
+          font-size: 12px;
+          color: #333;
+          white-space: pre-wrap;
+          font-family: inherit;
+        }
+
+        /* Signature */
+        .signature-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 30px;
+          margin-top: 25px;
+          padding-top: 15px;
+          border-top: 1px dashed #dee2e6;
+        }
+        .sig-col {
+          text-align: center;
+        }
+        .sig-line {
+          height: 1px;
+          background: #495057;
+          width: 80%;
+          margin: 30px auto 5px auto;
+        }
+        .sig-col p {
+          font-size: 11px;
+          color: #495057;
+          margin: 0;
+        }
+
+        /* Action Buttons */
+        .no-print-toolbar {
+          background: #111;
+          color: #fff;
+          padding: 12px 25px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          position: sticky;
+          top: 0;
+          z-index: 9999;
+          margin: -30px -30px 30px -30px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        .toolbar-title {
+          font-size: 13px;
+          font-weight: bold;
+          font-family: sans-serif;
+        }
+        .toolbar-actions {
+          display: flex;
+          gap: 10px;
+        }
+        .btn {
+          padding: 6px 14px;
+          font-size: 12px;
+          font-weight: bold;
+          border-radius: 6px;
+          border: none;
+          cursor: pointer;
+          font-family: sans-serif;
+          transition: transform 0.1s;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: #ffd600; color: #000; }
+        .btn-secondary { background: #333; color: #ccc; border: 1px solid #444; }
+      </style>
+    </head>
+    <body>
+      <div class="no-print-toolbar no-print">
+        <span class="toolbar-title">📝 PREVISUALIZAÇÃO DE IMPRESSÃO (CONTROLE DE ROTAS RODOVAR)</span>
+        <div class="toolbar-actions">
+          <button class="btn btn-secondary" onclick="window.close()">Fechar Guia</button>
+          <button class="btn btn-primary" onclick="window.print()">Imprimir Roteiro</button>
+        </div>
+      </div>
+
+      <div class="print-header">
+        <div class="logo-area">
+          <h1>RODOVAR MONITORA</h1>
+          <span>Logística & Transporte de Cargas</span>
+        </div>
+        <div class="meta-area">
+          <p style="margin:0 0 4px 0"><strong>Emitido em:</strong> ${dateStr}</p>
+          <p style="margin:0"><strong>Operador:</strong> Sistema Rodovar</p>
+        </div>
+      </div>
+
+      <div class="stats-bar">
+        <div>
+          <div class="stat-card-title">Total de Rotas</div>
+          <div class="stat-card-val">${totalCargas}</div>
+        </div>
+        <div>
+          <div class="stat-card-title">Distância Total</div>
+          <div class="stat-card-val">${totalKm.toLocaleString('pt-BR')} km</div>
+        </div>
+        <div>
+          <div class="stat-card-title">Saldo Líquido</div>
+          <div class="stat-card-val">${options.showFinance ? `R$ ${saldoLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '---'}</div>
+        </div>
+        <div>
+          <div class="stat-card-title font-bold text-[#ffd600]">Status</div>
+          <div class="stat-card-val" style="font-size:12px; color:#555; font-weight:normal; margin-top:3px;">Pronto p/ Emissão</div>
+        </div>
+      </div>
+
+      <div class="routes-container">
+        ${cardsHtml}
+      </div>
+
+      <script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+          }, 450);
+        };
+      </script>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+}
+
 export default function DeliveryList({
   entregas,
   onSelectDelivery,
@@ -605,6 +976,7 @@ export default function DeliveryList({
 
   // Phone clipboard copy helper with visual indicator state
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
   const handleCopyPhone = (e: React.MouseEvent, phone: string, idKey: string) => {
     e.stopPropagation();
     if (!phone) return;
@@ -853,6 +1225,67 @@ export default function DeliveryList({
   // Filter Logic grounded on high performance secure cursor paginated lists
   const filteredEntregas = loadedEntregas;
 
+  // States for Print Routes Modal
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printSelectedIds, setPrintSelectedIds] = useState<string[]>([]);
+  const [printShowFinance, setPrintShowFinance] = useState(true);
+  const [printShowObs, setPrintShowObs] = useState(true);
+  const [printShowSignature, setPrintShowSignature] = useState(true);
+  const [printSearchQuery, setPrintSearchQuery] = useState('');
+
+  const handleOpenPrintModal = () => {
+    if (selectedIds.length > 0) {
+      setPrintSelectedIds([...selectedIds]);
+    } else {
+      setPrintSelectedIds(filteredEntregas.map(e => e.id));
+    }
+    setPrintSearchQuery('');
+    setIsPrintModalOpen(true);
+  };
+
+  const handleTogglePrintItem = (id: string) => {
+    setPrintSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleAllPrintItems = (currentListIds: string[]) => {
+    const allSelected = currentListIds.every(id => printSelectedIds.includes(id));
+    if (allSelected) {
+      setPrintSelectedIds(prev => prev.filter(id => !currentListIds.includes(id)));
+    } else {
+      setPrintSelectedIds(prev => Array.from(new Set([...prev, ...currentListIds])));
+    }
+  };
+
+  const printFilteredEntregas = useMemo(() => {
+    return filteredEntregas.filter(e => {
+      if (!printSearchQuery.trim()) return true;
+      const q = printSearchQuery.toLowerCase().trim();
+      return (
+        (e.motorista || '').toLowerCase().includes(q) ||
+        (e.vendedor || '').toLowerCase().includes(q) ||
+        (e.cliente || '').toLowerCase().includes(q) ||
+        (e.origem || '').toLowerCase().includes(q) ||
+        (e.destino || '').toLowerCase().includes(q) ||
+        (e.id || '').toLowerCase().includes(q)
+      );
+    });
+  }, [filteredEntregas, printSearchQuery]);
+
+  const handleExecutePrint = () => {
+    const deliveriesToPrint = filteredEntregas.filter(e => printSelectedIds.includes(e.id));
+    if (deliveriesToPrint.length === 0) {
+      alert('Selecione pelo menos uma rota para imprimir.');
+      return;
+    }
+    printDeliveries(deliveriesToPrint, {
+      showFinance: printShowFinance,
+      showObs: printShowObs,
+      showSignature: printShowSignature
+    });
+  };
+
   // Export to Excel-ready CSV
   const handleExportToCSV = () => {
     // Columns Headers
@@ -1024,6 +1457,15 @@ export default function DeliveryList({
           >
             <Download className="w-3.5 h-3.5 text-[#FFD600]" />
             Exportar Excel
+          </button>
+
+          <button
+            onClick={handleOpenPrintModal}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] uppercase text-xs font-mono font-bold tracking-wider rounded-lg transition-all cursor-pointer text-gray-300"
+            id="list-print-routes"
+          >
+            <Printer className="w-3.5 h-3.5 text-[#FFD600]" />
+            Imprimir Rotas
           </button>
         </div>
       </div>
@@ -1217,6 +1659,13 @@ export default function DeliveryList({
               </span>
             </div>
             <div className="flex items-center gap-2.5">
+              <button
+                onClick={handleOpenPrintModal}
+                className="px-3 py-1.5 border border-[#FFD600]/80 hover:border-[#FFD600] bg-zinc-900/60 hover:bg-zinc-900 text-[#FFD600] rounded-lg text-[10px] font-mono font-bold uppercase cursor-pointer transition-all flex items-center gap-1.5 shadow-md shadow-[#FFD600]/5"
+              >
+                <Printer className="w-3.5 h-3.5 text-[#FFD600]" />
+                Imprimir ({selectedIds.length})
+              </button>
               <button
                 onClick={() => setSelectedIds([])}
                 className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-gray-400 hover:text-white rounded-lg text-[10px] font-mono font-bold uppercase cursor-pointer transition-all"
@@ -1901,6 +2350,216 @@ export default function DeliveryList({
                 }`}
               >
                 Confirmar Importação ({parsedRowsPreview.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selection & Optimization Print Modal */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-fade-in">
+          <div className="bg-[#121212] border border-zinc-800 rounded-2xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
+            
+            {/* Header */}
+            <div className="border-b border-zinc-800 p-5 flex items-center justify-between bg-zinc-950">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-[#FFD600]" />
+                <div>
+                  <h3 className="text-sm font-bold font-sans uppercase tracking-wider text-white">Impressor de Rotas Profissional</h3>
+                  <p className="text-[10px] text-zinc-500 font-mono">Selecione as rotas e customize opções antes de gerar a listagem impressa moderna</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPrintModalOpen(false)}
+                className="text-gray-405 hover:text-white transition-colors cursor-pointer text-xs font-semibold uppercase tracking-wider font-mono border border-zinc-800 px-2.5 py-1 rounded bg-zinc-900"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            {/* Content body split into Options panel (left) and Routes checklist (right) */}
+            <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-zinc-800 flex-1 overflow-hidden">
+              
+              {/* Left/Sidebar: Configuration Controls */}
+              <div className="w-full lg:w-80 p-5 space-y-5 overflow-y-auto bg-zinc-900/25 shrink-0">
+                <h4 className="text-[10px] uppercase font-mono tracking-widest text-[#FFD600] font-bold pb-2 border-b border-zinc-800/60">Opções de Impressão</h4>
+                
+                <div className="space-y-4">
+                  {/* Option 1: Financial values */}
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input 
+                      type="checkbox"
+                      checked={printShowFinance}
+                      onChange={(e) => setPrintShowFinance(e.target.checked)}
+                      className="mt-1 rounded bg-zinc-950 border-zinc-800 text-[#FFD650] focus:ring-0 cursor-pointer focus:ring-offset-0 focus:outline-none"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-gray-200 group-hover:text-[#FFD600] transition-colors">Exibir Valores Financeiros</span>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Inclui Frete Empresa, Frete Motorista e cálculo do Saldo Líquido.</p>
+                    </div>
+                  </label>
+
+                  {/* Option 2: Observations */}
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input 
+                      type="checkbox"
+                      checked={printShowObs}
+                      onChange={(e) => setPrintShowObs(e.target.checked)}
+                      className="mt-1 rounded bg-zinc-950 border-zinc-800 text-[#FFD650] focus:ring-0 cursor-pointer focus:ring-offset-0 focus:outline-none"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-gray-200 group-hover:text-[#FFD600] transition-colors">Exibir Observações</span>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Mostra notas, endereços detalhados ou informações de apoio.</p>
+                    </div>
+                  </label>
+
+                  {/* Option 3: Driver Signature Field */}
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input 
+                      type="checkbox"
+                      checked={printShowSignature}
+                      onChange={(e) => setPrintShowSignature(e.target.checked)}
+                      className="mt-1 rounded bg-zinc-950 border-zinc-800 text-[#FFD650] focus:ring-0 cursor-pointer focus:ring-offset-0 focus:outline-none"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-gray-200 group-hover:text-[#FFD600] transition-colors">Campos de Assinatura</span>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Adiciona recibo de despacho com linhas para motorista e recebedor.</p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Print Stats summary */}
+                <div className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-4 space-y-3 font-mono">
+                  <span className="text-[9px] uppercase tracking-wider text-zinc-500 block">Resumo do Lote</span>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-400">Selecionadas:</span>
+                    <span className="text-white font-bold">{printSelectedIds.length} de {filteredEntregas.length}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-400">Distância Total:</span>
+                    <span className="text-white font-bold">
+                      {filteredEntregas
+                        .filter(e => printSelectedIds.includes(e.id))
+                        .reduce((sum, e) => sum + (e.km || 0), 0)
+                        .toLocaleString('pt-BR')} km
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Routes checklist and search */}
+              <div className="flex-1 flex flex-col overflow-hidden p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-zinc-950 p-3 rounded-xl border border-zinc-800/80">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-500" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar rotas na lista por motorista, vendedor, cliente, cidades..."
+                      value={printSearchQuery}
+                      onChange={(e) => setPrintSearchQuery(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded-lg pl-9 pr-3 py-2 focus:border-[#FFD600] focus:ring-0 focus:outline-none placeholder-gray-500 font-sans"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAllPrintItems(printFilteredEntregas.map(e => e.id))}
+                      className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-gray-300 hover:text-white rounded-lg text-xs font-mono font-bold cursor-pointer transition-colors"
+                    >
+                      {printFilteredEntregas.every(e => printSelectedIds.includes(e.id)) ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Checklist Container */}
+                <div className="flex-1 overflow-y-auto border border-zinc-800 rounded-xl bg-zinc-950 divide-y divide-zinc-900 scrollbar-thin">
+                  {printFilteredEntregas.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-gray-500 font-mono">
+                      Nenhuma carga encontrada para imprimir com os critérios atuais.
+                    </div>
+                  ) : (
+                    printFilteredEntregas.map((e) => {
+                      const isChecked = printSelectedIds.includes(e.id);
+                      return (
+                        <div 
+                          key={e.id}
+                          onClick={() => handleTogglePrintItem(e.id)}
+                          className={`p-3.5 flex items-center gap-4 hover:bg-zinc-900/40 cursor-pointer transition-colors ${
+                            isChecked ? 'bg-[#FFD600]/5' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}} // Handled by parent div onClick
+                            className="rounded bg-zinc-900 border-zinc-800 text-[#FFD600] focus:ring-0 cursor-pointer pointer-events-none"
+                          />
+                          
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-2 items-center text-xs font-sans">
+                            <div className="space-y-0.5">
+                              <span className="font-mono text-[10px] text-[#FFD600] font-bold block">ID: {e.id.slice(0, 8)}...</span>
+                              <span className="text-[10px] text-gray-400 font-mono">{e.data_coleta ? new Date(e.data_coleta + 'T00:00:00').toLocaleDateString('pt-BR') : 'Sem data'}</span>
+                            </div>
+                            
+                            <div className="truncate">
+                              <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-tight font-bold">Comercial / Cliente</span>
+                              <span className="text-white font-bold">{e.vendedor || 'Sem Vendedor'}</span>
+                              <span className="text-gray-400 block truncate">{e.cliente || 'Sem Cliente'}</span>
+                            </div>
+
+                            <div className="truncate">
+                              <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-tight font-bold">Carga / Rota</span>
+                              <span className="text-gray-200 block truncate font-mono text-[11px]">{e.origem} ➔ {e.destino}</span>
+                              <span className="text-gray-400 block">{e.km ? `${e.km.toLocaleString('pt-BR')} km` : '0 km'}</span>
+                            </div>
+
+                            <div className="truncate">
+                              <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-tight font-bold">Motorista & Status</span>
+                              <span className="text-white font-bold block truncate">{e.motorista || 'Sem motorista'}</span>
+                              <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] uppercase font-mono font-bold mt-0.5 ${
+                                e.status === 'entregue' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/50' :
+                                e.status === 'em_transito' ? 'bg-yellow-950/40 text-[#FFD600] border border-yellow-900/50' :
+                                e.status === 'parado' ? 'bg-red-950/40 text-red-400 border border-red-900/50' :
+                                'bg-blue-950/40 text-blue-400 border border-blue-900/50'
+                              }`}>
+                                {e.status === 'entregue' ? 'Entregue ✅' :
+                                 e.status === 'em_transito' ? 'Trânsito 🚚' :
+                                 e.status === 'parado' ? 'Parado 🛑' :
+                                 'Coletando 📦'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions footer */}
+            <div className="border-t border-zinc-800 p-5 bg-zinc-950 flex items-center justify-end gap-3 font-sans">
+              <button
+                type="button"
+                onClick={() => setIsPrintModalOpen(false)}
+                className="px-4 py-2 border border-zinc-800 text-gray-400 hover:text-white hover:bg-zinc-900/50 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleExecutePrint}
+                disabled={printSelectedIds.length === 0}
+                className={`px-5 py-2 rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all cursor-pointer flex items-center gap-2 ${
+                  printSelectedIds.length > 0 
+                  ? 'bg-[#FFD600] text-black hover:bg-[#ffe23b] shadow-lg shadow-[#FFD600]/20' 
+                  : 'bg-zinc-850 text-zinc-600 cursor-not-allowed border border-zinc-800'
+                }`}
+              >
+                <Printer className="w-4 h-4 shrink-0" />
+                Imprimir Roteiro Selecionado ({printSelectedIds.length})
               </button>
             </div>
           </div>

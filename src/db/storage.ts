@@ -676,9 +676,10 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     updated_at: new Date().toISOString()
   };
 
-  // Normalize vendor name to consistent trimmed uppercase
+  // Normalize vendor name to consistent trimmed uppercase (extract first name if multi-name exists with separators)
   if (payload.vendedor) {
-    payload.vendedor = payload.vendedor.trim().toUpperCase();
+    const parts = payload.vendedor.split(/[\/\-\\]/);
+    payload.vendedor = (parts[0] || '').trim().toUpperCase();
   }
 
   // Auto-generate trackingCode if not present (format: RDV + 4 digits, e.g. RDV0123)
