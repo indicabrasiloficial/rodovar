@@ -11,7 +11,8 @@ import {
   query, 
   where, 
   writeBatch,
-  getDocs
+  getDocs,
+  updateDoc
 } from 'firebase/firestore';
 
 const ENTREGAS_COLLECTION = 'entregas';
@@ -1355,4 +1356,41 @@ export function subscribeToPresence(callback: (presenceList: any[]) => void): ()
   });
 }
 
+export async function updateEntregaField(id: string, updates: Record<string, any>): Promise<void> {
+  const index = cachedEntregas.findIndex(e => e.id === id);
+  if (index !== -1) {
+    const freshObject = { ...cachedEntregas[index] };
+    
+    Object.keys(updates).forEach(key => {
+      if (key.includes('.')) {
+        const parts = key.split('.');
+        let current: any = freshObject;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          if (!current[part]) {
+            current[part] = {};
+          } else {
+            current[part] = { ...current[part] };
+          }
+          current = current[part];
+        }
+        current[parts[parts.length - 1]] = updates[key];
+      } else {
+        (freshObject as any)[key] = updates[key];
+      }
+    });
 
+    cachedEntregas[index] = freshObject;
+    lastEntregasFetchTime = Date.now();
+    try {
+      localStorage.setItem('rodovar_cached_entregas_fallback', JSON.stringify(cachedEntregas));
+      localStorage.setItem('rodovar_entregas_cache_timestamp', String(lastEntregasFetchTime));
+    } catch {}
+    
+    window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'UPDATE', payload: freshObject } }));
+  }
+
+  await updateDoc(doc(db, ENTREGAS_COLLECTION, id), updates).catch((error) => {
+    handleFirestoreError(error, OperationType.UPDATE, `${ENTREGAS_COLLECTION}/${id}`);
+  });
+}

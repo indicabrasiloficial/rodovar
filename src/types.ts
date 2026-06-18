@@ -48,6 +48,23 @@ export interface Entrega {
   cte?: string;
   localizacaoAtual?: { lat: number; lng: number } | null;
   ultimaAtualizacao?: string | null;
+  etapasOperador?: {
+    e01?: boolean;
+    e02?: boolean;
+    e03?: boolean;
+    e04?: boolean;
+    e05?: boolean;
+    e06?: boolean;
+    e07?: boolean;
+    e08?: boolean;
+    e09?: boolean;
+    e10?: boolean;
+    e11?: boolean;
+    e12?: boolean;
+    ultimaAtualizacao?: any;
+  };
+  notasOperador?: string;
+  notasAtualizadaEm?: any;
 }
 
 export interface DocumentoAnexo {

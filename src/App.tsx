@@ -19,6 +19,7 @@ import BlacklistManager from './components/BlacklistManager';
 import BackupRegistry from './components/BackupRegistry';
 import { Rastrear } from './components/Rastrear';
 import { MotoristaTracking } from './components/MotoristaTracking';
+import OperatorPanel from './components/OperatorPanel';
 
 import { 
   Truck, 
@@ -43,11 +44,12 @@ import {
   LayoutDashboard,
   Bot,
   Database,
-  Globe
+  Globe,
+  CheckSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel';
 
 
 export default function App() {
@@ -99,6 +101,8 @@ export default function App() {
     const path = window.location.pathname;
     if (path.startsWith('/motorista/')) {
       setSelectedView('motorista');
+    } else if (path === '/operador/painel') {
+      setSelectedView('operador_painel');
     }
     setIsAuthLoading(false);
     
@@ -388,6 +392,16 @@ export default function App() {
             onClose={() => setSelectedView('dashboard')}
           />
         );
+      case 'operador_painel':
+        return (
+          <OperatorPanel 
+            user={user}
+            onBackToList={() => {
+              setSelectedView('list');
+              window.history.pushState({ path: '/' }, '', '/');
+            }}
+          />
+        );
       default:
         return <div className="text-center p-12 text-gray-500">Selecione uma opção válida.</div>;
     }
@@ -536,6 +550,25 @@ export default function App() {
               <LayoutDashboard className="w-4 h-4 shrink-0 text-inherit" />
               <span>Painel</span>
             </button>
+
+            {/* Nav Operator Panel - Only visible for Operador (or Master) roles */}
+            {(user?.role === 'Operador' || user?.role === 'Master') && (
+              <button
+                onClick={() => {
+                  setSelectedView('operador_painel');
+                  window.history.pushState({ path: '/operador/painel' }, '', '/operador/painel');
+                }}
+                className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+                  selectedView === 'operador_painel'
+                  ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
+                  : 'bg-zinc-900 border-zinc-800 text-[#FFD600]/80 hover:text-[#FFD600] hover:border-[#FFD600]'
+                }`}
+                id="nav-operador-painel"
+              >
+                <CheckSquare className="w-4 h-4 shrink-0 text-inherit animate-pulse" />
+                <span>Painel Operador</span>
+              </button>
+            )}
 
             {/* Nav Stats */}
             <button
@@ -838,6 +871,25 @@ export default function App() {
                   <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
                   <span>Painel</span>
                 </button>
+
+                {/* Nav Operator Panel - Only visible for Operador (or Master) roles */}
+                {(user?.role === 'Operador' || user?.role === 'Master') && (
+                  <button
+                    onClick={() => {
+                      setSelectedView('operador_painel');
+                      window.history.pushState({ path: '/operador/painel' }, '', '/operador/painel');
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      selectedView === 'operador_painel'
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                      : 'bg-zinc-900/20 border-transparent text-[#FFD600]/80 hover:text-[#FFD600]'
+                    }`}
+                    id="desktop-nav-operador-painel"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5 shrink-0 animate-pulse text-inherit" />
+                    <span>Painel Operador</span>
+                  </button>
+                )}
               </div>
             </div>
 
