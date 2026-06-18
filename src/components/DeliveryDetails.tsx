@@ -137,6 +137,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
   const [entrega, setEntrega] = useState<Entrega | null>(null);
   const [locLinkInput, setLocLinkInput] = useState('');
+  const [showDetailsLocModal, setShowDetailsLocModal] = useState(false);
   const [isSavingLink, setIsSavingLink] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [clickedScripts, setClickedScripts] = useState<string[]>([]);
@@ -381,6 +382,10 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     });
     setEntrega(updated);
 
+    if (newStatus === 'coletando' && (!updated.link_localizacao || !updated.link_localizacao.trim().startsWith('http'))) {
+      setShowDetailsLocModal(true);
+    }
+
     if (window.falarRodovar) {
       const statusLabels: Record<string, string> = {
         coletando: 'carregando em fase de coleta',
@@ -583,6 +588,47 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
           </a>
         </div>
       </div>
+
+      {/* ALERTA AUTOMÁTICO CRÍTICO: FALTA LOCALIZAÇÃO NA COLETA */}
+      {entrega.status === 'coletando' && (!entrega.link_localizacao || !entrega.link_localizacao.trim().startsWith('http')) && (
+        <div 
+          className="bg-red-950/25 border-2 border-red-500/40 rounded-xl p-5 shadow-[0_0_20px_rgba(239,68,68,0.08)] relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-5"
+          id="operator-loc-coleta-alert-box"
+        >
+          <div className="absolute -top-12 -left-12 w-32 h-32 bg-red-500/10 blur-2xl rounded-full pointer-events-none" />
+          
+          <div className="flex items-start gap-4 z-10 w-full md:w-auto" id="alert-text-wrapper-coleta">
+            <div className="bg-red-500/20 border border-red-500/35 p-2.5 rounded-xl text-red-500 shrink-0 flex items-center justify-center shadow-lg">
+              <AlertTriangle className="w-5 h-5 shrink-0 animate-bounce text-red-400" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-xs uppercase font-mono tracking-widest text-[#FFD600] font-black leading-none flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                ⚠️ ALERTA DE QUALIDADE: PEDIR LOCALIZAÇÃO AO CLIENTE!
+              </h3>
+              <p className="text-xs text-zinc-300 leading-relaxed max-w-xl font-sans">
+                O motorista <strong className="text-white font-black">{entrega.motorista}</strong> está coletando a carga, mas você ainda <strong>não registrou a localização exata de entrega</strong> do cliente <strong className="text-[#FFD600] font-black">{entrega.cliente}</strong>. Solicite agora via WhatsApp!
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const cleanPhone = (entrega.tel_cliente || '').replace(/\D/g, '');
+              const clientName = entrega.cliente || 'Parceiro';
+              const msg = `Olá ${clientName}! Sou o ${getActiveUserFullName()} da Rodovar. Nosso motorista ${entrega.motorista} já está iniciando a coleta da sua mercadoria com destino a ${entrega.destino}. Por favor, envie-nos o link exato da sua localização de entrega no Google de forma a garantir que o motorista faça a entrega com máxima precisão e rapidez. Muito obrigado!`;
+              const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`;
+              window.open(url, '_blank', 'noreferrer,noopener');
+            }}
+            className="w-full md:w-auto px-5 py-3 bg-[#FFD600] hover:bg-[#ffe23b] text-black text-xs font-black uppercase rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 shadow-[0_4px_15px_rgba(255,214,0,0.25)] z-10 shrink-0 font-mono"
+            id="notify-coleta-request-btn"
+          >
+            <MessageSquare className="w-4 h-4 text-black" />
+            <span>COBRAR VIA WHATSAPP</span>
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
@@ -1240,6 +1286,84 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
         </div>
 
       </div>
+
+      {showDetailsLocModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in" id="details-loc-reminder-overlay">
+          <div className="bg-[#0c0c0c] border-2 border-amber-500/50 rounded-2xl max-w-md w-full p-6 shadow-[0_0_50px_rgba(245,158,11,0.2)] space-y-6 relative overflow-hidden" id="details-loc-reminder-container">
+            <div className="absolute -top-16 -right-16 w-32 h-32 bg-amber-500/10 blur-2xl rounded-full pointer-events-none" />
+            
+            <div className="flex items-start gap-4">
+              <div className="bg-amber-500/20 border border-amber-500/40 p-3 rounded-xl text-[#FFD600] shrink-0 animate-bounce">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <span className="text-[10px] uppercase font-mono tracking-widest text-[#FFD600] font-black block">
+                  🛡️ CONTROLE DE FLUXO RODOVAR
+                </span>
+                <h3 className="text-sm font-black uppercase text-white font-mono tracking-wide leading-tight">
+                  PEDIR LOGÍSTICA DE LOCALIZAÇÃO!
+                </h3>
+              </div>
+            </div>
+
+            <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-3.5 text-xs text-zinc-300 font-sans">
+              <p className="leading-relaxed">
+                Você definiu a carga como <strong>"Coletando"</strong>. Quando o motorista inicia a coleta, é o momento perfeito para cobrar a localização de entrega do cliente para que o sistema trace a rota automaticamente.
+              </p>
+              <div className="border-t border-zinc-900 pt-3 flex flex-col gap-2 font-mono text-[11px]">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-zinc-500 font-bold uppercase text-[9px]">Cliente:</span>
+                  <span className="text-[#FFD600] font-black truncate max-w-[200px]">{entrega.cliente}</span>
+                </div>
+                {entrega.tel_cliente && (
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-zinc-500 font-bold uppercase text-[9px]">Telefone:</span>
+                    <span className="text-zinc-300 font-semibold">{entrega.tel_cliente}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-zinc-500 font-bold uppercase text-[9px]">Entrega Destino:</span>
+                  <span className="text-zinc-350 truncate max-w-[200px]">{entrega.destino}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] text-zinc-400 font-medium leading-relaxed font-sans">
+                Clique abaixo para enviar agora no WhatsApp do cliente o pedido formal de link de localização do estabelecimento.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDetailsLocModal(false)}
+                  className="w-full sm:flex-1 py-3 px-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 hover:border-zinc-700 text-zinc-400 hover:text-white transition rounded-xl font-mono text-xs font-black uppercase cursor-pointer text-center"
+                  id="details-reminder-proceed-without-btn"
+                >
+                  Fechar alerta
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cleanPhone = (entrega.tel_cliente || '').replace(/\D/g, '');
+                    const clientName = entrega.cliente || 'Parceiro';
+                    const msg = `Olá ${clientName}! Sou o ${getActiveUserFullName()} da Rodovar. Nosso motorista ${entrega.motorista} já está iniciando a coleta da sua mercadoria com destino a ${entrega.destino}. Por favor, envie-nos o link exato da sua localização de entrega no Google de forma a garantir que o motorista faça a entrega com máxima precisão e rapidez. Muito obrigado!`;
+                    const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`;
+                    window.open(url, '_blank', 'noreferrer,noopener');
+                    setShowDetailsLocModal(false);
+                  }}
+                  className="w-full sm:flex-1 py-3 px-4 bg-[#FFD600] hover:bg-[#ffe23b] text-black transition rounded-xl font-mono text-xs font-black uppercase cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(255,214,0,0.25)]"
+                  id="details-reminder-whatsapp-request-btn"
+                >
+                  <MessageSquare className="w-4 h-4 shrink-0 text-black" />
+                  <span>Pedir via WhatsApp</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

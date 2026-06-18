@@ -2,24 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { db, OperationType, handleFirestoreError } from '../db/firebase';
 import { Entrega, DeliveryStatus } from '../types';
 import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
-import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  startAfter, 
-  onSnapshot, 
-  getCountFromServer,
-  DocumentData,
-  QueryDocumentSnapshot,
-  getDocs
-} from 'firebase/firestore';
+import { getEntregas, subscribeToRealtime, fetchEntregasFromServer } from '../db/storage';
 
-const ENTREGAS_COLLECTION = 'entregas';
 const PAGE_SIZE = 20;
 
-// High performance parsing helper identical to storage.ts
+// High performance parsing helper identical to storage.ts (retained for backward compatibility / useVoice imports)
 export function parseFirestoreDocToEntrega(docSnap: any): Entrega {
   const data = docSnap.data();
   const kmVal = data.km !== undefined && data.km > 0 
@@ -69,11 +56,8 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [indexWarning, setIndexWarning] = useState<string | null>(null);
+  const [indexWarning] = useState<string | null>(null);
 
-  // Keep tracks of document snapshot cursors for pagination
-  const lastVisibleDocsRef = useRef<Record<number, QueryDocumentSnapshot<DocumentData>>>({});
-  const unsubscribesRef = useRef<(() => void)[]>([]);
   const activePageIndexRef = useRef<number>(0);
 
   // Convert loaded pages to single contiguous flat list of unique items
@@ -85,70 +69,53 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
       return [...acc, ...pageItems];
     }, []);
 
-  // Compute number of actually loaded items
   const loadedCount = loadedEntregas.length;
 
-  // Compile active query constraints based on filter values (safe, exact equality matches only)
-  const buildQueryBase = () => {
-    let q = query(collection(db, ENTREGAS_COLLECTION));
-    
-    // exact match status
-    if (filters.status && filters.status !== 'all') {
-      q = query(q, where('status', '==', filters.status));
-    }
-    // exact match collection date
-    if (filters.dataColeta) {
-      q = query(q, where('data_coleta', '==', filters.dataColeta));
-    }
-
-    return q;
-  };
-
-  // Re-run whenever filters change
-  useEffect(() => {
-    // 1. Unsubscribe from all previous snapshots
-    unsubscribesRef.current.forEach(unsub => unsub());
-    unsubscribesRef.current = [];
-    
-    // 2. Clear state
-    setPages({});
-    lastVisibleDocsRef.current = {};
-    activePageIndexRef.current = 0;
-    setHasMore(true);
+  const loadInitialPage = async () => {
     setLoading(true);
-    setIndexWarning(null);
+    try {
+      let items = [...getEntregas()];
 
-    const loadLocalFallback = () => {
-      try {
-        const raw = localStorage.getItem('rodovar_cached_entregas_fallback');
-        let items: Entrega[] = raw ? JSON.parse(raw) : [];
-        
-        // Apply filters locally in fallback mode
+      // If database is empty on boot, await or attempt a soft refetch once to initialize
+      if (items.length === 0 && (window as any).rodovar_quota_exceeded !== true) {
+        await fetchEntregasFromServer(false);
+        items = [...getEntregas()];
+      }
+
+      // Apply all filtering compound logic 100% in-memory over our fast local storage/TTL database
+      const filtered = items.filter(e => {
+        // Status filter
         if (filters.status && filters.status !== 'all') {
-          items = items.filter(e => e.status === filters.status);
+          if (e.status !== filters.status) return false;
         }
+        // Collection date filter
         if (filters.dataColeta) {
-          items = items.filter(e => e.data_coleta === filters.dataColeta);
+          if (e.data_coleta !== filters.dataColeta) return false;
         }
+        // Vendedor filter
         if (filters.vendedor?.trim()) {
           const v = filters.vendedor.toLowerCase().trim();
-          items = items.filter(e => (e.vendedor || '').toLowerCase().includes(v));
+          if (!(e.vendedor || '').toLowerCase().includes(v)) return false;
         }
+        // Origin filter
         if (filters.origem.trim()) {
           const o = filters.origem.toLowerCase().trim();
-          items = items.filter(e => (e.origem || '').toLowerCase().includes(o));
+          if (!(e.origem || '').toLowerCase().includes(o)) return false;
         }
+        // Destino filter
         if (filters.destino.trim()) {
           const d = filters.destino.toLowerCase().trim();
-          items = items.filter(e => (e.destino || '').toLowerCase().includes(d));
+          if (!(e.destino || '').toLowerCase().includes(d)) return false;
         }
+        // Cliente filter
         if (filters.cliente.trim()) {
           const c = filters.cliente.toLowerCase().trim();
-          items = items.filter(e => (e.cliente || '').toLowerCase().includes(c));
+          if (!(e.cliente || '').toLowerCase().includes(c)) return false;
         }
+        // General text search (motorista, vendedor, cliente, origem, destino, observacoes, id)
         if (filters.search.trim()) {
           const s = filters.search.toLowerCase().trim();
-          items = items.filter(e => 
+          return (
             (e.motorista || '').toLowerCase().includes(s) ||
             (e.vendedor || '').toLowerCase().includes(s) ||
             (e.cliente || '').toLowerCase().includes(s) ||
@@ -158,228 +125,112 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
             (e.id || '').toLowerCase().includes(s)
           );
         }
+        return true;
+      });
 
-        setPages({ 0: items });
-        setTotalCount(items.length);
-      } catch (err) {
-        console.error("Local fallback error:", err);
+      // Slice page 0 locally (instantaneous and cost-free!)
+      const page0 = filtered.slice(0, PAGE_SIZE);
+      setPages({ 0: page0 });
+      setTotalCount(filtered.length);
+      setHasMore(filtered.length > PAGE_SIZE);
+    } catch (err) {
+      console.error("Local pagination error:", err);
+      // Resilience fallback to localStorage
+      try {
+        const raw = localStorage.getItem('rodovar_cached_entregas_fallback');
+        const fallbackItems: Entrega[] = raw ? JSON.parse(raw) : [];
+        setPages({ 0: fallbackItems.slice(0, PAGE_SIZE) });
+        setTotalCount(fallbackItems.length);
+        setHasMore(fallbackItems.length > PAGE_SIZE);
+      } catch {
         setPages({ 0: [] });
         setTotalCount(0);
+        setHasMore(false);
       }
-      setHasMore(false);
+    } finally {
       setLoading(false);
       setLoadingMore(false);
-    };
+    }
+  };
 
-    const hasSearchFilters = !!(
-      filters.search.trim() || 
-      filters.origem.trim() || 
-      filters.destino.trim() || 
-      filters.cliente.trim() ||
-      filters.vendedor?.trim()
-    );
-
-    const loadInitialPage = async () => {
-      // If we already know the Firestore quota is exceeded during this browser session,
-      // bypass network calls and fetch instantly from persistent localStorage fallback cache.
-      if ((window as any).rodovar_quota_exceeded === true) {
-        loadLocalFallback();
-        return;
-      }
-
-      try {
-        const queryBase = buildQueryBase();
-
-        if (hasSearchFilters) {
-          // If advanced filters are active, query up to 500 entries of the specific status/date category,
-          // and apply advanced in-memory compound filters to circumvent Firestore indexing constraints.
-          const searchQuery = query(
-            queryBase,
-            orderBy('created_at', 'desc'),
-            limit(500)
-          );
-
-          const unsubscribe = onSnapshot(searchQuery, (snapshot) => {
-            const rawItems = snapshot.docs.map(parseFirestoreDocToEntrega);
-            
-            // Apply all filters in-memory
-            const filtered = rawItems.filter(e => {
-              // Vendedor filter
-              if (filters.vendedor?.trim()) {
-                const v = filters.vendedor.toLowerCase().trim();
-                if (!(e.vendedor || '').toLowerCase().includes(v)) return false;
-              }
-              // Origin filter
-              if (filters.origem.trim()) {
-                const o = filters.origem.toLowerCase().trim();
-                if (!(e.origem || '').toLowerCase().includes(o)) return false;
-              }
-              // Destino filter
-              if (filters.destino.trim()) {
-                const d = filters.destino.toLowerCase().trim();
-                if (!(e.destino || '').toLowerCase().includes(d)) return false;
-              }
-              // Cliente filter
-              if (filters.cliente.trim()) {
-                const c = filters.cliente.toLowerCase().trim();
-                if (!(e.cliente || '').toLowerCase().includes(c)) return false;
-              }
-              // Text Search filter (vendedor, cliente, motorista, origem, destino, observacoes, id)
-              if (filters.search.trim()) {
-                const s = filters.search.toLowerCase().trim();
-                const matches = 
-                  (e.motorista || '').toLowerCase().includes(s) ||
-                  (e.vendedor || '').toLowerCase().includes(s) ||
-                  (e.cliente || '').toLowerCase().includes(s) ||
-                  (e.origem || '').toLowerCase().includes(s) ||
-                  (e.destino || '').toLowerCase().includes(s) ||
-                  (e.observacoes || '').toLowerCase().includes(s) ||
-                  (e.id || '').toLowerCase().includes(s);
-                if (!matches) return false;
-              }
-              return true;
-            });
-
-            setPages({ 0: filtered });
-            setTotalCount(filtered.length);
-            setHasMore(false);
-            setLoading(false);
-            setLoadingMore(false);
-          }, (error: any) => {
-            const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
-            if (isQuotaExceeded) {
-              console.warn("Rodovar: Quota diária esgotada no advanced search. Entrando em modo offline.");
-              (window as any).rodovar_quota_exceeded = true;
-              window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
-              loadLocalFallback();
-            } else {
-              console.error("Firestore advanced search error:", error);
-              handleFirestoreError(error, OperationType.LIST, ENTREGAS_COLLECTION);
-              setLoading(false);
-            }
-          });
-
-          unsubscribesRef.current.push(unsubscribe);
-        } else {
-          // No search filters active: Standard cursor paging
-          try {
-            const countSnap = await getCountFromServer(queryBase);
-            setTotalCount(countSnap.data().count);
-          } catch (err: any) {
-            console.warn('Error fetching server-side matches count:', err);
-            setTotalCount(null);
-          }
-
-          const initialQuery = query(
-            queryBase, 
-            orderBy('created_at', 'desc'), 
-            limit(PAGE_SIZE)
-          );
-
-          const unsubscribe = onSnapshot(initialQuery, (snapshot) => {
-            const items = snapshot.docs.map(parseFirestoreDocToEntrega);
-            
-            setPages(prev => ({ ...prev, [0]: items }));
-            setLoading(false);
-            setLoadingMore(false);
-
-            if (snapshot.docs.length > 0) {
-              lastVisibleDocsRef.current[0] = snapshot.docs[snapshot.docs.length - 1];
-            }
-            
-            if (snapshot.docs.length < PAGE_SIZE) {
-              setHasMore(false);
-            } else {
-              setHasMore(true);
-            }
-          }, (error: any) => {
-            const isQuotaExceeded = error && (error.code === 'resource-exhausted' || error.message?.includes('Quota exceeded') || error.message?.includes('quota-exceeded'));
-            if (isQuotaExceeded) {
-              console.warn("Rodovar: Quota diária esgotada no snapshot inicial. Entrando em modo offline.");
-              (window as any).rodovar_quota_exceeded = true;
-              window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
-              loadLocalFallback();
-            } else {
-              console.error("Firestore page 1 snapshot error:", error);
-              handleFirestoreError(error, OperationType.LIST, ENTREGAS_COLLECTION);
-              setLoading(false);
-            }
-          });
-
-          unsubscribesRef.current.push(unsubscribe);
-        }
-      } catch (err: any) {
-        console.error("Error setting up paginated data fetch:", err);
-        const isQuotaExceeded = err && (err.code === 'resource-exhausted' || err.message?.includes('Quota exceeded') || err.message?.includes('quota-exceeded'));
-        if (isQuotaExceeded) {
-          (window as any).rodovar_quota_exceeded = true;
-          window.dispatchEvent(new CustomEvent('rodovar_quota_exceeded_event'));
-          loadLocalFallback();
-        } else {
-          setLoading(false);
-        }
-      }
-    };
+  // Re-run whenever filter conditions change
+  useEffect(() => {
+    setPages({});
+    activePageIndexRef.current = 0;
+    setHasMore(true);
 
     loadInitialPage();
 
+    // Listen to central cache updates (e.g., from save/delete mutations or 3-min automatic polls)
+    // to dynamically refresh without issuing any redundant reads to Firestore!
+    const unsubscribeFromStorage = subscribeToRealtime(() => {
+      loadInitialPage();
+    });
+
     return () => {
-      unsubscribesRef.current.forEach(u => u());
+      unsubscribeFromStorage();
     };
   }, [filters]);
 
-  // Load next page function (only applicable when search filters are empty)
   const loadMore = () => {
-    const hasSearchFilters = !!(
-      filters.search.trim() || 
-      filters.origem.trim() || 
-      filters.destino.trim() || 
-      filters.cliente.trim()
-    );
-
-    if (loading || loadingMore || !hasMore || indexWarning || hasSearchFilters) return;
-    
-    const nextPageIndex = activePageIndexRef.current + 1;
-    const lastVisibleDoc = lastVisibleDocsRef.current[nextPageIndex - 1];
-    
-    if (!lastVisibleDoc) {
-      setHasMore(false);
-      return;
-    }
+    if (loading || loadingMore || !hasMore) return;
 
     setLoadingMore(true);
+    const nextPageIndex = activePageIndexRef.current + 1;
     activePageIndexRef.current = nextPageIndex;
 
-    const queryBase = buildQueryBase();
-    const nextQuery = query(
-      queryBase,
-      orderBy('created_at', 'desc'),
-      startAfter(lastVisibleDoc),
-      limit(PAGE_SIZE)
-    );
-
-    const unsubscribe = onSnapshot(nextQuery, (snapshot) => {
-      const items = snapshot.docs.map(parseFirestoreDocToEntrega);
+    try {
+      const items = [...getEntregas()];
       
-      setPages(prev => ({ ...prev, [nextPageIndex]: items }));
-      setLoadingMore(false);
+      const filtered = items.filter(e => {
+        if (filters.status && filters.status !== 'all') {
+          if (e.status !== filters.status) return false;
+        }
+        if (filters.dataColeta) {
+          if (e.data_coleta !== filters.dataColeta) return false;
+        }
+        if (filters.vendedor?.trim()) {
+          const v = filters.vendedor.toLowerCase().trim();
+          if (!(e.vendedor || '').toLowerCase().includes(v)) return false;
+        }
+        if (filters.origem.trim()) {
+          const o = filters.origem.toLowerCase().trim();
+          if (!(e.origem || '').toLowerCase().includes(o)) return false;
+        }
+        if (filters.destino.trim()) {
+          const d = filters.destino.toLowerCase().trim();
+          if (!(e.destino || '').toLowerCase().includes(d)) return false;
+        }
+        if (filters.cliente.trim()) {
+          const c = filters.cliente.toLowerCase().trim();
+          if (!(e.cliente || '').toLowerCase().includes(c)) return false;
+        }
+        if (filters.search.trim()) {
+          const s = filters.search.toLowerCase().trim();
+          return (
+            (e.motorista || '').toLowerCase().includes(s) ||
+            (e.vendedor || '').toLowerCase().includes(s) ||
+            (e.cliente || '').toLowerCase().includes(s) ||
+            (e.origem || '').toLowerCase().includes(s) ||
+            (e.destino || '').toLowerCase().includes(s) ||
+            (e.observacoes || '').toLowerCase().includes(s) ||
+            (e.id || '').toLowerCase().includes(s)
+          );
+        }
+        return true;
+      });
 
-      if (snapshot.docs.length > 0) {
-        lastVisibleDocsRef.current[nextPageIndex] = snapshot.docs[snapshot.docs.length - 1];
-      }
-      
-      if (snapshot.docs.length < PAGE_SIZE) {
-        setHasMore(false);
-      } else {
-        setHasMore(true);
-      }
-    }, (error) => {
-      console.error(`Page ${nextPageIndex} load snapshot error:`, error);
-      setLoadingMore(false);
-      setHasMore(false);
-    });
+      const start = nextPageIndex * PAGE_SIZE;
+      const end = start + PAGE_SIZE;
+      const pageItems = filtered.slice(start, end);
 
-    unsubscribesRef.current.push(unsubscribe);
+      setPages(prev => ({ ...prev, [nextPageIndex]: pageItems }));
+      setHasMore(filtered.length > end);
+    } catch (err) {
+      console.error("Local pagination loadMore error:", err);
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   return {
