@@ -680,7 +680,9 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   // Normalize vendor name to consistent trimmed uppercase (extract first name if multi-name exists with separators)
   if (payload.vendedor) {
     const parts = payload.vendedor.split(/[\/\-\\]/);
-    payload.vendedor = (parts[0] || '').trim().toUpperCase();
+    let p = (parts[0] || '').trim().toUpperCase();
+    if (p === 'MÔNICA') p = 'MONICA';
+    payload.vendedor = p;
   }
 
   // Auto-generate trackingCode if not present (format: RDV + 4 digits, e.g. RDV0123)
@@ -931,7 +933,13 @@ export function subscribeToScheduledRealtime(callback: (payload: { action: strin
 // Helpers for Auto-complete
 export function getUniqueVendedores(): string[] {
   const list = cachedEntregas
-    .map(e => e.vendedor ? e.vendedor.trim().toUpperCase() : '')
+    .map(e => {
+      if (!e.vendedor) return '';
+      const parts = e.vendedor.split(/[\/\-\\]/);
+      let p = (parts[0] || '').trim().toUpperCase();
+      if (p === 'MÔNICA') p = 'MONICA';
+      return p;
+    })
     .filter(Boolean);
   return Array.from(new Set(list));
 }

@@ -6,6 +6,14 @@ import { getEntregas, subscribeToRealtime, fetchEntregasFromServer } from '../db
 
 const PAGE_SIZE = 20;
 
+const getCleanedVendedorName = (name: string): string => {
+  if (!name) return '';
+  const parts = name.split(/[\/\-\\]/);
+  let p = (parts[0] || '').trim().toUpperCase();
+  if (p === 'MÔNICA') p = 'MONICA';
+  return p;
+};
+
 // High performance parsing helper identical to storage.ts (retained for backward compatibility / useVoice imports)
 export function parseFirestoreDocToEntrega(docSnap: any): Entrega {
   const data = docSnap.data();
@@ -94,8 +102,9 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
         }
         // Vendedor filter
         if (filters.vendedor?.trim()) {
-          const v = filters.vendedor.toLowerCase().trim();
-          if (!(e.vendedor || '').toLowerCase().includes(v)) return false;
+          const v = getCleanedVendedorName(filters.vendedor).toLowerCase();
+          const ev = getCleanedVendedorName(e.vendedor || '').toLowerCase();
+          if (ev !== v && !ev.includes(v)) return false;
         }
         // Origin filter
         if (filters.origem.trim()) {
@@ -190,8 +199,9 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
           if (e.data_coleta !== filters.dataColeta) return false;
         }
         if (filters.vendedor?.trim()) {
-          const v = filters.vendedor.toLowerCase().trim();
-          if (!(e.vendedor || '').toLowerCase().includes(v)) return false;
+          const v = getCleanedVendedorName(filters.vendedor).toLowerCase();
+          const ev = getCleanedVendedorName(e.vendedor || '').toLowerCase();
+          if (ev !== v && !ev.includes(v)) return false;
         }
         if (filters.origem.trim()) {
           const o = filters.origem.toLowerCase().trim();

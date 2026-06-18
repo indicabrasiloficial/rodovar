@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../db/firebase';
 import { Entrega, DeliveryStatus } from '../types';
 import { updateEntregaField, getEntregas, fetchEntregasFromServer } from '../db/storage';
+import { getDeliveryKm } from '../utils/distance';
 import { 
   collection, 
   query, 
@@ -31,6 +32,7 @@ import {
   Send,
   MapPin,
   XCircle,
+  X,
   Truck
 } from 'lucide-react';
 
@@ -42,6 +44,14 @@ interface OperatorPanelProps {
 const CACHE_KEY = "rdv_cargas_operador";
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+const cleanVendedor = (name: string): string => {
+  if (!name) return '';
+  const parts = name.split(/[\/\-\\]/);
+  let p = (parts[0] || '').trim().toUpperCase();
+  if (p === 'MÔNICA') p = 'MONICA';
+  return p;
+};
+
 export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps) {
   const [cargas, setCargas] = useState<Entrega[]>([]);
   const [carregando, setCarregando] = useState(false);
@@ -52,6 +62,19 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
   // Local notes edit state for debounce
   const [notepadContent, setNotepadContent] = useState<Record<string, string>>({});
   const [salvandoNotaId, setSalvandoNotaId] = useState<string | null>(null);
+  const [occurrenceFeedback, setOccurrenceFeedback] = useState<Record<string, string>>({});
+
+  // Calculadora de Rotas & Previsibilidade Real (3 Dias)
+  const [isRouteModalOpen, setIsRouteModalOpen] = useState(false);
+  const [activeRouteCalcSelected, setActiveRouteCalcSelected] = useState<Entrega | null>(null);
+  const [customSpeed, setCustomSpeed] = useState<number>(60); // km/h (default: heavy truck speed)
+  const [customDailyHours, setCustomDailyHours] = useState<number>(9); // 9h maximum daily active drive limit (Lei do Motorista)
+  const [startingTime, setStartingTime] = useState<string>(() => {
+    const now = new Date();
+    return now.toISOString().slice(0, 16); // format 'YYYY-MM-DDTHH:MM' for HTML input datetime-local
+  });
+  const [routeSearchQuery, setRouteSearchQuery] = useState('');
+  const [salvandoPrevisaoId, setSalvandoPrevisaoId] = useState<string | null>(null);
 
   // Firestore Reads Counter (economizador Spark)
   const [readsThisSession, setReadsThisSession] = useState<number>(() => {
@@ -90,7 +113,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
       const limite72Horas = 72 * 60 * 60 * 1000; // 72 hours in ms
 
       const dadosFiltrados = todosOsDados.filter(item => {
-        const isAtivo = item.status !== 'entregue';
+        const isAtivo = item.status !== 'entregue' && !item.etapasOperador?.e12;
         const tempoCriacao = item.created_at ? new Date(item.created_at).getTime() : 0;
         const tempoAtualizacao = item.updated_at ? new Date(item.updated_at).getTime() : 0;
         const registradoUltimas72h = (agora - tempoCriacao < limite72Horas) || (agora - tempoAtualizacao < limite72Horas);
@@ -227,6 +250,97 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
     }, 1500);
   };
 
+  // Convert custom operator notes permanently to checked and registered occurrences inside histoy + observations
+  const handleSalvarOcorrenciaTratada = async (cargaId: string) => {
+    const comentario = notepadContent[cargaId] || '';
+    if (!comentario.trim()) return;
+
+    setSalvandoNotaId(cargaId);
+    try {
+      const originalCarga = cargas.find(c => c.id === cargaId);
+      if (!originalCarga) return;
+
+      let activeUser = { username: 'sistema', displayName: 'Sistema', role: 'Operador Rodovar' };
+      const userStored = localStorage.getItem('rodovar_active_login_v2');
+      if (userStored) {
+        try {
+          activeUser = JSON.parse(userStored);
+        } catch {}
+      }
+
+      // Generate localized, elegant date formatting
+      const dataHoraLocal = new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+      const novoEvento = {
+        id: 'evt-' + Math.random().toString(36).substring(2, 11),
+        timestamp: new Date().toISOString(),
+        usuario: activeUser.username,
+        usuarioNome: activeUser.displayName,
+        cargo: activeUser.role,
+        descricao: `🚨 [OCORRÊNCIA TRATADA] ${comentario.trim()}`
+      };
+
+      const historicoAtual = originalCarga.historico || [];
+      const novoHistorico = [...historicoAtual, novoEvento].slice(-40);
+
+      // Append comment block permanently to general observations ('observacoes')
+      let novasObservacoes = originalCarga.observacoes || '';
+      const blocoOcorrencia = `\n[OCORRÊNCIA TRATADA em ${dataHoraLocal} por ${activeUser.displayName}]: ${comentario.trim()}`;
+      novasObservacoes = (novasObservacoes + blocoOcorrencia).trim();
+
+      await updateEntregaField(cargaId, {
+        historico: novoHistorico,
+        observacoes: novasObservacoes,
+        notasOperador: '',
+        notasAtualizadaEm: serverTimestamp()
+      });
+
+      // Synchronize in-memory react state
+      setCargas(prev => {
+        const updated = prev.map(c => {
+          if (c.id === cargaId) {
+            return {
+              ...c,
+              historico: novoHistorico,
+              observacoes: novasObservacoes,
+              notasOperador: '',
+              notasAtualizadaEm: new Date().toISOString()
+            };
+          }
+          return c;
+        });
+
+        // Sync local caches
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            parsed.dados = updated;
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
+          } catch {}
+        }
+        return updated;
+      });
+
+      // Clear scratch input
+      setNotepadContent(prev => ({ ...prev, [cargaId]: '' }));
+      
+      // Flash feedback
+      setOccurrenceFeedback(prev => ({ ...prev, [cargaId]: 'Ocorrência gravada no cadastro com sucesso!' }));
+      setTimeout(() => {
+        setOccurrenceFeedback(prev => ({ ...prev, [cargaId]: '' }));
+      }, 4000);
+
+      if (window.falarRodovar) {
+        window.falarRodovar("Ocorrência tratada salva com sucesso!");
+      }
+    } catch (e) {
+      console.error("Erro ao registrar ocorrencia tratada no Firestore:", e);
+    } finally {
+      setSalvandoNotaId(null);
+    }
+  };
+
   // Convert Firebase/ISO timestamp safely
   const getTimestampMs = (ts: any): number => {
     if (!ts) return 0;
@@ -356,6 +470,29 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
     };
   };
 
+  // Memoized carga list for exactly last 3 days of updates or registration (72 hours)
+  const cargasUltimos3Dias = useMemo(() => {
+    const agora = Date.now();
+    const limite3Dias = 3 * 24 * 60 * 60 * 1000; // 72 hours
+    return cargas.filter(c => {
+      const tc = c.created_at ? new Date(c.created_at).getTime() : 0;
+      const tu = c.updated_at ? new Date(c.updated_at).getTime() : agora;
+      return (agora - tc < limite3Dias) || (agora - tu < limite3Dias);
+    });
+  }, [cargas]);
+
+  const filteredRouteCargas = useMemo(() => {
+    const q = routeSearchQuery.toLowerCase().trim();
+    if (!q) return cargasUltimos3Dias;
+    return cargasUltimos3Dias.filter(c => 
+      (c.motorista || '').toLowerCase().includes(q) ||
+      (c.origem || '').toLowerCase().includes(q) ||
+      (c.destino || '').toLowerCase().includes(q) ||
+      (cleanVendedor(c.vendedor || '')).toLowerCase().includes(q) ||
+      (c.cliente || '').toLowerCase().includes(q)
+    );
+  }, [cargasUltimos3Dias, routeSearchQuery]);
+
   // Filter & Search computation (using custom scoring logic)
   const filteredCargas = useMemo(() => {
     let list = cargas.filter(e => {
@@ -399,7 +536,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
     }).length;
 
     const emTransito = cargas.filter(c => {
-      return c.status === 'em_transito';
+      return c.status === 'em_transito' && !c.etapasOperador?.e12;
     }).length;
 
     const hojeStr = new Date().toISOString().split('T')[0];
@@ -424,25 +561,139 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
     const notas = e.notasOperador || '';
 
     // Extract potential confirm items from Operator notes
-    const endConfirmado = notas.includes('Endereço:') ? notas : 'Não especificado';
+    const endConfirmado = (e.observacoes || notas || '').trim() || 'Pendente (confirmar com as instruções na etapa 8)';
+
+    // Helper helper to get logged username/displayName
+    const getActiveUserFullName = () => {
+      if (user && user.displayName) return user.displayName;
+      const stored = localStorage.getItem('rodovar_active_login_v2');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed.displayName) return parsed.displayName;
+        } catch {}
+      }
+      return 'Jairo Bahia'; // Safe fallback
+    };
+
+    const jairoName = getActiveUserFullName();
 
     switch (etapaId) {
+      case 'e01':
+        return `Opa, ${motorista}! Beleza? Aqui é o ${jairoName} da Rodovar. Eu que vou acompanhar sua viagem até ${destino}. Consegue me mandar aquela sua localização local pra eu acompanhar aqui? Valeu, boa viagem!`;
       case 'e02':
-        return `Olá ${motorista}! Você já chegou no local de coleta em ${origem}? Qual a previsão para iniciar o carregamento?`;
+        return `Fala, ${motorista}! Tudo certo? Você já encostou aí na coleta em ${origem}? Consegue me dar um retorno pra eu avisar o cliente aqui? Abraço!`;
+      case 'e03':
+        return `Opa, ${motorista}! Consigo confirmar o carregamento com você? Tem previsão de que horas você deve terminar e estar liberado aí em ${origem}? Valeu!`;
+      case 'e04':
+        return `Fala, ${motorista}! Show de bola. Consegue me mandar uma foto bem nítida dos documentos assinados aí na coleta (como a Ordem de Coleta, Nota ou CTE) pra gente liberar sua viagem aqui? Obrigado!`;
       case 'e05':
-        return `Mateus, segue documento de coleta da carga ${origem} ➔ ${destino}, motorista ${motorista}. Favor gerar o MDF.`;
+        return `Mateus, segue o documento de coleta em anexo referente ao motorista ${motorista} (Origem: ${origem} ➔ Destino: ${destino}). Por favor, pode dar início à geração do MDF-e para liberação do frete? Valeu!`;
       case 'e06':
-        return `Olá ${motorista}! Segue o MDF da sua carga. Pode seguir viagem. Boa estrada!`;
+        return `Opa, ${motorista}! Segue em anexo o arquivo do seu MDF-e que o Mateus liberou para nós. Rota e documentação 100% autorizadas no sistema. Pode seguir viagem com toda segurança. Boa estrada!`;
       case 'e07':
-        return `Olá! A RODOVAR informa que sua carga saiu de ${origem} e está a caminho de ${destino}. Previsão de chegada: ${prazo || 'Pendente'}. Em breve entraremos em contato para confirmar o endereço de entrega.`;
+        return `Olá, tudo bem? Aqui é o ${jairoName} da Rodovar. Passando para avisar que a sua carga já está em trânsito com o motorista ${motorista}. Previsão de entrega limite para o dia ${prazo || 'planejado'}. Qualquer dúvida estou à disposição!`;
       case 'e08':
-        return `Para garantir a entrega sem problemas, precisamos confirmar:\n1) Endereço completo de entrega com CEP\n2) Ponto de referência\n3) Nome e celular de quem vai receber\nPode nos enviar?`;
+        return `Olá, tudo bem? Para darmos total previsibilidade à sua entrega em ${destino}, você poderia nos enviar o link da localização local exata do descarregamento ou confirmar o endereço completo com ponto de referência? Muito obrigado!`;
       case 'e09':
-        return `Olá ${motorista}! Informações de entrega em ${destino}:\nEndereço: ${endConfirmado}\nQualquer dúvida, me chama!`;
+        return `Fala, ${motorista}! Seguem as coordenadas e detalhes confirmados de entrega para a sua descarga em ${destino}:\n📦 Cliente: ${cliente}\n📍 Endereço de Entrega: ${endConfirmado}\nQualquer dúvida ou dilema na rota, só me chamar. Segue firme e com cuidado!`;
+      case 'e10':
+        return `Fala, ${motorista}! Viagem finalizada com excelência! Por favor, tira aquela foto bem nítida e enquadrada do canhoto assinado e carimbado de entrega pra eu dar baixa no faturamento e liberar o pagamento do seu saldo de frete. Tamo junto!`;
       case 'e11':
-        return `@Mateus segue canhoto da entrega ${origem} ➔ ${destino}. Motorista: ${motorista}. Favor processar pagamento.`;
+        return `@Mateus, segue a imagem do canhoto de entrega finalizado com sucesso pelo motorista ${motorista} de ${origem} ➔ ${destino}. Documentação em conformidade. Favor processar saldo de frete e registrar.`;
+      case 'e12':
+        return `Prezado Cliente, aqui é da Rodovar. Confirmamos que o descarregamento da carga foi concluído pelo motorista ${motorista} em ${destino} e o comprovante já foi registrado em nossa base. Muito obrigado pela confiança e até a próxima viagem!`;
       default:
         return '';
+    }
+  };
+
+  // Helper helper to calculate realistic route predictions with Brazilian truck routing limits
+  const calculateRouteDetails = (e: Entrega | null) => {
+    if (!e) return null;
+    const distance = getDeliveryKm(e);
+    const speed = customSpeed > 0 ? customSpeed : 60;
+    const dailyHours = customDailyHours > 0 ? customDailyHours : 9;
+
+    // Driving time in decimal hours
+    const totalHoursActive = distance / speed;
+
+    // Brazilian driver's law (Lei 13.103): 30 minutes rest stop every 4 hours
+    const restStopsCount = Math.floor(totalHoursActive / 4);
+    const totalRestHours = restStopsCount * 0.5;
+
+    // Overnight rest: 11 hours rest required if total hours exceed dailyHours driving limit
+    const daysOfActiveDrive = totalHoursActive / dailyHours;
+    const pernoitesCount = Math.max(0, Math.floor(daysOfActiveDrive - 0.01));
+    const totalPernoiteHours = pernoitesCount * 11;
+
+    // Combined durations
+    const totalTravelHours = totalHoursActive + totalRestHours + totalPernoiteHours;
+
+    // Calculate actual ETA (Date)
+    const startDate = startingTime ? new Date(startingTime) : new Date();
+    const etaMs = startDate.getTime() + totalHoursActive * 60 * 60 * 1000 + totalRestHours * 60 * 60 * 1000 + totalPernoiteHours * 60 * 60 * 1000;
+    const etaDate = new Date(etaMs);
+
+    // Format ETA
+    const weekDaysArr = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+    const weekday = weekDaysArr[etaDate.getDay()];
+    const formattedETA = etaDate.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }) + ` às ${String(etaDate.getHours()).padStart(2, '0')}:${String(etaDate.getMinutes()).padStart(2, '0')}h`;
+
+    const activeHoursInt = Math.floor(totalHoursActive);
+    const activeMinutesInt = Math.round((totalHoursActive - activeHoursInt) * 60);
+
+    const getActiveUserFullName = () => {
+      if (user && user.displayName) return user.displayName;
+      const stored = localStorage.getItem('rodovar_active_login_v2');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed.displayName) return parsed.displayName;
+        } catch {}
+      }
+      return 'Jairo Bahia'; // Safe fallback
+    };
+    const activeOperator = getActiveUserFullName();
+
+    return {
+      distance,
+      activeHours: activeHoursInt,
+      activeMinutes: activeMinutesInt,
+      restStopsCount,
+      pernoitesCount,
+      totalTravelHours,
+      formattedETA,
+      etaWeekday: weekday,
+      motoristaMessage: `Fala, ${e.motorista || 'Amigo'}! Tudo bem? Aqui é o ${activeOperator} da Rodovar. Calculamos seu plano de viagem realista de ${e.origem} até ${e.destino} (${distance} km):\n⏱️ Limite diário programado: ${dailyHours}h de direção ativa a ${speed} km/h.\n⚠️ Lembre-se de realizar ${restStopsCount} paradas obrigatórias de 30min para descanso regulamentar e no total realizar ${pernoitesCount} pernoites para sua segurança na estrada.\n🏁 Previsão realista de chegada no descarregamento estimada para: ${formattedETA} (${weekday}).\nSiga em paz, com tranquilidade e boa viagem! 🛣️🚚`,
+      clienteMessage: `Olá, tudo bem? Aqui é o ${activeOperator} da Rodovar. Para sua total previsibilidade, realizamos um cálculo em tempo real de rota para a sua carga com origem em ${e.origem} e destino ${e.destino}. Sob condução profissional do motorista ${e.motorista}, com velocidade média regulamentada de ${speed} km/h e considerando o tempo de descanso por lei, a nossa previsão realista de chegada para descarregamento é para o dia: ${formattedETA} (${weekday}). Qualquer novidade informamos. Seguimos monitorando! 👍`
+    };
+  };
+
+  const handleSalvarPrevisaoRealista = async (carga: Entrega, msg: string, formattedETA: string) => {
+    setSalvandoPrevisaoId(carga.id);
+    try {
+      const novaNota = `[PREVISÃO EM TEMPO REAL] Rota ${carga.origem} ➔ ${carga.destino}. Chegada estimada realista: ${formattedETA}.`;
+      await updateEntregaField(carga.id, {
+        notasOperador: msg,
+        notasAtualizadaEm: serverTimestamp()
+      });
+
+      // Update locally
+      setCargas(prev => prev.map(item => item.id === carga.id ? { ...item, notasOperador: msg } : item));
+      if (activeRouteCalcSelected?.id === carga.id) {
+        setActiveRouteCalcSelected(prev => prev ? { ...prev, notasOperador: msg } : null);
+      }
+      alert(`Previsão calculada gravada com sucesso absoluto nas anotações da carga! 🛣️✅`);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erro ao gravar previsão realista: ${err.message}`);
+    } finally {
+      setSalvandoPrevisaoId(null);
     }
   };
 
@@ -476,10 +727,23 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
           <button
             onClick={() => carregarCargas(true)}
             disabled={carregando}
-            className="flex items-center gap-2 bg-[#FFD600] hover:bg-[#ffe23b] text-black rounded-lg px-4 py-2 text-xs font-black uppercase tracking-wider cursor-pointer font-sans shadow-md active:scale-95 transition-all"
+            className="flex items-center gap-2 bg-[#FFD600] hover:bg-[#ffe23b] text-black rounded-lg px-3.5 py-2 text-xs font-black uppercase tracking-wider cursor-pointer font-sans shadow-md active:scale-95 transition-all"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${carregando ? 'animate-spin' : ''}`} />
-            {carregando ? 'Atualizando...' : 'Atualizar'}
+            {carregando ? '...' : 'Atualizar'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsRouteModalOpen(true);
+              if (cargasUltimos3Dias.length > 0) {
+                setActiveRouteCalcSelected(cargasUltimos3Dias[0]);
+              }
+            }}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-3.5 py-2 text-xs font-black uppercase tracking-wider cursor-pointer font-sans shadow-md active:scale-95 transition-all border border-emerald-500/30"
+          >
+            <span>🛣️</span> Rotas & Previsão (3d)
           </button>
         </div>
       </div>
@@ -595,11 +859,11 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                       </div>
                       
                       <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase border ${
-                        c.status === 'entregue' ? 'bg-emerald-950/20 border-emerald-900 text-emerald-400' :
+                        c.status === 'entregue' || c.etapasOperador?.e12 ? 'bg-emerald-950/20 border-emerald-900 text-emerald-400' :
                         c.status === 'em_transito' ? 'bg-amber-950/20 border-amber-900 text-[#FFD600]' :
                         'bg-zinc-900 border-zinc-800 text-zinc-400'
                       }`}>
-                        {c.status.replace('_', ' ')}
+                        {c.etapasOperador?.e12 ? 'entregue' : c.status.replace('_', ' ')}
                       </span>
                     </div>
 
@@ -676,7 +940,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                       
                       {/* Financial info if true */}
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 font-mono text-[11px] text-zinc-400">
-                        <div>Vendedor: <strong className="text-zinc-205 text-white">{e.vendedor || 'Sem Vendedor'}</strong></div>
+                        <div>Vendedor: <strong className="text-zinc-205 text-white">{cleanVendedor(e.vendedor) || 'Sem Vendedor'}</strong></div>
                         <div>•</div>
                         <div>Motorista: <strong className="text-white">{e.motorista} ({e.tel_motorista || 'Sem fone'})</strong></div>
                         <div>•</div>
@@ -717,6 +981,31 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                       onChange={(e) => handleNotepadChange(selectedCargaId, e.target.value)}
                       className="w-full h-24 bg-zinc-900/60 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-[#FFD600] placeholder-zinc-500 font-sans leading-relaxed"
                     />
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1 border-t border-zinc-900/30">
+                      <div className="flex-1">
+                        {occurrenceFeedback[e.id] ? (
+                          <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1 animate-pulse">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                            {occurrenceFeedback[e.id]}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-zinc-500 block leading-tight font-sans">
+                            Clique ao lado para registrar esta anotação como Ocorrência Tratada na linha do tempo e observações da carga.
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSalvarOcorrenciaTratada(e.id)}
+                        disabled={salvandoNotaId === e.id || !(notepadContent[e.id] || '').trim()}
+                        className="px-4 py-2 rounded bg-zinc-900 hover:bg-[#FFD600] hover:text-black border border-zinc-800 hover:border-yellow-600 text-xs font-black uppercase text-[#FFD600] tracking-wider transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 self-end shrink-0"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        Salvar Ocorrência Tratada
+                      </button>
+                    </div>
                   </div>
 
                   {/* Wizard / Sequenced steps cards list */}
@@ -814,25 +1103,46 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
 
                               {/* WhatsApp inline action */}
                               {textMsg && (
-                                <a
-                                  href={waLink ? waLink : '#'}
-                                  onClick={(ev) => {
-                                    if (!hasPhone) {
-                                      ev.preventDefault();
-                                      alert("Telefone não cadastrado para o destinatário! Confirme os dados de cadastro da rota.");
-                                    }
-                                  }}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5 transition-colors no-underline ${
-                                    hasPhone 
-                                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white font-bold' 
-                                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                                  }`}
-                                >
-                                  <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-                                  Chamar Zap
-                                </a>
+                                <div className="w-full mt-2.5 space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <a
+                                      href={waLink ? waLink : '#'}
+                                      onClick={(ev) => {
+                                        if (!hasPhone) {
+                                          ev.preventDefault();
+                                          alert("Telefone não cadastrado para o destinatário! Confirme os dados de cadastro da rota.");
+                                        }
+                                      }}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5 transition-colors no-underline ${
+                                        hasPhone 
+                                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white font-bold' 
+                                          : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                                      Chamar Zap
+                                    </a>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(textMsg);
+                                        // Temporary state indicator is nice, but alert is rugged and safe
+                                        alert("Script copiado para a área de transferência! 📋");
+                                      }}
+                                      className="px-2.5 py-1 rounded text-[10px] bg-zinc-850 hover:bg-zinc-700 text-zinc-300 font-bold border border-zinc-800 hover:text-white transition-all cursor-pointer flex items-center gap-1"
+                                    >
+                                      <span>📋</span> Copiar Script
+                                    </button>
+                                  </div>
+
+                                  <div className="bg-zinc-950/40 p-2 rounded border border-zinc-900/60 font-mono text-[9px] text-zinc-400 leading-tight whitespace-pre-wrap">
+                                    <span className="text-zinc-500 font-bold uppercase tracking-wider text-[8px] block mb-1">Preview do Script ({et.id === 'e07' || et.id === 'e08' ? 'Cliente' : 'Motorista'}):</span>
+                                    "{textMsg}"
+                                  </div>
+                                </div>
                               )}
 
                               {/* Suggest updateStatus automatically at Step 6 */}
@@ -917,6 +1227,300 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
         </div>
 
       </div>
+
+      {/* MODAL: CALCULADORA DE ROTAS E PREVISÃO REALISTA */}
+      {isRouteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col md:h-auto overflow-hidden shadow-2xl animate-scale-up">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 md:p-5 border-b border-zinc-900 bg-zinc-900/40">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">🛣️</span>
+                <div>
+                  <h3 className="text-sm font-black uppercase text-white tracking-wider font-sans">
+                    Calculadora de Rotas & Previsibilidade Real (3 Dias)
+                  </h3>
+                  <p className="text-[10px] text-zinc-400 font-sans mt-0.5">
+                    Modela frotas e descansos regulamentares da Lei do Motorista em tempo real
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRouteModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-zinc-900 hover:bg-zinc-805 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body: Two-column Layout */}
+            <div className="p-4 md:p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[350px] max-h-[70vh]">
+              
+              {/* Column 1: Selector & Config inputs (5 Cols) */}
+              <div className="lg:col-span-12 xl:col-span-5 flex flex-col gap-4">
+                
+                {/* Search & Selector */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 font-sans block">
+                    1. Selecionar Rota/Carga de Trabalho
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-zinc-500" />
+                    <input
+                      type="text"
+                      placeholder="Filtrar motorista, destino, vendedor..."
+                      value={routeSearchQuery}
+                      onChange={(e) => setRouteSearchQuery(e.target.value)}
+                      className="w-full bg-zinc-900/60 border border-zinc-800 rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#FFD600] font-sans"
+                    />
+                  </div>
+
+                  <div className="border border-zinc-900 rounded-lg max-h-40 overflow-y-auto space-y-1 p-1 bg-zinc-950/40">
+                    {filteredRouteCargas.length === 0 ? (
+                      <p className="text-[10px] text-zinc-500 text-center py-4 italic font-sans font-medium">Nenhuma carga recente (últimos 3 dias) encontrada.</p>
+                    ) : (
+                      filteredRouteCargas.map((c) => {
+                        const isSelected = activeRouteCalcSelected?.id === c.id;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setActiveRouteCalcSelected(c)}
+                            className={`w-full text-left p-2 rounded-md transition-all flex flex-col gap-0.5 cursor-pointer text-xs ${
+                              isSelected 
+                                ? 'bg-[#FFD600]/10 border border-[#FFD600]/45 text-white' 
+                                : 'hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center w-full font-bold">
+                              <span className="text-white truncate max-w-[150px]">{c.motorista}</span>
+                              <span className="text-[9px] px-1.5 bg-zinc-900 rounded text-zinc-500 font-mono font-normal">
+                                {getDeliveryKm(c)} km
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px] text-zinc-500 truncate">
+                              <span>{c.origem}</span>
+                              <ArrowRight className="w-2.5 h-2.5 shrink-0" />
+                              <span className="text-[#FFD600]/85">{c.destino}</span>
+                            </div>
+                            <div className="text-[8px] text-zinc-650 font-mono mt-0.5">
+                              Vend: {cleanVendedor(c.vendedor || '')} • Criado em: {c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : 'Sem data'}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Simulated routing attributes */}
+                <div className="bg-zinc-900/40 border border-[#FFD600]/10 p-4 rounded-xl space-y-4">
+                  <h4 className="text-[10px] uppercase font-bold tracking-widest text-[#FFD600] font-sans">
+                    2. Variáveis de Simulação Logística
+                  </h4>
+
+                  {/* Average speed */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-zinc-300">Velocidade Média Programada:</span>
+                      <span className="text-white font-mono">{customSpeed} km/h</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="40"
+                      max="90"
+                      step="5"
+                      value={customSpeed}
+                      onChange={(e) => setCustomSpeed(Number(e.target.value))}
+                      className="w-full accent-[#FFD600] bg-zinc-800 h-1.5 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[9px] text-[#FFD600]/60 font-mono">
+                      <span>40 km/h (Chuvas / Serra)</span>
+                      <span>90 km/h (Pista Dupla)</span>
+                    </div>
+                  </div>
+
+                  {/* Active driving hour limit per day */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-zinc-300">Jornada Diária de Direção:</span>
+                      <span className="text-white font-mono">{customDailyHours} horas/dia</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="6"
+                      max="11"
+                      step="1"
+                      value={customDailyHours}
+                      onChange={(e) => setCustomDailyHours(Number(e.target.value))}
+                      className="w-full accent-[#FFD600] bg-zinc-800 h-1.5 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[9px] text-[#FFD600]/60 font-mono">
+                      <span>6h/dia (Fins de semana)</span>
+                      <span>11h/dia (Lei do Motorista)</span>
+                    </div>
+                  </div>
+
+                  {/* Starting Date Time */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-300 block">
+                      Horário Estipulado de Saída:
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={startingTime}
+                      onChange={(e) => setStartingTime(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-[#FFD600]"
+                    />
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Column 2: Simulated ETA and copyable ready scripts (7 Cols) */}
+              <div className="lg:col-span-12 xl:col-span-7 flex flex-col justify-between gap-4">
+                {activeRouteCalcSelected ? (
+                  (() => {
+                    const results = calculateRouteDetails(activeRouteCalcSelected);
+                    if (!results) return null;
+
+                    return (
+                      <div className="space-y-4 h-full flex flex-col justify-between">
+                        
+                        {/* Summary statistics */}
+                        <div className="bg-zinc-900/20 border border-zinc-850 rounded-xl p-4 space-y-3">
+                          <h4 className="text-[10px] uppercase font-bold tracking-widest text-[#FFD600] pb-2 border-b border-zinc-900 font-sans flex items-center justify-between">
+                            <span>Previsão Realista Calculada</span>
+                            <span className="text-[9px] font-mono font-normal text-zinc-500 uppercase">Fórmula Lei 13.103</span>
+                          </h4>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono">
+                            <div className="bg-zinc-950/60 p-2.5 rounded border border-zinc-900">
+                              <span className="text-[9px] text-zinc-500 block uppercase">Km Total</span>
+                              <strong className="text-sm text-[#FFD600] block mt-0.5">{results.distance} km</strong>
+                            </div>
+                            <div className="bg-zinc-950/60 p-2.5 rounded border border-zinc-900">
+                              <span className="text-[9px] text-zinc-500 block uppercase">Direção Pura</span>
+                              <strong className="text-sm text-white block mt-0.5">{results.activeHours}h {results.activeMinutes}m</strong>
+                            </div>
+                            <div className="bg-zinc-950/60 p-2.5 rounded border border-zinc-900">
+                              <span className="text-[9px] text-zinc-500 block uppercase">Paradas 30m</span>
+                              <strong className="text-xs text-amber-500 block mt-1">{results.restStopsCount} paradas</strong>
+                            </div>
+                            <div className="bg-zinc-950/60 p-2.5 rounded border border-zinc-900">
+                              <span className="text-[9px] text-zinc-500 block uppercase">Pernoite (11h)</span>
+                              <strong className="text-xs text-indigo-400 block mt-1">{results.pernoitesCount} pernoites</strong>
+                            </div>
+                          </div>
+
+                          <div className="bg-[#FFD600]/5 border border-[#FFD600]/30 rounded-lg p-3 flex items-center gap-3 mt-1">
+                            <div className="w-9 h-9 rounded-full bg-[#FFD600]/10 flex items-center justify-center shrink-0 text-[#FFD600]">
+                              <Clock className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-zinc-400 uppercase font-mono block">Previsão Estimada de Entrega (ETA Realista)</span>
+                              <strong className="text-sm md:text-base text-[#FFD600] uppercase font-sans tracking-tight">
+                                {results.formattedETA}
+                              </strong>
+                              <span className="text-xs text-white block font-sans font-medium">({results.etaWeekday})</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Script boxes with instant copy */}
+                        <div className="space-y-4 overflow-y-auto max-h-[350px] pr-1">
+                          
+                          {/* Motorista script block */}
+                          <div className="space-y-1.5 p-3 rounded-lg bg-zinc-900/10 border border-zinc-900/60">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider font-sans">
+                                💬 WhatsApp: Script de Viagem ao Motorista ({activeRouteCalcSelected.motorista})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(results.motoristaMessage);
+                                  alert("Script de viagem para o Motorista copiado! 📋");
+                                }}
+                                className="text-[9px] font-mono text-zinc-400 hover:text-white cursor-pointer transition-colors bg-zinc-950 px-2 py-1 rounded border border-zinc-800"
+                              >
+                                Copiar Script
+                              </button>
+                            </div>
+                            <textarea
+                              readOnly
+                              value={results.motoristaMessage}
+                              className="w-full h-24 bg-zinc-950 border border-zinc-900 rounded-lg p-2.5 text-xs text-zinc-300 font-mono leading-relaxed"
+                            />
+                            <div className="flex justify-end gap-2 text-right mt-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleSalvarPrevisaoRealista(activeRouteCalcSelected, results.motoristaMessage, results.formattedETA)}
+                                disabled={salvandoPrevisaoId === activeRouteCalcSelected.id}
+                                className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-[#FFD600] text-[#FFD600] hover:text-black hover:border-yellow-600 transition-all border border-zinc-800 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                              >
+                                {salvandoPrevisaoId === activeRouteCalcSelected.id ? 'Salvando...' : '💾 Salvar Previsão no Cadastro'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Cliente script block */}
+                          <div className="space-y-1.5 p-3 rounded-lg bg-zinc-900/10 border border-zinc-900/60">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider font-sans">
+                                🤝 WhatsApp: Informativo de Previsibilidade ao Cliente ({activeRouteCalcSelected.cliente || 'Sem Cliente'})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(results.clienteMessage);
+                                  alert("Informativo para o Cliente copiado! 📋");
+                                }}
+                                className="text-[9px] font-mono text-zinc-400 hover:text-white cursor-pointer transition-colors bg-zinc-950 px-2 py-1 rounded border border-zinc-800"
+                              >
+                                Copiar Script
+                              </button>
+                            </div>
+                            <textarea
+                              readOnly
+                              value={results.clienteMessage}
+                              className="w-full h-24 bg-zinc-950 border border-zinc-900 rounded-lg p-2.5 text-xs text-zinc-300 font-mono leading-relaxed"
+                            />
+                            <div className="flex justify-end gap-2 text-right mt-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleSalvarPrevisaoRealista(activeRouteCalcSelected, results.clienteMessage, results.formattedETA)}
+                                disabled={salvandoPrevisaoId === activeRouteCalcSelected.id}
+                                className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-[#FFD600] text-[#FFD600] hover:text-black hover:border-yellow-600 transition-all border border-zinc-800 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                              >
+                                {salvandoPrevisaoId === activeRouteCalcSelected.id ? 'Salvando...' : '💾 Salvar Previsão no Cadastro'}
+                              </button>
+                            </div>
+                          </div>
+
+                        </div>
+
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="bg-zinc-900/10 border border-dashed border-zinc-850 rounded-2xl p-8 text-center h-full flex flex-col justify-center items-center gap-2">
+                    <span className="text-3xl">🛣️</span>
+                    <strong className="text-zinc-400 font-sans text-xs uppercase">Sem Carga Selecionada</strong>
+                    <p className="text-[10px] text-zinc-500 max-w-sm mx-auto">
+                      Escolha um dos roteiros ativos do painel do lado esquerdo para calcular previsões realistas de rota e gerar scripts de comunicação customizados.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

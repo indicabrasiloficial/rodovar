@@ -404,15 +404,15 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     window.open(url, '_blank', 'noreferrer,noopener');
   };
 
-  // Preset WhatsApp templates
+  // Preset WhatsApp templates (humanized, short, natural and popular phrasing to avoid spam flags and feel trustful)
   const waTemplates = {
-    apresentar: `Olá ${entrega.motorista}! Aqui é o ${getActiveUserFullName()}, representante da Rodovar Transportadora. Estarei acompanhando sua viagem de ${entrega.origem} até ${entrega.destino} até o término. Poderia me enviar seu link de localização em tempo real pelo WhatsApp? Obrigado!`,
-    solicitarLoc: `Olá ${entrega.motorista}! Tudo bem? Poderia me enviar sua localização em tempo real agora? Preciso informar ao cliente o status da carga. Grato!`,
-    informarCliente: `Olá! Aqui é o ${getActiveUserFullName()} da Rodovar Transportadora. Sua carga está a caminho! O motorista ${entrega.motorista} está em deslocamento e chegará até ${entrega.prazo}. Qualquer dúvida estou à disposição.`,
-    solicitarCanhoto: `Olá ${entrega.motorista}! Após a entrega, por favor solicite o canhoto assinado e nos envie uma foto. Obrigado pela parceria!`,
-    confirmarEntrega: `Olá! Confirmamos a entrega da sua carga realizada pelo motorista ${entrega.motorista}. Foi um prazer atendê-lo! Rodovar Transportadora.`,
-    prazoMotorista: `Olá ${entrega.motorista}! Como está a viagem para ${entrega.destino}? Gostaríamos de alinhar sobre o tempo de percurso: o prazo limite de recebimento da carga é ${entrega.prazo}. Está tudo correndo de forma segura dentro deste planejado? Qualquer contratempo nos comunique de imediato. Obrigado! Rodovar.`,
-    prazoCliente: `Olá! Aqui é o ${getActiveUserFullName()} da Rodovar. Tudo bem? Referente à carga com destino a vocês, gostaríamos de confirmar que o prazo estimado/limite para a entrega é ${entrega.prazo}. O motorista ${entrega.motorista} está sob monitoramento e qualquer alteração de rota avisamos no mesmo instante!`
+    apresentar: `Opa, ${entrega.motorista}! Beleza? Aqui é o ${getActiveUserFullName()} da Rodovar. Eu que vou acompanhar sua viagem até ${entrega.destino}. Consegue me mandar aquela sua localização local pra eu acompanhar aqui? Valeu, boa viagem!`,
+    solicitarLoc: `Fala, ${entrega.motorista}! Tudo certo por aí? Consegue me mandar uma atualização de onde você tá agora ou a localização ao vivo? Só pra eu atualizar o cliente aqui. Abração!`,
+    informarCliente: `Olá, tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Passando pra avisar que sua carga já está a caminho com o motorista ${entrega.motorista}. Previsão de chegada para o dia ${entrega.prazo}. Se precisar de algo, só me chamar por aqui!`,
+    solicitarCanhoto: `Opa, ${entrega.motorista}! Assim que você descarregar aí, por favor não esquece de mandar a foto do canhoto assinado pra mim, beleza? Tamo junto!`,
+    confirmarEntrega: `Olá, tudo bem? Passando pra confirmar que o motorista ${entrega.motorista} finalizou a entrega da carga aí no endereço de vocês. Obrigado pela parceria e até a próxima! Rodovar.`,
+    prazoMotorista: `Fala, ${entrega.motorista}! Como tá a estrada aí, tudo tranquilo? Só pra alinhar com você, a previsão limite de recebimento da carga é ${entrega.prazo}. Tá tudo certo pra entregar nessa data de boa? No aguardo!`,
+    prazoCliente: `Olá, tudo bem? Sou o ${getActiveUserFullName()} da Rodovar. Só pra confirmar, a previsão pra entrega da sua carga é o dia ${entrega.prazo}. O motorista ${entrega.motorista} tá vindo tranquilo e qualquer novidade da rota eu te aviso por aqui!`
   };
 
   const handleSolicitarCanhotoClick = () => {

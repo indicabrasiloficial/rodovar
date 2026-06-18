@@ -26,6 +26,15 @@ import {
   Printer
 } from 'lucide-react';
 
+const cleanVendedorName = (name: string): string => {
+  if (!name) return '';
+  // Split by slashes, backslashes, or dashes to keep only the first name
+  const parts = name.split(/[\/\-\\]/);
+  let p = (parts[0] || '').trim().toUpperCase();
+  if (p === 'MÔNICA') p = 'MONICA';
+  return p;
+};
+
 interface DeliveryListProps {
   entregas: Entrega[];
   onSelectDelivery: (id: string) => void;
@@ -106,13 +115,6 @@ export function parsePastedTextToDeliveries(text: string) {
       return `${y}-${m}-${d}`;
     }
     return val;
-  };
-
-  const cleanVendedorName = (name: string): string => {
-    if (!name) return '';
-    // Split by slashes, backslashes, or dashes to keep only the first name
-    const parts = name.split(/[\/\-\\]/);
-    return (parts[0] || '').trim().toUpperCase();
   };
 
   const parseStatusValue = (input: string): DeliveryStatus => {
@@ -1791,7 +1793,7 @@ export default function DeliveryList({
                             <span className="text-[#FFD600]">{e.destino}</span>
                           </div>
                           <p className="text-[10px] text-gray-400 font-mono m-0">
-                            Vend: {e.vendedor || 'Sem registro'} • <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
+                            Vend: {cleanVendedorName(e.vendedor) || 'Sem registro'} • <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
                             {e.created_at && (
                               <>
                                 <span className="text-zinc-650"> •</span> Hora Cad: <span className="text-zinc-300 font-bold">{formatRegistrationTime(e.created_at)}</span>
@@ -2020,7 +2022,7 @@ export default function DeliveryList({
                               <span className="text-[#FFD600]">{e.destino}</span>
                             </div>
                             <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1.5 flex-wrap">
-                              <span>Vend: {e.vendedor || 'Sem registro'}</span>
+                              <span>Vend: {cleanVendedorName(e.vendedor) || 'Sem registro'}</span>
                               <span className="text-zinc-650">•</span>
                               <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
                               {e.created_at && (
@@ -2505,7 +2507,7 @@ export default function DeliveryList({
                             
                             <div className="truncate">
                               <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-tight font-bold">Comercial / Cliente</span>
-                              <span className="text-white font-bold">{e.vendedor || 'Sem Vendedor'}</span>
+                              <span className="text-white font-bold">{cleanVendedorName(e.vendedor) || 'Sem Vendedor'}</span>
                               <span className="text-gray-400 block truncate">{e.cliente || 'Sem Cliente'}</span>
                             </div>
 
