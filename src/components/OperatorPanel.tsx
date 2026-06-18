@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../db/firebase';
 import { Entrega, DeliveryStatus } from '../types';
-import { updateEntregaField } from '../db/storage';
+import { updateEntregaField, getEntregas, fetchEntregasFromServer } from '../db/storage';
 import { 
   collection, 
   query, 
@@ -70,45 +70,50 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
   const isOperator = userData?.role === "Operador" || userData?.role === "Master";
 
   const carregarCargas = useCallback(async (forcar = false) => {
-    if (!forcar) {
-      const cached = sessionStorage.getItem(CACHE_KEY);
-      if (cached) {
-        try {
-          const { dados, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < CACHE_TTL) {
-            setCargas(dados);
-            return;
-          }
-        } catch (e) {
-          console.error("Erro ao carregar cache do painel do operador:", e);
-        }
-      }
-    }
-    
     setCarregando(true);
     try {
-      // Query "entregas" collection where status is not "entregue" (economia Firebase Spark)
-      const q = query(
-        collection(db, "entregas"),
-        where("status", "!=", "entregue")
-      );
-      
-      const snap = await getDocs(q);
-      contarLeitura(snap.size);
+      if (forcar) {
+        await fetchEntregasFromServer(true).catch(err => {
+          console.warn("Erro ao forçar atualização:", err);
+        });
+      } else {
+        // Trigger background fetch if needed, but don't await to keep UI fast
+        fetchEntregasFromServer(false).catch(() => {});
+      }
 
-      const dados = snap.docs.map(d => {
-        const item = { id: d.id, ...d.data() } as Entrega;
-        return item;
+      // Load from global cached database (extremely fast, offline & quota resilient)
+      const todosOsDados = getEntregas();
+      contarLeitura(todosOsDados.length);
+
+      // Filter only active charges AND those created or updated in the last 72 hours (3 days)
+      const agora = Date.now();
+      const limite72Horas = 72 * 60 * 60 * 1000; // 72 hours in ms
+
+      const dadosFiltrados = todosOsDados.filter(item => {
+        const isAtivo = item.status !== 'entregue';
+        const tempoCriacao = item.created_at ? new Date(item.created_at).getTime() : 0;
+        const tempoAtualizacao = item.updated_at ? new Date(item.updated_at).getTime() : 0;
+        const registradoUltimas72h = (agora - tempoCriacao < limite72Horas) || (agora - tempoAtualizacao < limite72Horas);
+        
+        return isAtivo || registradoUltimas72h;
       });
 
       sessionStorage.setItem(CACHE_KEY, JSON.stringify({
-        dados, 
-        timestamp: Date.now()
+        dados: dadosFiltrados, 
+        timestamp: agora
       }));
       
-      setCargas(dados);
+      setCargas(dadosFiltrados);
     } catch (err) {
       console.error("Erro ao sincronizar do Firestore:", err);
+      // Fallback
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        try {
+          const { dados } = JSON.parse(cached);
+          setCargas(dados);
+        } catch {}
+      }
     } finally {
       setCarregando(false);
     }
@@ -121,18 +126,11 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
   // Handle local memory synchronization with App global changes
   useEffect(() => {
     const handleSync = () => {
-      // Refresh cache from storage dynamically if an external update occurred
-      const cached = sessionStorage.getItem(CACHE_KEY);
-      if (cached) {
-        try {
-          const { dados } = JSON.parse(cached);
-          setCargas(dados);
-        } catch {}
-      }
+      carregarCargas(false);
     };
     window.addEventListener('rodovar_realtime_event', handleSync);
     return () => window.removeEventListener('rodovar_realtime_event', handleSync);
-  }, []);
+  }, [carregarCargas]);
 
   // Update specific operator stage
   const handleToggleEtapa = async (cargaId: string, etapaId: string, valorAtual: boolean) => {
