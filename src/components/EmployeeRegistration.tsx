@@ -13,6 +13,8 @@ export interface Employee {
 
 const DEFAULT_PASSWORDS: Record<string, string> = {
   'jairobahia': 'Danone01',
+  'mateus': '102030',
+  'priscila': '203040',
   'genivaldo': 'rodovar2026',
   'alexandre': 'rodovar2026',
   'vitor': 'rodovar2026',
@@ -36,6 +38,14 @@ const DEFAULT_EMPLOYEES: Employee[] = [
     username: 'mateus',
     role: 'Operador',
     passwordHash: '102030',
+    created_at: '2026-01-01'
+  },
+  {
+    id: 'emp-priscila',
+    name: 'Priscila',
+    username: 'priscila',
+    role: 'Operador',
+    passwordHash: '203040',
     created_at: '2026-01-01'
   },
   {
@@ -114,6 +124,20 @@ export function getRegisteredEmployees(): Employee[] {
       username: 'mateus',
       role: 'Operador',
       passwordHash: '102030',
+      created_at: '2026-01-01'
+    });
+    localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
+  }
+
+  // Guarantee Priscila is present (Operador)
+  const hasPriscila = list.some(emp => emp.username === 'priscila');
+  if (!hasPriscila) {
+    list.push({
+      id: 'emp-priscila',
+      name: 'Priscila',
+      username: 'priscila',
+      role: 'Operador',
+      passwordHash: '203040',
       created_at: '2026-01-01'
     });
     localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
