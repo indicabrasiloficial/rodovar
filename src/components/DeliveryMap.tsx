@@ -189,7 +189,11 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
       // Simple WhatsApp links
       const telMot = entrega.tel_motorista.replace(/\D/g, '');
-      const whatsMsg = `Olá ${entrega.motorista}! Tudo bem? Sou o ${getActiveUserName()} da Rodovar. Me envia o link de localização dessa viagem para ${entrega.destino}?`;
+      const whatsMsg = `Bom dia, ${entrega.motorista}!
+
+Por favor, envie sua localização atual para acompanhamento da viagem.
+
+Obrigado e tenha um excelente dia!`;
       const waUrl = `https://wa.me/55${telMot}?text=${encodeURIComponent(whatsMsg)}`;
 
       // Create Popup

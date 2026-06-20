@@ -407,7 +407,11 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   // Preset WhatsApp templates (humanized, short, natural and popular phrasing to avoid spam flags and feel trustful)
   const waTemplates = {
     apresentar: `Opa, ${entrega.motorista}! Beleza? Aqui é o ${getActiveUserFullName()} da Rodovar. Eu que vou acompanhar sua viagem até ${entrega.destino}. Consegue me mandar aquela sua localização local pra eu acompanhar aqui? Valeu, boa viagem!`,
-    solicitarLoc: `Fala, ${entrega.motorista}! Tudo certo por aí? Consegue me mandar uma atualização de onde você tá agora ou a localização ao vivo? Só pra eu atualizar o cliente aqui. Abração!`,
+    solicitarLoc: `Bom dia, ${entrega.motorista}!
+
+Por favor, envie sua localização atual para acompanhamento da viagem.
+
+Obrigado e tenha um excelente dia!`,
     informarCliente: `Olá, tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Passando pra avisar que sua carga já está a caminho com o motorista ${entrega.motorista}. Previsão de chegada para o dia ${entrega.prazo}. Se precisar de algo, só me chamar por aqui!`,
     solicitarCanhoto: `Opa, ${entrega.motorista}! Assim que você descarregar aí, por favor não esquece de mandar a foto do canhoto assinado pra mim, beleza? Tamo junto!`,
     confirmarEntrega: `Olá, tudo bem? Passando pra confirmar que o motorista ${entrega.motorista} finalizou a entrega da carga aí no endereço de vocês. Obrigado pela parceria e até a próxima! Rodovar.`,

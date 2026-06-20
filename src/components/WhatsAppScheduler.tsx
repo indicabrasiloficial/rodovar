@@ -72,7 +72,7 @@ export default function WhatsAppScheduler() {
     } else if (selectedDeliveryId === 'BULK_TRANSITO') {
       if (recipientType === 'motorista') {
         setCustomText(
-          'Olá {motorista}! Aqui é o Agente Rodovar monitorando seu veículo em Trânsito para {destino}. Para atualizar nosso painel, favor nos enviar sua localização em tempo real. Boa viagem!'
+          'Bom dia {motorista}!\n\nPor favor, envie sua localização atual para acompanhamento da viagem.\n\nObrigado e tenha um excelente dia!'
         );
       } else {
         setCustomText(
@@ -82,7 +82,7 @@ export default function WhatsAppScheduler() {
     } else if (selectedDelivery) {
       if (recipientType === 'motorista') {
         setCustomText(
-          `Olá ${selectedDelivery.motorista}! Aqui é o Agente Rodovar monitorando sua carga para ${selectedDelivery.destino}. Conforme nossa programação de rastreio, por favor nos envie sua localização em tempo real. Grato e boa viagem!`
+          `Bom dia, ${selectedDelivery.motorista}!\n\nPor favor, envie sua localização atual para acompanhamento da viagem.\n\nObrigado e tenha um excelente dia!`
         );
       } else {
         setCustomText(
@@ -101,7 +101,7 @@ export default function WhatsAppScheduler() {
       let bulkTemplate = '';
       switch (type) {
         case 'loc':
-          bulkTemplate = 'Olá {motorista}! Aqui é o Agente Rodovar na escuta. Por favor, nos envie seu link de localização do WhatsApp atualizado para registrar no mapa. Obrigado!';
+          bulkTemplate = 'Bom dia {motorista}!\n\nPor favor, envie sua localização atual para acompanhamento da viagem.\n\nObrigado e tenha um excelente dia!';
           break;
         case 'atraso':
           bulkTemplate = 'Aviso importante de Logística Rodovar: A carga conduzida pelo motorista {motorista} com destino a {destino} sofreu atrasos térmicos/de trânsito regulamentares. Nova previsão sendo recalculada.';
@@ -130,7 +130,7 @@ export default function WhatsAppScheduler() {
 
     switch (type) {
       case 'loc':
-        template = `Olá ${driver}! Aqui é o Agente Rodovar na escuta. Por favor, nos envie seu link de localização do WhatsApp atualizado para registrar no mapa. Obrigado!`;
+        template = `Bom dia, ${driver}!\n\nPor favor, envie sua localização atual para acompanhamento da viagem.\n\nObrigado e tenha um excelente dia!`;
         break;
       case 'atraso':
         template = `Aviso importante de Logística Rodovar: A carga conduzida por ${driver} com destino ao cliente ${client} sofreu atrasos térmicos/de tráfego regulamentares. Nova previsão sendo recalculada.`;

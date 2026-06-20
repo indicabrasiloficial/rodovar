@@ -31,6 +31,14 @@ const DEFAULT_EMPLOYEES: Employee[] = [
     created_at: '2026-01-01'
   },
   {
+    id: 'emp-mateus',
+    name: 'Mateus',
+    username: 'mateus',
+    role: 'Operador',
+    passwordHash: '102030',
+    created_at: '2026-01-01'
+  },
+  {
     id: 'emp-genivaldo',
     name: 'Genivaldo',
     username: 'genivaldo',
@@ -92,6 +100,20 @@ export function getRegisteredEmployees(): Employee[] {
       username: 'ricardo',
       role: 'Diretor de Operações',
       passwordHash: 'rodovar2026',
+      created_at: '2026-01-01'
+    });
+    localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
+  }
+
+  // Guarantee Mateus is present (Operador)
+  const hasMateus = list.some(emp => emp.username === 'mateus');
+  if (!hasMateus) {
+    list.push({
+      id: 'emp-mateus',
+      name: 'Mateus',
+      username: 'mateus',
+      role: 'Operador',
+      passwordHash: '102030',
       created_at: '2026-01-01'
     });
     localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));

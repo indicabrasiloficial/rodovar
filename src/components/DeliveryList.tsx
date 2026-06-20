@@ -1351,7 +1351,11 @@ export default function DeliveryList({
   };
 
   const getWhatsappDriverMsg = (entrega: Entrega) => {
-    return `Olá ${entrega.motorista}! Sou o ${getActiveUserFullName()}, representante da Rodovar Transportadora. Poderia me enviar o link de localização dessa viagem para ${entrega.destino}? Aguardo o retorno!`;
+    return `Bom dia, ${entrega.motorista}!
+
+Por favor, envie sua localização atual para acompanhamento da viagem.
+
+Obrigado e tenha um excelente dia!`;
   };
 
   const getWhatsappClientMsg = (entrega: Entrega) => {
