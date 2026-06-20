@@ -462,8 +462,14 @@ export default function App() {
             
             if (lowerUser === 'master') {
               greeting = `Olá, Administrador Mestre! O sistema Rodovar está totalmente liberado. O painel de controle e cadastro de funcionários foi desbloqueado com segurança.`;
-            } else if (lowerUser === 'jairobahia' || lowerRole.includes('operador')) {
+            } else if (lowerUser === 'mateus') {
+              greeting = `Seja bem vindo ao sistema Rodovar Monitora, Mateus! O painel operacional está pronto para uso. Vamos acompanhar as cargas juntos hoje?`;
+            } else if (lowerUser === 'priscila') {
+              greeting = `Seja bem vindo ao sistema Rodovar Monitora, Priscila! Painel de controle operacional ativo. Quais rotas vamos vigiar hoje?`;
+            } else if (lowerUser === 'jairobahia') {
               greeting = `Seja bem vindo ao sistema Rodovar Monitora, Jairo Bahia! Painel de controle operacional ativo. Como estão as coletas e os envios de WhatsApp hoje?`;
+            } else if (lowerRole.includes('operador')) {
+              greeting = `Seja bem vindo ao sistema Rodovar Monitora, ${userData.displayName}! Painel operacional ativo com sucesso.`;
             } else if (lowerUser === 'genivaldo' || lowerRole.includes('gerente')) {
               greeting = `Olá, Gerente Genivaldo! O painel gerencial da Rodovar está pronto. Notei alguns veículos parados na rota, deseja iniciar uma varredura?`;
             } else if (lowerUser === 'alexandre' || lowerRole.includes('comercial')) {
