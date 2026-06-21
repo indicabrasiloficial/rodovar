@@ -1227,115 +1227,15 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               </p>
 
               <div className="space-y-2 text-xs max-h-[550px] overflow-y-auto pr-1">
-                {(() => {
-                  const list_etapas_jairo = [
-                    {
-                      id: 'e01',
-                      title: '1. Confirmar Cadastro',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Passando para informar de maneira respeitosa que sua carga já foi registrada como Coletando em nosso sistema. Desejamos uma excelente viagem!`,
-                      preview: `Passando para informar de maneira respeitosa que sua carga já foi registrada como Coletando em nosso sistema...`
-                    },
-                    {
-                      id: 'e02',
-                      title: '2. Chegada Local Coleta',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Por gentileza, poderia nos confirmar se você já chegou com sucesso ao local de coleta em ${entrega.origem}? Agradeço a atenção.`,
-                      preview: `Por gentileza, poderia nos confirmar se você já chegou com sucesso ao local de coleta em ${entrega.origem}?`
-                    },
-                    {
-                      id: 'e03',
-                      title: '3. Previsão de Carregamento',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Por favor, você teria uma previsão aproximada de que horas deve finalizar o seu carregamento aí em ${entrega.origem}? Aguardo seu retorno para alinhamento.`,
-                      preview: `Por favor, você teria uma previsão aproximada de que horas deve finalizar o seu carregamento...`
-                    },
-                    {
-                      id: 'e04',
-                      title: '4. Documento de Coleta',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Concluiu o carregamento? Por gentileza, nos envie uma foto bem nítida do documento físico de coleta assinado para que possamos validar no sistema. Muito obrigado!`,
-                      preview: `Por gentileza, nos envie uma foto bem nítida do documento físico de coleta assinado...`
-                    },
-                    {
-                      id: 'e05',
-                      title: '5. Solicitar MDF',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, Mateus! Tudo bem? Segue em anexo o documento de coleta assinado referente ao motorista ${entrega.motorista} (Origem: ${entrega.origem} ➔ Destino: ${entrega.destino}). Por favor, dê início à emissão do MDF-e para liberação do frete. Obrigado!`,
-                      preview: `Segue em anexo o documento de coleta assinado referente ao motorista ${entrega.motorista}...`
-                    },
-                    {
-                      id: 'e06',
-                      title: '6. Repassar MDF',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Segue em anexo o arquivo do seu MDF-e para viagem. Sua documentação e rota estão 100% autorizadas e liberadas em nosso sistema. Desejamos uma ótima estrada e siga em total segurança!`,
-                      preview: `Segue em anexo o arquivo do seu MDF-e para viagem. Rota 100% liberada...`
-                    },
-                    {
-                      id: 'e07',
-                      title: '7. Notificar Cliente',
-                      phone: entrega.tel_cliente,
-                      template: `${getGreetingText()}, tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Passando com muito respeito para informar que a sua carga já se encontra em trânsito com o motorista ${entrega.motorista}. A nossa previsão estimada de entrega é para o dia ${formatDateBR(entrega.prazo) || 'planejado'}. Qualquer dúvida, estou à inteira disposição!`,
-                      preview: `Passando com muito respeito para informar que a sua carga já se encontra em trânsito... Previsão: ${formatDateBR(entrega.prazo)}`
-                    },
-                    {
-                      id: 'e08',
-                      title: '8. Solicitar Localização',
-                      phone: entrega.tel_cliente,
-                      template: `${getGreetingText()}, tudo bem? Para garantirmos total exatidão e agilidade na realização do descarrego da sua carga em ${entrega.destino}, por gentileza, nos envie o link da localização exata ou o endereço de destino confirmado com pontos de referência. Muito obrigado pelo valioso suporte!`,
-                      preview: `Para garantirmos total exatidão e agilidade na realização do descarrego da sua carga...`
-                    },
-                    {
-                      id: 'e09',
-                      title: '9. Infos de Entrega',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Seguem todas as coordenadas e informações completas confirmadas para a realização de sua entrega em ${entrega.destino}:\n📦 Cliente: ${entrega.cliente}\n📍 Endereço de Entrega: ${entrega.notasOperador || 'Notado no sistema'}\nPor gentileza, siga com toda atenção e segurança. Excelente trabalho!`,
-                      preview: `Seguem todas as coordenadas e informações completas confirmadas para a sua entrega em ${entrega.destino}...`
-                    },
-                    {
-                      id: 'e10',
-                      title: '10. Canhoto Recebido',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Parabéns pela viagem concluída com sucesso! Por gentileza, assim que possível, nos envie uma foto bem legível e foca do canhoto assinado e da entrega realizada do motorista, para darmos baixa em nosso sistema e liberarmos o seu saldo de frete com faturamento. Fique com Deus!`,
-                      preview: `Parabéns pela viagem concluída com sucesso! Por gentileza, nos envie uma foto legível do canhoto...`,
-                      isCanhoto: true
-                    },
-                    {
-                      id: 'e11',
-                      title: '11. Informa ao cliente',
-                      phone: entrega.tel_cliente,
-                      template: `${getGreetingText()}, tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Passando de forma formal e educada para informar com grande satisfação que a entrega de sua mercadoria foi concluída com sucesso absoluto. O canhoto assinado já se encontra em nossa base. Agradecemos muito pela confiança e pela parceria!`,
-                      preview: `Passando de forma formal e educada para informar que a entrega de sua mercadoria foi concluída...`
-                    },
-                    {
-                      id: 'e12',
-                      title: '12. CanhotoAXD',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}, Mateus! Tudo bem? Segue em anexo o canhoto de entrega assinado pelo motorista ${entrega.motorista} referente ao trajeto ${entrega.origem} ➔ ${entrega.destino}. Documentação em perfeita ordem. Favor processar e registrar no sistema do grupo AXD/RODOVAR. Muito obrigado!`,
-                      preview: `Segue em anexo o canhoto de entrega assinado pelo motorista referente ao trajeto ${entrega.origem} ➔ ${entrega.destino}...`
-                    },
-                    {
-                      id: 'e13',
-                      title: '13. Finalizar Rota',
-                      phone: entrega.tel_motorista,
-                      template: `${getGreetingText()}! Rota concluída. Etapa administrativa de finalização executada com sucesso no sistema para o motorista ${entrega.motorista}. Status do frete atualizado para Entregue.`,
-                      preview: `Rota concluída. Etapa administrativa de finalização executada com sucesso no sistema.`
-                    }
-                  ];
-
-                  return list_etapas_jairo.map((et) => (
-                    <div key={et.id}>
-                      {renderScriptButton(
-                        et.id,
-                        et.title,
-                        et.phone,
-                        et.template,
-                        et.preview,
-                        et.isCanhoto
-                      )}
-                    </div>
-                  ));
-                })()}
+                {renderScriptButton('apresentar', '1. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Olá ${entrega.motorista}! Aqui é o ${getActiveUserName()}...`)}
+                {renderScriptButton('solicitarLoc', '2. Solicitar Localização', entrega.tel_motorista, waTemplates.solicitarLoc, 'Poderia me enviar sua localização ao vivo?')}
+                {renderScriptButton('informarCliente', '3. Informar Cliente', entrega.tel_cliente, waTemplates.informarCliente, `Sua carga está a caminho...`)}
+                {renderScriptButton('solicitarCanhoto', '4. Solicitar Canhoto', entrega.tel_motorista, waTemplates.solicitarCanhoto, 'Após a entrega solicite o canhoto assinado...', true)}
+                {renderScriptButton('confirmarEntrega', '5. Entrega Confirmada', entrega.tel_cliente, waTemplates.confirmarEntrega, `Confirmamos a entrega pelo motorista ${entrega.motorista}.`)}
+                
+                {/* New deadline alignment scripts */}
+                {renderScriptButton('prazoMotorista', '6. Alinhar Prazo (Motorista)', entrega.tel_motorista, waTemplates.prazoMotorista, `Prazo limite de recebimento: ${formatDateBR(entrega.prazo)}.`)}
+                {renderScriptButton('prazoCliente', '7. Alinhar Prazo (Cliente)', entrega.tel_cliente, waTemplates.prazoCliente, `Confirmando prazo estimado de entrega: ${formatDateBR(entrega.prazo)}.`)}
               </div>
             </div>
           ) : (

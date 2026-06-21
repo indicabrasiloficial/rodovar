@@ -617,7 +617,7 @@ export default function App() {
               id="nav-whatsapp"
             >
               <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">Agenda Zap</span>
+              <span className="hidden sm:inline">AgenteZAP</span>
               <span className="inline sm:hidden">Zap</span>
             </button>
 
@@ -956,7 +956,7 @@ export default function App() {
                   id="desktop-nav-whatsapp"
                 >
                   <MessageSquare className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
-                  <span>Agenda Zap</span>
+                  <span>AgenteZAP</span>
                 </button>
 
                 {/* Nav Agenda Compact Button */}
