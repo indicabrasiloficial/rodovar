@@ -65,6 +65,12 @@ const statusBadgeStyle: Record<string, { bg: string; text: string; label: string
     label: 'Parado 🛑',
     icon: AlertTriangle 
   },
+  descarregando: { 
+    bg: 'bg-purple-950/40 border border-purple-900/50', 
+    text: 'text-purple-400', 
+    label: 'Descarregando 🏢',
+    icon: Truck 
+  },
   entregue: { 
     bg: 'bg-emerald-950/40 border border-emerald-900/50', 
     text: 'text-emerald-400', 
@@ -1211,6 +1217,7 @@ export default function DeliveryList({
     { value: 'coletando', label: 'Coletando' },
     { value: 'em_transito', label: 'Trânsito' },
     { value: 'parado', label: 'Parado' },
+    { value: 'descarregando', label: 'Descarregando' },
     { value: 'entregue', label: 'Entregue' }
   ];
 

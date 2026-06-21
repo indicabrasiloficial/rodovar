@@ -1,4 +1,4 @@
-export type DeliveryStatus = 'coletando' | 'em_transito' | 'parado' | 'entregue';
+export type DeliveryStatus = 'coletando' | 'em_transito' | 'parado' | 'entregue' | 'descarregando';
 
 export interface EventoEntrega {
   id: string;
@@ -61,6 +61,7 @@ export interface Entrega {
     e10?: boolean;
     e11?: boolean;
     e12?: boolean;
+    e13?: boolean;
     ultimaAtualizacao?: any;
   };
   notasOperador?: string;

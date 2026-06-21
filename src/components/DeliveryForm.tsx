@@ -934,6 +934,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
                     <option value="coletando">Coletando 📦</option>
                     <option value="em_transito">Trânsito 🚚</option>
                     <option value="parado">Parado 🛑</option>
+                    <option value="descarregando">Descarregando 🏢</option>
                     <option value="entregue">Entregue ✅</option>
                   </select>
                 </div>

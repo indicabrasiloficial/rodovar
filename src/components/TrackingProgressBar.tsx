@@ -7,10 +7,11 @@ interface TrackingProgressBarProps {
 
 export const TrackingProgressBar: React.FC<TrackingProgressBarProps> = ({ status }) => {
   const steps = [
-    { label: 'Coletando', key: 'coletando', icon: Package, desc: 'Carga aguardando coleta' },
-    { label: 'Trânsito', key: 'em_transito', icon: Navigation, desc: 'Veículo em movimento' },
-    { label: 'Parado', key: 'parado', icon: AlertTriangle, desc: 'Parada programada / fiscal' },
-    { label: 'Entregue', key: 'entregue', icon: CheckSquare, desc: 'Entregue com canhoto assinado' }
+    { label: 'Coletando', key: 'coletando', icon: Package, desc: 'Aguardando Coleta' },
+    { label: 'Trânsito', key: 'em_transito', icon: Navigation, desc: 'Veículo em Movimento' },
+    { label: 'Parado', key: 'parado', icon: AlertTriangle, desc: 'Parada Programada' },
+    { label: 'Descarregando', key: 'descarregando', icon: Truck, desc: 'Veículo Descarregando' },
+    { label: 'Entregue', key: 'entregue', icon: CheckSquare, desc: 'Assinatura Registrada' }
   ];
 
   const getStatusIndex = (currentStatus: string): number => {
@@ -18,15 +19,16 @@ export const TrackingProgressBar: React.FC<TrackingProgressBarProps> = ({ status
       case 'coletando': return 0;
       case 'em_transito': return 1;
       case 'parado': return 2;
-      case 'entregue': return 3;
-      default: return 0;
+      case 'descarregando': return 3;
+      case 'entregue': return 4;
+      default: return 1;
     }
   };
 
   const currentIndex = getStatusIndex(status);
 
   return (
-    <div className="w-full py-6 px-2 sm:px-4" id="tracking-progress-bar-container">
+    <div className="w-full py-6 px-1 sm:px-4" id="tracking-progress-bar-container">
       {/* Track progress line */}
       <div className="relative mb-8" id="progress-line-track">
         {/* Background line */}
@@ -45,14 +47,14 @@ export const TrackingProgressBar: React.FC<TrackingProgressBarProps> = ({ status
           style={{ left: `${(currentIndex / (steps.length - 1)) * 100}%` }}
           id="animated-truck-marker"
         >
-          <div className="bg-[#FFD700] text-[#0a0a0a] p-2.5 rounded-full shadow-[0_0_15px_#FFD700] animate-bounce flex items-center justify-center">
-            <span className="text-lg inline-block" style={{ transform: 'scaleX(-1)' }} id="truck-emoji-reversed">🚛</span>
+          <div className="bg-[#FFD700] text-[#0a0a0a] p-2 rounded-full shadow-[0_0_15px_#FFD700] animate-bounce flex items-center justify-center">
+            <span className="text-base inline-block" style={{ transform: 'scaleX(-1)' }} id="truck-emoji-reversed">🚛</span>
           </div>
         </div>
       </div>
 
       {/* Steps indicators */}
-      <div className="grid grid-cols-4 gap-2 text-center" id="progress-steps-labels">
+      <div className="grid grid-cols-5 gap-1 text-center" id="progress-steps-labels">
         {steps.map((step, idx) => {
           const isCompleted = idx < currentIndex;
           const isActive = idx === currentIndex;

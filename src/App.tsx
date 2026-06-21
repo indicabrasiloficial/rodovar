@@ -20,6 +20,7 @@ import BackupRegistry from './components/BackupRegistry';
 import { Rastrear } from './components/Rastrear';
 import { MotoristaTracking } from './components/MotoristaTracking';
 import OperatorPanel from './components/OperatorPanel';
+import Agenda from './components/Agenda';
 
 import { 
   Truck, 
@@ -49,7 +50,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda';
 
 
 export default function App() {
@@ -83,6 +84,18 @@ export default function App() {
     if (newValue && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+  };
+
+  const [isLightMode, setIsLightMode] = useState(() => {
+    return localStorage.getItem('rodovar_light_mode') !== 'false'; // default to true to save quotas!
+  });
+
+  const toggleLightMode = () => {
+    const newValue = !isLightMode;
+    setIsLightMode(newValue);
+    localStorage.setItem('rodovar_light_mode', String(newValue));
+    // Trigger window storage/cache update
+    window.dispatchEvent(new Event('storage'));
   };
 
   // Load user session on start and sync in real-time
@@ -392,6 +405,10 @@ export default function App() {
             onClose={() => setSelectedView('dashboard')}
           />
         );
+      case 'agenda':
+        return (
+          <Agenda />
+        );
       case 'operador_painel':
         return (
           <OperatorPanel 
@@ -557,24 +574,22 @@ export default function App() {
               <span>Painel</span>
             </button>
 
-            {/* Nav Operator Panel - Only visible for Operador (or Master) roles */}
-            {(user?.role === 'Operador' || user?.role === 'Master') && (
-              <button
-                onClick={() => {
-                  setSelectedView('operador_painel');
-                  window.history.pushState({ path: '/operador/painel' }, '', '/operador/painel');
-                }}
-                className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
-                  selectedView === 'operador_painel'
-                  ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
-                  : 'bg-zinc-900 border-zinc-800 text-[#FFD600]/80 hover:text-[#FFD600] hover:border-[#FFD600]'
-                }`}
-                id="nav-operador-painel"
-              >
-                <CheckSquare className="w-4 h-4 shrink-0 text-inherit animate-pulse" />
-                <span>Painel Operador</span>
-              </button>
-            )}
+            {/* Agenda Navigation Button (replaces Painel Operador) */}
+            <button
+              onClick={() => {
+                setSelectedView('agenda');
+                window.history.pushState({ path: '/agenda' }, '', '/agenda');
+              }}
+              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+                selectedView === 'agenda'
+                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+              }`}
+              id="nav-agenda"
+            >
+              <BookOpen className="w-4 h-4 shrink-0 text-inherit animate-pulse" />
+              <span>Agenda</span>
+            </button>
 
             {/* Nav Stats */}
             <button
@@ -770,13 +785,28 @@ export default function App() {
 
             {/* High Density Right Side Info Items */}
             <div className="flex items-center gap-3.5">
+              {/* Quota Saving Mode (Modo Light) Toggle Button */}
+              <button
+                onClick={toggleLightMode}
+                className={`p-1.5 px-3 border rounded transition-all cursor-pointer h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold ${
+                  isLightMode 
+                    ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45' 
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white'
+                }`}
+                title={isLightMode ? "Modo Light ativo para economia de banco de dados. Clique para Sincronismo Rápido." : "Modo Express ativo. Clique para ativar economia de banco de dados."}
+                id="desktop-light-mode-toggle-btn"
+              >
+                <Database className="w-3.5 h-3.5 text-[#FFD600]" />
+                <span>{isLightMode ? "MODO LIGHT" : "MODO EXPRESS"}</span>
+              </button>
+
               {/* Mute Speech Button */}
               <button
                 onClick={toggleMuteSpeech}
                 className={`p-1.5 px-3 border rounded transition-all cursor-pointer h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold ${
                   isSpeechMuted 
-                    ? 'bg-red-950/20 text-red-400 border-red-900/60 hover:text-red-305' 
-                    : 'bg-emerald-950/15 text-emerald-400 border-emerald-900/60 hover:text-emerald-305'
+                    ? 'bg-red-950/20 text-red-400 border-red-900/60 hover:text-red-355' 
+                    : 'bg-emerald-950/15 text-emerald-400 border-emerald-900/60 hover:text-emerald-355'
                 }`}
                 title={isSpeechMuted ? "Fala desativada temporariamente. Clique para reativar." : "Fala ativa. Clique para desativar temporariamente."}
                 id="desktop-mute-speech-toggle-btn"
@@ -878,24 +908,22 @@ export default function App() {
                   <span>Painel</span>
                 </button>
 
-                {/* Nav Operator Panel - Only visible for Operador (or Master) roles */}
-                {(user?.role === 'Operador' || user?.role === 'Master') && (
-                  <button
-                    onClick={() => {
-                      setSelectedView('operador_painel');
-                      window.history.pushState({ path: '/operador/painel' }, '', '/operador/painel');
-                    }}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
-                      selectedView === 'operador_painel'
-                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
-                      : 'bg-zinc-900/20 border-transparent text-[#FFD600]/80 hover:text-[#FFD600]'
-                    }`}
-                    id="desktop-nav-operador-painel"
-                  >
-                    <CheckSquare className="w-3.5 h-3.5 shrink-0 animate-pulse text-inherit" />
-                    <span>Painel Operador</span>
-                  </button>
-                )}
+                {/* Nav Agenda Rodovar button (replaces desktop Painel Operador) */}
+                <button
+                  onClick={() => {
+                    setSelectedView('agenda');
+                    window.history.pushState({ path: '/agenda' }, '', '/agenda');
+                  }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'agenda'
+                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                    : 'bg-zinc-900/20 border-transparent text-zinc-300 hover:text-[#FFD600]'
+                  }`}
+                  id="desktop-nav-agenda"
+                >
+                  <BookOpen className="w-3.5 h-3.5 shrink-0 animate-pulse text-inherit" />
+                  <span>Agenda</span>
+                </button>
               </div>
             </div>
 
@@ -929,6 +957,20 @@ export default function App() {
                 >
                   <MessageSquare className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
                   <span>Agenda Zap</span>
+                </button>
+
+                {/* Nav Agenda Compact Button */}
+                <button
+                  onClick={() => setSelectedView('agenda')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'agenda' 
+                    ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                    : 'text-zinc-300 border-transparent hover:text-[#FFD600] hover:bg-zinc-900/40'
+                  }`}
+                  id="desktop-nav-agenda-compact"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                  <span>Agenda Rodovar</span>
                 </button>
 
                 {/* Nav Manager */}

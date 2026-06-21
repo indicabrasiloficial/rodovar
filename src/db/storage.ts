@@ -93,7 +93,12 @@ let isFetchingEntregas = false;
 export async function fetchEntregasFromServer(force = false): Promise<void> {
   if (isFetchingEntregas) return;
   const now = Date.now();
-  if (!force && lastEntregasFetchTime > 0 && now - lastEntregasFetchTime < CACHE_TTL_ENTREGAS) {
+
+  // Low Firebase resource quota active checker (Light Mode drops getDocs triggers significantly)
+  const isLightMode = localStorage.getItem('rodovar_light_mode') !== 'false';
+  const effectiveTtl = isLightMode ? 15 * 60 * 1000 : CACHE_TTL_ENTREGAS;
+
+  if (!force && lastEntregasFetchTime > 0 && now - lastEntregasFetchTime < effectiveTtl) {
     return;
   }
 
@@ -184,7 +189,11 @@ let isFetchingMessages = false;
 export async function fetchScheduledMessagesFromServer(force = false): Promise<void> {
   if (isFetchingMessages) return;
   const now = Date.now();
-  if (!force && lastMessagesFetchTime > 0 && now - lastMessagesFetchTime < CACHE_TTL_MESSAGES) {
+
+  const isLightMode = localStorage.getItem('rodovar_light_mode') !== 'false';
+  const effectiveTtl = isLightMode ? 20 * 60 * 1000 : CACHE_TTL_MESSAGES;
+
+  if (!force && lastMessagesFetchTime > 0 && now - lastMessagesFetchTime < effectiveTtl) {
     return;
   }
 
@@ -544,6 +553,7 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
       coletando: 'Coletando 📦',
       em_transito: 'Trânsito 🚚',
       parado: 'Parado 🛑',
+      descarregando: 'Descarregando 🏢',
       entregue: 'Entregue ✅'
     };
     return labels[status] || status;

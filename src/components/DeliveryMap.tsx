@@ -18,6 +18,8 @@ const getStatusColor = (status: string) => {
       return '#EF4444'; // Red
     case 'coletando':
       return '#3B82F6'; // Blue
+    case 'descarregando':
+      return '#A855F7'; // Purple
     case 'entregue':
       return '#10B981'; // Green
     default:
@@ -201,6 +203,7 @@ Obrigado e tenha um excelente dia!`;
         coletando: 'Coletando 📦',
         em_transito: 'Trânsito 🚚',
         parado: 'Parado 🛑',
+        descarregando: 'Descarregando 🏢',
         entregue: 'Entregue ✅'
       };
 

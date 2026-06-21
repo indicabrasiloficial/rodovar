@@ -3,6 +3,7 @@ import { db } from '../db/firebase';
 import { Entrega, DeliveryStatus } from '../types';
 import { updateEntregaField, getEntregas, fetchEntregasFromServer } from '../db/storage';
 import { getDeliveryKm } from '../utils/distance';
+import { formatDateBR } from '../utils/date';
 import { 
   collection, 
   query, 
@@ -113,7 +114,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
       const limite72Horas = 72 * 60 * 60 * 1000; // 72 hours in ms
 
       const dadosFiltrados = todosOsDados.filter(item => {
-        const isAtivo = item.status !== 'entregue' && !item.etapasOperador?.e12;
+        const isAtivo = item.status !== 'entregue' && !item.etapasOperador?.e13;
         const tempoCriacao = item.created_at ? new Date(item.created_at).getTime() : 0;
         const tempoAtualizacao = item.updated_at ? new Date(item.updated_at).getTime() : 0;
         const registradoUltimas72h = (agora - tempoCriacao < limite72Horas) || (agora - tempoAtualizacao < limite72Horas);
@@ -350,20 +351,21 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
     return Number(ts);
   };
 
-  // Definition of the 12 stages metadata and helper text
+  // Definition of the 13 stages metadata and helper text
   const list_etapas_metadata = [
     { id: 'e01', title: 'Confirmar Cadastro', desc: 'Carga cadastrada e status definido como Coletando', phase: 'coleta', phaseLabel: 'FASE 1 — COLETA' },
     { id: 'e02', title: 'Chegada Local Coleta', desc: 'Confirmar com o motorista: já chegou ao local de coleta?', phase: 'coleta', phaseLabel: 'FASE 1 — COLETA' },
     { id: 'e03', title: 'Previsão de Carregamento', desc: 'Registrar previsão de coleta informada pelo motorista', phase: 'coleta', phaseLabel: 'FASE 1 — COLETA' },
     { id: 'e04', title: 'Documento de Coleta', desc: 'Receber documento físico de coleta assinado', phase: 'coleta', phaseLabel: 'FASE 1 — COLETA' },
-    { id: 'e05', title: 'Solicitar MDF', desc: 'Enviar documento de coleta para Mateus gerar o MDF', phase: 'coleta', phaseLabel: 'FASE 1 — COLETA' },
-    { id: 'e06', title: 'Repassar MDF', desc: 'Receber MDF gerado e enviar ao motorista', phase: 'coleta', phaseLabel: 'FASE 1 — COLETA' },
+    { id: 'e05', title: 'Solicitar MDF', desc: 'Enviar documento de coleta para Mateus gerar o MDF', phase: 'transito', phaseLabel: 'FASE 2 — TRÂNSITO' },
+    { id: 'e06', title: 'Repassar MDF', desc: 'Receber MDF gerado e enviar ao motorista', phase: 'transito', phaseLabel: 'FASE 2 — TRÂNSITO' },
     { id: 'e07', title: 'Notificar Cliente', desc: 'Informar o cliente que a carga está em trânsito', phase: 'transito', phaseLabel: 'FASE 2 — TRÂNSITO' },
     { id: 'e08', title: 'Solicitar Localização', desc: 'Solicitar localização exata de entrega ao cliente', phase: 'transito', phaseLabel: 'FASE 2 — TRÂNSITO' },
-    { id: 'e09', title: 'Infos de Entrega', desc: 'Repassar todas as informações de entrega ao motorista', phase: 'transito', phaseLabel: 'FASE 2 — TRÂNSITO' },
-    { id: 'e10', title: 'Canhoto Recebido', desc: 'Receber canhoto assinado e fotos da entrega do motorista', phase: 'entrega', phaseLabel: 'FASE 3 — ENTREGA' },
-    { id: 'e11', title: ' canhotosAXD', desc: 'Enviar canhoto ao grupo AXD/RODOVAR marcando @Mateus', phase: 'entrega', phaseLabel: 'FASE 3 — ENTREGA' },
-    { id: 'e12', title: 'Finalizar Rota', desc: 'Atualizar status da carga para Entregue no sistema', phase: 'entrega', phaseLabel: 'FASE 3 — ENTREGA' }
+    { id: 'e09', title: 'Infos de Entrega', desc: 'Repassar todas as informações da entrega ao motorista', phase: 'entrega', phaseLabel: 'FASE 3 — ENTREGA' },
+    { id: 'e10', title: 'Canhoto Recebido', desc: 'Receber canhoto assinado e foto da entrega do motorista', phase: 'entrega', phaseLabel: 'FASE 3 — ENTREGA' },
+    { id: 'e11', title: 'Informa ao cliente', desc: 'Repassar todas as informações da entrega concluída com canhoto', phase: 'encerrar', phaseLabel: 'FASE 4 — ENCERRAR' },
+    { id: 'e12', title: 'CanhotoAXD', desc: 'Enviar canhoto ao grupo AXD/RODOVAR marcando @Mateus', phase: 'encerrar', phaseLabel: 'FASE 4 — ENCERRAR' },
+    { id: 'e13', title: 'Finalizar Rota', desc: 'Atualizar status da carga para Entregue no sistema', phase: 'encerrar', phaseLabel: 'FASE 4 — ENCERRAR' }
   ];
 
   // Helper helper to get next pending stage index
@@ -451,9 +453,9 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
       };
     }
 
-    // 3. Prazo de entrega é hoje e etapa 12 não concluída
+    // 3. Prazo de entrega é hoje e etapa 13 não concluída
     const hojeStr = new Date().toISOString().split('T')[0];
-    if (!etapas.e12 && e.prazo === hojeStr) {
+    if (!etapas.e13 && e.prazo === hojeStr) {
       return {
         level: 'atencao',
         label: 'Prazo Vencendo Hoje',
@@ -532,11 +534,11 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
     
     const naColeta = cargas.filter(c => {
       const listConcluidas = getConcluidasCount(c);
-      return listConcluidas <= 6; // Phase 1 is done up to etapa 6
+      return listConcluidas <= 4; // Phase 1 (Coleta) is done up to etapa 4
     }).length;
 
     const emTransito = cargas.filter(c => {
-      return c.status === 'em_transito' && !c.etapasOperador?.e12;
+      return c.status === 'em_transito' && !c.etapasOperador?.e13;
     }).length;
 
     const hojeStr = new Date().toISOString().split('T')[0];
@@ -557,7 +559,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
     const origem = e.origem || '';
     const destino = e.destino || '';
     const cliente = e.cliente || '';
-    const prazo = e.prazo ? new Date(e.prazo + 'T00:00:00').toLocaleDateString('pt-BR') : '';
+    const prazoBR = formatDateBR(e.prazo);
     const notas = e.notasOperador || '';
 
     // Extract potential confirm items from Operator notes
@@ -578,31 +580,43 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
 
     const jairoName = getActiveUserFullName();
 
+    // Time of day greeting helper: Bom dia, Boa tarde, Boa noite
+    const getGreeting = (): string => {
+      const hr = new Date().getHours();
+      if (hr >= 5 && hr < 12) return 'Bom dia';
+      if (hr >= 12 && hr < 18) return 'Boa tarde';
+      return 'Boa noite';
+    };
+
+    const greeting = getGreeting();
+
     switch (etapaId) {
       case 'e01':
-        return `Opa, ${motorista}! Beleza? Aqui é o ${jairoName} da Rodovar. Eu que vou acompanhar sua viagem até ${destino}. Consegue me mandar aquela sua localização local pra eu acompanhar aqui? Valeu, boa viagem!`;
+        return `${greeting}, ${motorista}! Tudo bem? Aqui é o ${jairoName} da Rodovar. Passando para informar de maneira respeitosa que sua carga já foi registrada como Coletando em nosso sistema. Desejamos uma excelente viagem!`;
       case 'e02':
-        return `Fala, ${motorista}! Tudo certo? Você já encostou aí na coleta em ${origem}? Consegue me dar um retorno pra eu avisar o cliente aqui? Abraço!`;
+        return `${greeting}, ${motorista}! Tudo bem? Por gentileza, poderia nos confirmar se você já chegou com sucesso ao local de coleta em ${origem}? Agradeço a atenção.`;
       case 'e03':
-        return `Opa, ${motorista}! Consigo confirmar o carregamento com você? Tem previsão de que horas você deve terminar e estar liberado aí em ${origem}? Valeu!`;
+        return `${greeting}, ${motorista}! Tudo bem? Por favor, você teria uma previsão aproximada de que horas deve finalizar o seu carregamento aí em ${origem}? Aguardo seu retorno para alinhamento.`;
       case 'e04':
-        return `Fala, ${motorista}! Show de bola. Consegue me mandar uma foto bem nítida dos documentos assinados aí na coleta (como a Ordem de Coleta, Nota ou CTE) pra gente liberar sua viagem aqui? Obrigado!`;
+        return `${greeting}, ${motorista}! Tudo bem? Concluiu o carregamento? Por gentileza, nos envie uma foto bem nítida do documento físico de coleta assinado para que possamos validar no sistema. Muito obrigado!`;
       case 'e05':
-        return `Mateus, segue o documento de coleta em anexo referente ao motorista ${motorista} (Origem: ${origem} ➔ Destino: ${destino}). Por favor, pode dar início à geração do MDF-e para liberação do frete? Valeu!`;
+        return `${greeting}, Mateus! Tudo bem? Segue em anexo o documento de coleta assinado referente ao motorista ${motorista} (Origem: ${origem} ➔ Destino: ${destino}). Por favor, dê início à emissão do MDF-e para liberação do frete. Obrigado!`;
       case 'e06':
-        return `Opa, ${motorista}! Segue em anexo o arquivo do seu MDF-e que o Mateus liberou para nós. Rota e documentação 100% autorizadas no sistema. Pode seguir viagem com toda segurança. Boa estrada!`;
+        return `${greeting}, ${motorista}! Tudo bem? Segue em anexo o arquivo do seu MDF-e para viagem. Sua documentação e rota estão 100% autorizadas e liberadas em nosso sistema. Desejamos uma ótima estrada e siga em total segurança!`;
       case 'e07':
-        return `Olá, tudo bem? Aqui é o ${jairoName} da Rodovar. Passando para avisar que a sua carga já está em trânsito com o motorista ${motorista}. Previsão de entrega limite para o dia ${prazo || 'planejado'}. Qualquer dúvida estou à disposição!`;
+        return `${greeting}, tudo bem? Aqui é o ${jairoName} da Rodovar. Passando com muito respeito para informar que a sua carga já se encontra em trânsito com o motorista ${motorista}. A nossa previsão estimada de entrega é para o dia ${prazoBR || 'planejado'}. Qualquer dúvida, estou à inteira disposição!`;
       case 'e08':
-        return `Olá, tudo bem? Para darmos total previsibilidade à sua entrega em ${destino}, você poderia nos enviar o link da localização local exata do descarregamento ou confirmar o endereço completo com ponto de referência? Muito obrigado!`;
+        return `${greeting}, tudo bem? Para garantirmos total exatidão e agilidade na realização do descarrego da sua carga em ${destino}, por gentileza, nos envie o link da localização exata ou o endereço de destino confirmado com pontos de referência. Muito obrigado pelo valioso suporte!`;
       case 'e09':
-        return `Fala, ${motorista}! Seguem as coordenadas e detalhes confirmados de entrega para a sua descarga em ${destino}:\n📦 Cliente: ${cliente}\n📍 Endereço de Entrega: ${endConfirmado}\nQualquer dúvida ou dilema na rota, só me chamar. Segue firme e com cuidado!`;
+        return `${greeting}, ${motorista}! Tudo bem? Seguem todas as coordenadas e informações completas confirmadas para a realização de sua entrega em ${destino}:\n📦 Cliente: ${cliente}\n📍 Endereço de Entrega: ${endConfirmado}\nPor gentileza, siga com toda atenção e segurança. Excelente trabalho!`;
       case 'e10':
-        return `Fala, ${motorista}! Viagem finalizada com excelência! Por favor, tira aquela foto bem nítida e enquadrada do canhoto assinado e carimbado de entrega pra eu dar baixa no faturamento e liberar o pagamento do seu saldo de frete. Tamo junto!`;
+        return `${greeting}, ${motorista}! Tudo bem? Parabéns pela viagem concluída com sucesso! Por gentileza, assim que possível, nos envie uma foto bem legível e foca do canhoto assinado e da entrega realizada do motorista, para darmos baixa em nosso sistema e liberarmos o seu saldo de frete com faturamento. Fique com Deus!`;
       case 'e11':
-        return `@Mateus, segue a imagem do canhoto de entrega finalizado com sucesso pelo motorista ${motorista} de ${origem} ➔ ${destino}. Documentação em conformidade. Favor processar saldo de frete e registrar.`;
+        return `${greeting}, tudo bem? Aqui é o ${jairoName} da Rodovar. Passando de forma formal e educada para informar com grande satisfação que a entrega de sua mercadoria foi concluída com sucesso absoluto. O canhoto assinado já se encontra em nossa base. Agradecemos muito pela confiança e pela parceria!`;
       case 'e12':
-        return `Prezado Cliente, aqui é da Rodovar. Confirmamos que o descarregamento da carga foi concluído pelo motorista ${motorista} em ${destino} e o comprovante já foi registrado em nossa base. Muito obrigado pela confiança e até a próxima viagem!`;
+        return `${greeting}, Mateus! Tudo bem? Segue em anexo o canhoto de entrega assinado pelo motorista ${motorista} referente ao trajeto ${origem} ➔ ${destino}. Documentação em perfeita ordem. Favor processar e registrar no sistema do grupo AXD/RODOVAR. Muito obrigado!`;
+      case 'e13':
+        return `${greeting}! Rota concluída. Etapa administrativa de finalização executada com sucesso no sistema para o motorista ${motorista}. Status do frete atualizado para Entregue.`;
       default:
         return '';
     }
@@ -859,11 +873,11 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                       </div>
                       
                       <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase border ${
-                        c.status === 'entregue' || c.etapasOperador?.e12 ? 'bg-emerald-950/20 border-emerald-900 text-emerald-400' :
+                        c.status === 'entregue' || c.etapasOperador?.e13 ? 'bg-emerald-950/20 border-emerald-900 text-emerald-400' :
                         c.status === 'em_transito' ? 'bg-amber-950/20 border-amber-900 text-[#FFD600]' :
                         'bg-zinc-900 border-zinc-800 text-zinc-400'
                       }`}>
-                        {c.etapasOperador?.e12 ? 'entregue' : c.status.replace('_', ' ')}
+                        {c.etapasOperador?.e13 ? 'entregue' : c.status.replace('_', ' ')}
                       </span>
                     </div>
 
@@ -1038,7 +1052,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                         const isBlockedStep = et.id === 'e05' && !etapasConfig.e04;
 
                         // Recipient number builder based on target
-                        const phoneToUse = et.id === 'e07' || et.id === 'e08' ? e.tel_cliente : e.tel_motorista;
+                        const phoneToUse = et.id === 'e07' || et.id === 'e08' || et.id === 'e11' ? e.tel_cliente : e.tel_motorista;
                         const hasPhone = !!phoneToUse;
                         const waLink = hasPhone 
                           ? `https://wa.me/55${formatPhoneForWhatsApp(phoneToUse)}?text=${encodeURIComponent(textMsg)}` 
@@ -1164,8 +1178,8 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                                 </button>
                               )}
 
-                              {/* Suggest updateDoc "entregue" automatically at Step 12 */}
-                              {et.id === 'e12' && !isConcluida && e.status !== 'entregue' && (
+                              {/* Suggest updateDoc "entregue" automatically at Step 13 */}
+                              {et.id === 'e13' && !isConcluida && e.status !== 'entregue' && (
                                 <button
                                   type="button"
                                   onClick={async () => {
@@ -1176,7 +1190,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                                       return updated;
                                     });
                                     // Mark stage as true
-                                    await handleToggleEtapa(e.id, 'e12', false);
+                                    await handleToggleEtapa(e.id, 'e13', false);
                                     alert("Status da carga alterado para ENTREGUE com sucesso absoluto! Operação concluída. ✅");
                                   }}
                                   className="px-2.5 py-1 bg-emerald-950/20 border border-emerald-500/30 hover:border-emerald-500/60 text-emerald-400 rounded text-[10px] font-mono uppercase font-bold cursor-pointer"
@@ -1192,15 +1206,15 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                     </div>
                   </div>
 
-                  {/* PARTE 4 — Finalizing message when all 12 stages completed */}
-                  {concluidas === 12 && (
+                  {/* PARTE 4 — Finalizing message when all 13 stages completed */}
+                  {concluidas === 13 && (
                     <div className="bg-emerald-950/25 border-2 border-emerald-500/60 rounded-xl p-4 md:p-5 text-center space-y-3">
                       <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40 animate-bounce">
                         ✓
                       </div>
                       <h4 className="text-sm font-black text-white uppercase tracking-wider font-sans">CARGA FINALIZADA COM SUCESSO</h4>
                       <p className="text-xs text-zinc-400 leading-relaxed max-w-lg mx-auto">
-                        Excelente trabalho operacional! Todas as 12 etapas, do cadastro ao canhoto de pagamento de Mateus AXD, foram registradas. Rota entre <strong>{e.origem}</strong> e <strong>{e.destino}</strong> foi concluída sem incidentes e sob controle total comercial.
+                        Excelente trabalho operacional! Todas as 13 etapas, do cadastro ao canhoto de pagamento de Mateus AXD, foram registradas. Rota entre <strong>{e.origem}</strong> e <strong>{e.destino}</strong> foi concluída sem incidentes e sob controle total comercial.
                       </p>
                       <div className="font-mono text-[10px] text-zinc-500 border-t border-zinc-900 pt-3 flex items-center justify-center gap-4">
                         <span>Motorista: {e.motorista}</span>
