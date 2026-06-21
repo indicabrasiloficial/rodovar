@@ -1721,18 +1721,18 @@ Obrigado e tenha um excelente dia!`;
 
             {/* Shimmer skeleton rows for desktop */}
             <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full min-w-[1260px] text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-zinc-950/80 border-b border-zinc-800 text-gray-400 font-mono uppercase tracking-wider text-[10px]">
                     <th className="py-3 px-4 w-10 text-center"></th>
-                    <th className="py-3 px-4">Rota / Vendedor</th>
-                    <th className="py-3 px-4">Coleta / Prazo</th>
-                    <th className="py-3 px-4">Cliente</th>
-                    <th className="py-3 px-4">Motorista</th>
-                    <th className="py-3 px-4">Valores / Fretes</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-center">Contatos Rápidos (WhatsApp)</th>
-                    <th className="py-3 px-4 text-right">Ação</th>
+                    <th className="py-3 px-4 min-w-[200px]">Rota / Vendedor</th>
+                    <th className="py-3 px-4 min-w-[130px]">Coleta / Prazo</th>
+                    <th className="py-3 px-4 min-w-[190px]">Cliente</th>
+                    <th className="py-3 px-4 min-w-[160px]">Motorista</th>
+                    <th className="py-3 px-4 min-w-[120px]">Valores / Fretes</th>
+                    <th className="py-3 px-4 text-center min-w-[100px]">Status</th>
+                    <th className="py-3 px-4 text-center min-w-[300px]">Contatos Rápidos (WhatsApp)</th>
+                    <th className="py-3 px-4 text-right min-w-[60px]">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 font-sans">
@@ -1976,7 +1976,7 @@ Obrigado e tenha um excelente dia!`;
 
             {/* Desktop Table View */}
             <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full min-w-[1260px] text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-zinc-950/80 border-b border-zinc-800 text-gray-400 font-mono uppercase tracking-wider text-[10px]">
                     <th className="py-3 px-4 w-10 text-center">
@@ -1988,14 +1988,14 @@ Obrigado e tenha um excelente dia!`;
                         id="bulk-select-all-checkbox"
                       />
                     </th>
-                    <th className="py-3 px-4">Rota / Vendedor</th>
-                    <th className="py-3 px-4">Coleta / Prazo</th>
-                    <th className="py-3 px-4">Cliente</th>
-                    <th className="py-3 px-4">Motorista</th>
-                    <th className="py-3 px-4">Valores / Fretes</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-center">Contatos Rápidos (WhatsApp)</th>
-                    <th className="py-3 px-4 text-right">Ação</th>
+                    <th className="py-3 px-4 min-w-[200px]">Rota / Vendedor</th>
+                    <th className="py-3 px-4 min-w-[130px]">Coleta / Prazo</th>
+                    <th className="py-3 px-4 min-w-[190px]">Cliente</th>
+                    <th className="py-3 px-4 min-w-[160px]">Motorista</th>
+                    <th className="py-3 px-4 min-w-[120px]">Valores / Fretes</th>
+                    <th className="py-3 px-4 text-center min-w-[100px]">Status</th>
+                    <th className="py-3 px-4 text-center min-w-[300px]">Contatos Rápidos (WhatsApp)</th>
+                    <th className="py-3 px-4 text-right min-w-[60px]">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 font-sans relative">

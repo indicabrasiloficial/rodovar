@@ -1059,7 +1059,7 @@ export default function App() {
       </header>
 
       {/* Main Container structure */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6 font-sans">
+      <main className="flex-1 max-w-7xl xl:max-w-[1450px] 2xl:max-w-[1600px] w-full mx-auto px-4 py-6 font-sans">
         {firestoreQuotaExceeded && (
           <div className="mb-6 p-4 rounded-xl bg-amber-950/20 border border-amber-900/60 text-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in" id="rodovar-quota-banner">
             <div className="flex items-start gap-3">
