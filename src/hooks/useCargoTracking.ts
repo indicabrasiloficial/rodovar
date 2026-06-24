@@ -28,7 +28,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       return;
     }
 
-    const cargoId = entrega.id;
+    const cargoId = entrega.id.toLowerCase();
     const trackingRef = ref(database, `tracking/${cargoId}/current`);
 
     const handleSync = (rtdbSnap: any) => {

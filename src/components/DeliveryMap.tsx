@@ -132,7 +132,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       let lastGpsTimestamp = '';
 
       // Find if this specific delivery has an active live tracking session
-      const liveData = liveTrackingData.find(track => track.cargoId === entrega.id);
+      const liveData = liveTrackingData.find(track => track.cargoId.toLowerCase() === entrega.id.toLowerCase());
       const isLiveGps = !!liveData;
 
       if (isLiveGps && liveData) {
@@ -321,7 +321,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
     // 5. Instantly pan or zoom smoothly to selected elements
     if (singleView && mapDeliveries.length === 1) {
       const item = mapDeliveries[0];
-      const liveData = liveTrackingData.find(track => track.cargoId === item.id);
+      const liveData = liveTrackingData.find(track => track.cargoId.toLowerCase() === item.id.toLowerCase());
       const latVal = liveData ? liveData.lat : (item.localizacaoAtual && item.localizacaoAtual.lat) ? Number(item.localizacaoAtual.lat) : Number(item.lat);
       const lngVal = liveData ? liveData.lng : (item.localizacaoAtual && item.localizacaoAtual.lng) ? Number(item.localizacaoAtual.lng) : Number(item.lng);
       const currentZoom = map.getZoom() || 8;
@@ -329,7 +329,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
     } else if (selectedId) {
       const selected = mapDeliveries.find(e => e.id === selectedId);
       if (selected) {
-        const liveData = liveTrackingData.find(track => track.cargoId === selected.id);
+        const liveData = liveTrackingData.find(track => track.cargoId.toLowerCase() === selected.id.toLowerCase());
         const latVal = liveData ? liveData.lat : (selected.localizacaoAtual && selected.localizacaoAtual.lat) ? Number(selected.localizacaoAtual.lat) : Number(selected.lat);
         const lngVal = liveData ? liveData.lng : (selected.localizacaoAtual && selected.localizacaoAtual.lng) ? Number(selected.localizacaoAtual.lng) : Number(selected.lng);
         const currentZoom = map.getZoom() || 6;

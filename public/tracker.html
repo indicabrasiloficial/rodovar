@@ -275,13 +275,14 @@
 
     // URL Parameters Parser
     const urlParams = new URLSearchParams(window.location.search);
-    const cargoId = urlParams.get("cargoId") || urlParams.get("cargoid");
+    const rawCargoId = urlParams.get("cargoId") || urlParams.get("cargoid") || "test-cargo";
+    const cargoId = rawCargoId.toLowerCase();
     const driverName = urlParams.get("driver") || "Motorista Convidado";
     const routeName = urlParams.get("route") || "Rota não especificada";
     const clientName = urlParams.get("client") || "Destinatário não especificado";
 
     // Setup initial GUI elements
-    document.getElementById("disp-cargo-id").innerText = cargoId ? cargoId.toUpperCase() : "TESTE-CARGO";
+    document.getElementById("disp-cargo-id").innerText = rawCargoId.toUpperCase();
     document.getElementById("disp-driver").innerText = driverName;
     document.getElementById("disp-route").innerText = routeName;
     document.getElementById("disp-client").innerText = clientName;
