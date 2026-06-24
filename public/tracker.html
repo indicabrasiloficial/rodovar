@@ -253,7 +253,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getDatabase, ref, set, push, onValue, off, get, child } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-    import { getFirestore, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFirestore, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // Global Tracker States
     let app, db, firestore;
@@ -438,16 +438,26 @@
       }
     }
 
-    // Watch status changes in database to auto-close
+    // Watch status changes in Firestore to auto-close (100% reliable)
     function listenToStatusChanges() {
-      if (!db) return;
-      const statusRef = ref(db, `tracking/${cargoId}/status`);
-      onValue(statusRef, (snapshot) => {
-        const statusVal = snapshot.val();
-        if (statusVal === 'delivered' || statusVal === 'finished') {
-          stopTrackingGracefully(statusVal);
-        }
-      });
+      if (!firestore) return;
+      try {
+        const docRef = doc(firestore, "entregas", cargoId);
+        onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const statusVal = data.status;
+            if (statusVal === 'entregue' || statusVal === 'delivered' || statusVal === 'finished') {
+              console.log("Status change detected in Firestore: ", statusVal, ". Stop tracking gracefully.");
+              stopTrackingGracefully(statusVal);
+            }
+          }
+        }, (err) => {
+          console.warn("Firestore status listener error:", err);
+        });
+      } catch (e) {
+        console.warn("Error setting up Firestore status listener:", e);
+      }
     }
 
     // Wake Lock handling to keep screen alive

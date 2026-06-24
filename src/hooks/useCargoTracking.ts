@@ -99,39 +99,52 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       return false;
     };
 
+    const applyFallbacks = () => {
+      if (entrega.link_localizacao) {
+        const waCoords = extractCoordsFromLink(entrega.link_localizacao);
+        if (waCoords) {
+          setPosition(waCoords);
+          setSource('whatsapp');
+          setIsLive(false);
+          setLastSeenSeconds(null);
+          lastTsRef.current = null;
+          return;
+        }
+      }
+
+      if (entrega.lat && entrega.lng) {
+        setPosition({ lat: Number(entrega.lat), lng: Number(entrega.lng) });
+        setSource(entrega.link_localizacao ? 'whatsapp' : 'none');
+        setIsLive(false);
+        setLastSeenSeconds(null);
+        lastTsRef.current = null;
+      } else {
+        setPosition(null);
+        setSource('none');
+        setIsLive(false);
+        setLastSeenSeconds(null);
+        lastTsRef.current = null;
+      }
+    };
+
+    // 1. Run an immediate sync with Firestore/delivery data before RTDB responds or if RTDB fails
+    const initialFound = handleSync(null);
+    if (!initialFound) {
+      applyFallbacks();
+    }
+
     const unsubscribe = onValue(trackingRef, (snap) => {
       const found = handleSync(snap);
       if (!found) {
-        // Fallback 1: Link WhatsApp coordinates
-        if (entrega.link_localizacao) {
-          const waCoords = extractCoordsFromLink(entrega.link_localizacao);
-          if (waCoords) {
-            setPosition(waCoords);
-            setSource('whatsapp');
-            setIsLive(false);
-            setLastSeenSeconds(null);
-            lastTsRef.current = null;
-            return;
-          }
-        }
-
-        // Fallback 2: General coordinates from delivery object
-        if (entrega.lat && entrega.lng) {
-          setPosition({ lat: Number(entrega.lat), lng: Number(entrega.lng) });
-          setSource(entrega.link_localizacao ? 'whatsapp' : 'none');
-          setIsLive(false);
-          setLastSeenSeconds(null);
-          lastTsRef.current = null;
-        } else {
-          setPosition(null);
-          setSource('none');
-          setIsLive(false);
-          setLastSeenSeconds(null);
-          lastTsRef.current = null;
-        }
+        applyFallbacks();
       }
     }, (error) => {
-      console.error("Error reading specific cargo tracking from Realtime DB:", error);
+      console.warn("Realtime DB tracking listener failed/denied, falling back to Firestore: ", error);
+      // Run fallback sync with Firestore directly when Realtime DB fails
+      const found = handleSync(null);
+      if (!found) {
+        applyFallbacks();
+      }
     });
 
     // Setup an interval to recalculate active/offline status locally (every 5s)
