@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getDatabase } from 'firebase/database';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const config = {
@@ -17,6 +18,7 @@ const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig.f
 
 const app = initializeApp(config);
 export const db = getFirestore(app, databaseId); /* CRITICAL: The app will break without this line */
+export const database = getDatabase(app, import.meta.env.VITE_FIREBASE_DATABASE_URL || (firebaseConfig as any).databaseURL || `https://${config.projectId}-default-rtdb.firebaseio.com`);
 
 // Enable offline IndexedDB persistence for robust local fallback when network is unavailable
 if (typeof window !== 'undefined') {

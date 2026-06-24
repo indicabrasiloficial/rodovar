@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
@@ -119,6 +120,30 @@ REGRAS CRÍTICAS DE ESCOPO:
       success: false,
       error: err.message || "Erro interno ao processar a requisição de IA"
     });
+  }
+});
+
+// Endpoint serving active firebase config parameters to the standalone tracker client
+app.get("/api/firebase-config", (req, res) => {
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (!fs.existsSync(configPath)) {
+      return res.status(404).json({ error: "Configuration blueprint file not found." });
+    }
+    const configData = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const config = {
+      apiKey: process.env.VITE_FIREBASE_API_KEY || configData.apiKey,
+      authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || configData.authDomain,
+      projectId: process.env.VITE_FIREBASE_PROJECT_ID || configData.projectId,
+      storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || configData.storageBucket,
+      messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || configData.messagingSenderId,
+      appId: process.env.VITE_FIREBASE_APP_ID || configData.appId,
+      databaseURL: process.env.VITE_FIREBASE_DATABASE_URL || configData.databaseURL || `https://${process.env.VITE_FIREBASE_PROJECT_ID || configData.projectId}-default-rtdb.firebaseio.com`
+    };
+    return res.json(config);
+  } catch (err: any) {
+    console.error("Error reading Firebase Applet config:", err);
+    return res.status(500).json({ error: "Failed to read application configurations." });
   }
 });
 

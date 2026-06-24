@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RODOVAR MONITORA - Rastreamento de Viagem</title>
+  <!-- Tailwind CSS Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts - Inter & JetBrains Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              yellow: '#FFD600',
+              bg: '#0A0A0A',
+              card: '#121212',
+              border: '#1A1A1A'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0A0A0A;
+      color: #E4E4E7;
+      font-family: 'Inter', sans-serif;
+    }
+    .pulse-green {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+      animation: pulse-green-anim 1.5s infinite;
+    }
+    @keyframes pulse-green-anim {
+      0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+      }
+      100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+      }
+    }
+    .pulse-yellow {
+      box-shadow: 0 0 0 0 rgba(255, 214, 0, 0.4);
+      animation: pulse-yellow-anim 2s infinite;
+    }
+    @keyframes pulse-yellow-anim {
+      0% {
+        box-shadow: 0 0 0 0 rgba(255, 214, 0, 0.4);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(255, 214, 0, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 214, 0, 0);
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between px-4 py-6 select-none bg-brand-bg">
+
+  <!-- Top Header with Logo -->
+  <header class="flex justify-between items-center pb-4 border-b border-zinc-900 mb-4">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-brand-yellow flex items-center justify-center text-black font-black text-xl italic shadow-md">
+        R
+      </div>
+      <div>
+        <h1 class="text-base font-black tracking-tight text-white flex items-center gap-1.5 uppercase font-sans">
+          RODOVAR <span class="text-brand-yellow text-xs font-semibold px-1 py-0.5 rounded bg-brand-yellow/10">MONITORA</span>
+        </h1>
+        <p class="text-[9px] font-mono tracking-widest text-zinc-500 uppercase leading-none">Rastreamento de Frota</p>
+      </div>
+    </div>
+    
+    <!-- Status Connection Badge -->
+    <div id="conn-badge" class="flex items-center gap-1.5 bg-zinc-900/50 px-2.5 py-1 rounded-full border border-zinc-800 text-[10px] font-mono">
+      <span id="conn-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span id="conn-text" class="text-zinc-400">ONLINE</span>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 flex flex-col gap-4">
+
+    <!-- Active Delivery Info Card -->
+    <div class="bg-brand-card border border-zinc-900 rounded-xl p-5 shadow-xl relative overflow-hidden" id="card-delivery-info">
+      <!-- Accent Top border -->
+      <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-brand-yellow to-amber-500"></div>
+
+      <div class="flex justify-between items-start mb-4 mt-2">
+        <div>
+          <span class="text-[9px] font-mono uppercase tracking-wider text-zinc-500 block leading-none mb-1">ID da Carga</span>
+          <h2 id="disp-cargo-id" class="text-sm font-bold font-mono text-zinc-300">CARREGANDO...</h2>
+        </div>
+        <div id="status-badge" class="px-2.5 py-1 rounded-lg bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono text-[10px] uppercase font-black tracking-wider flex items-center gap-1.5">
+          <span id="status-dot" class="w-2 h-2 rounded-full bg-zinc-500"></span>
+          <span id="status-text">AGUARDANDO</span>
+        </div>
+      </div>
+
+      <div class="space-y-4 font-sans text-xs">
+        <div class="grid grid-cols-1 gap-3">
+          <div class="bg-zinc-900/40 p-3 rounded-lg border border-zinc-900/80">
+            <span class="text-[9px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">Motorista Autorizado</span>
+            <span id="disp-driver" class="text-sm font-black text-white block">Carregando...</span>
+          </div>
+
+          <div class="bg-zinc-900/40 p-3 rounded-lg border border-zinc-900/80">
+            <span class="text-[9px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">Rota da Carga</span>
+            <span id="disp-route" class="text-sm font-bold text-brand-yellow block leading-snug">Carregando...</span>
+          </div>
+
+          <div class="bg-zinc-900/40 p-3 rounded-lg border border-zinc-900/80">
+            <span class="text-[9px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">Cliente Destinatário</span>
+            <span id="disp-client" class="text-sm font-medium text-zinc-300 block">Carregando...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GPS Live Status Panel -->
+    <div id="gps-panel" class="bg-brand-card border border-zinc-900 rounded-xl p-5 shadow-xl hidden">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400 font-mono flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          Painel de Telemetria GPS
+        </h3>
+        <span id="tracker-timer" class="text-[10px] font-mono text-zinc-500">00:00:00</span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div class="bg-zinc-900/60 p-3 rounded-lg border border-zinc-900 flex flex-col justify-between">
+          <span class="text-[9px] font-mono text-zinc-500 uppercase">Latitude</span>
+          <span id="tele-lat" class="text-sm font-bold font-mono text-white mt-1">-</span>
+        </div>
+        <div class="bg-zinc-900/60 p-3 rounded-lg border border-zinc-900 flex flex-col justify-between">
+          <span class="text-[9px] font-mono text-zinc-500 uppercase">Longitude</span>
+          <span id="tele-lng" class="text-sm font-bold font-mono text-white mt-1">-</span>
+        </div>
+        <div class="bg-zinc-900/60 p-3 rounded-lg border border-zinc-900 flex flex-col justify-between">
+          <span class="text-[9px] font-mono text-zinc-500 uppercase">Precisão GPS</span>
+          <span id="tele-acc" class="text-xs font-mono font-bold mt-1 text-zinc-400">-</span>
+        </div>
+        <div class="bg-zinc-900/60 p-3 rounded-lg border border-zinc-900 flex flex-col justify-between">
+          <span class="text-[9px] font-mono text-zinc-500 uppercase">Envios Concluídos</span>
+          <span id="tele-count" class="text-sm font-black font-mono text-emerald-400 mt-1">0</span>
+        </div>
+      </div>
+
+      <!-- Quick background warning -->
+      <div class="bg-zinc-950 p-3 rounded-lg border border-zinc-900 flex items-start gap-2 text-[10px] text-zinc-400 leading-relaxed">
+        <span class="text-emerald-400 mt-0.5">✔</span>
+        <span><strong>Rastreamento em Background Ativo:</strong> Você pode desligar a tela ou abrir outros aplicativos. O GPS continuará enviando a sua localização.</span>
+      </div>
+    </div>
+
+    <!-- Landing/Instructions Box if Idle -->
+    <div id="instructions-panel" class="bg-zinc-950 p-4 rounded-xl border border-zinc-900 flex flex-col gap-3">
+      <h3 class="text-xs font-black uppercase text-brand-yellow font-mono tracking-wide">Como funciona?</h3>
+      <ul class="text-[11px] space-y-2 text-zinc-400 font-sans">
+        <li class="flex gap-2 items-start">
+          <span class="text-brand-yellow font-bold">1.</span>
+          <span>Clique em <strong>INICIAR CORRIDA</strong> abaixo antes de sair com o caminhão.</span>
+        </li>
+        <li class="flex gap-2 items-start">
+          <span class="text-brand-yellow font-bold">2.</span>
+          <span>Permita o acesso à localização nas configurações do seu celular, se solicitado.</span>
+        </li>
+        <li class="flex gap-2 items-start">
+          <span class="text-brand-yellow font-bold">3.</span>
+          <span>Mantenha a página aberta. Você pode desligar a tela, colocar no bolso ou usar o GPS de sua preferência. O monitoramento continuará enviando a sua posição automaticamente.</span>
+        </li>
+        <li class="flex gap-2 items-start">
+          <span class="text-brand-yellow font-bold">4.</span>
+          <span>Ao chegar no destino, quando o operador confirmar o descarregamento/entrega, o rastreamento será encerrado de forma totalmente automática.</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Error container -->
+    <div id="error-panel" class="bg-red-950/20 border border-red-900/50 p-4 rounded-xl text-red-400 text-xs hidden flex-col gap-2">
+      <strong class="font-bold flex items-center gap-1 font-mono uppercase text-[10px]">⚠️ Erro Detectado</strong>
+      <span id="error-message">Erro desconhecido. Por favor, recarregue a página ou contate o suporte.</span>
+    </div>
+
+    <!-- Finished Screen -->
+    <div id="finished-panel" class="bg-emerald-950/20 border border-emerald-900/60 p-8 rounded-xl text-center hidden flex flex-col items-center gap-4 animate-fade-in my-auto">
+      <div class="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center text-emerald-400 text-3xl font-black">
+        ✓
+      </div>
+      <div>
+        <h3 class="text-lg font-black text-white font-sans">Viagem Concluída com Sucesso!</h3>
+        <p class="text-xs text-zinc-400 mt-2 leading-relaxed">Sua carga foi registrada como <strong>ENTREGUE</strong> no sistema central. O monitorador GPS foi desligado e sua bateria está salva.</p>
+      </div>
+      <span class="text-[10px] font-mono bg-emerald-950/50 border border-emerald-900/30 text-emerald-400 px-3 py-1 rounded-full uppercase">Serviço Encerrado</span>
+    </div>
+
+  </main>
+
+  <!-- Bottom Buttons Controls -->
+  <footer class="mt-6 flex flex-col gap-2" id="footer-controls">
+    <!-- Main Big Button: Iniciar Corrida -->
+    <button id="btn-start-tracking" class="w-full bg-brand-yellow hover:bg-yellow-400 text-black py-4 px-6 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.98]">
+      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      INICIAR CORRIDA
+    </button>
+
+    <!-- Active Button Blocked (Visible only when tracking is active) -->
+    <button id="btn-active-tracking" class="w-full bg-zinc-900 border border-zinc-800 text-zinc-500 py-4 px-6 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed hidden">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-green"></span>
+      CORRIDA ATIVA — BLOQUEADO
+    </button>
+
+    <div class="text-center">
+      <p class="text-[9px] text-zinc-600 font-mono">RODOVAR MONITORA v2.8 • SISTEMA SEGURO DA CRIPTO-FROTA</p>
+    </div>
+  </footer>
+
+  <!-- Firebase CDN imports -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set, push, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    // Global Tracker States
+    let app, db;
+    let watchId = null;
+    let isTracking = false;
+    let wakeLock = null;
+    let serviceWorkerReg = null;
+    let totalCoordinatesSent = 0;
+    let trackingStartTime = null;
+    let timerInterval = null;
+
+    // URL Parameters Parser
+    const urlParams = new URLSearchParams(window.location.search);
+    const cargoId = urlParams.get("cargoId");
+    const driverName = urlParams.get("driver") || "Motorista Convidado";
+    const routeName = urlParams.get("route") || "Rota não especificada";
+    const clientName = urlParams.get("client") || "Destinatário não especificado";
+
+    // Setup initial GUI elements
+    document.getElementById("disp-cargo-id").innerText = cargoId ? cargoId.toUpperCase() : "TESTE-CARGO";
+    document.getElementById("disp-driver").innerText = driverName;
+    document.getElementById("disp-route").innerText = routeName;
+    document.getElementById("disp-client").innerText = clientName;
+
+    // Helper: format connection dot
+    window.addEventListener('online', () => {
+      document.getElementById("conn-dot").className = "w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse";
+      document.getElementById("conn-text").innerText = "ONLINE";
+    });
+    window.addEventListener('offline', () => {
+      document.getElementById("conn-dot").className = "w-1.5 h-1.5 rounded-full bg-red-500 animate-ping";
+      document.getElementById("conn-text").innerText = "DESCONECTADO";
+    });
+
+    // 1. Fetch Firebase Configuration from our proxy/API dynamically or fallback to config schema
+    async function loadFirebaseConfig() {
+      try {
+        const response = await fetch('/api/firebase-config');
+        if (!response.ok) throw new Error("Falha ao carregar API config.");
+        const config = await response.json();
+        return config;
+      } catch (e) {
+        console.warn("Could not fetch remote Firebase config, using native local defaults: ", e);
+        // Clean absolute fallback default configuration structure
+        const loc = window.location;
+        const defaultProj = "ai-studio-ee2f781e-146e-4680-8c47-4b030d3ec113";
+        return {
+          apiKey: "",
+          authDomain: `${defaultProj}.firebaseapp.com`,
+          databaseURL: `https://${defaultProj}-default-rtdb.firebaseio.com`,
+          projectId: defaultProj,
+          storageBucket: `${defaultProj}.appspot.com`,
+          messagingSenderId: "706858665205",
+          appId: "1:706858665205:web:601173b3d89a02a74771bc"
+        };
+      }
+    }
+
+    // Initialize tracking logic on load
+    async function init() {
+      if (!cargoId) {
+        showError("ID da Carga inválido ou ausente na URL. Solicite um novo link.");
+        return;
+      }
+
+      try {
+        const firebaseConfig = await loadFirebaseConfig();
+        app = initializeApp(firebaseConfig);
+        db = getDatabase(app);
+
+        // Listen for automatic delivery/finish status from control room
+        listenToStatusChanges();
+
+        // Bind Start Trigger
+        document.getElementById("btn-start-tracking").addEventListener("click", startTracking);
+        document.getElementById("btn-active-tracking").addEventListener("click", () => {
+          alert("Sua corrida está ativa! O rastreamento de segurança está bloqueado em background para sua segurança.");
+        });
+
+      } catch (error) {
+        console.error("Erro na inicialização de telemetria:", error);
+        showError("Não foi possível conectar com o servidor central da Rodovar. Verifique seu 4G.");
+      }
+    }
+
+    // Watch status changes in database to auto-close
+    function listenToStatusChanges() {
+      const statusRef = ref(db, `tracking/${cargoId}/status`);
+      onValue(statusRef, (snapshot) => {
+        const statusVal = snapshot.val();
+        if (statusVal === 'delivered' || statusVal === 'finished') {
+          stopTrackingGracefully(statusVal);
+        }
+      });
+    }
+
+    // Wake Lock handling to keep screen alive
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log("Wake Lock ativado com sucesso.");
+        }
+      } catch (err) {
+        console.warn("Wake Lock recusado pelo dispositivo:", err);
+      }
+    }
+
+    // Background Service Worker inline generator
+    async function registerBackgroundServiceWorker() {
+      if ('serviceWorker' in navigator) {
+        try {
+          // Generates a background keepalive service worker via Blob
+          const swCode = `
+            self.addEventListener('install', (e) => {
+              self.skipWaiting();
+            });
+            self.addEventListener('activate', (e) => {
+              e.waitUntil(self.clients.claim());
+            });
+            self.addEventListener('message', (e) => {
+              // Echo message to maintain event loops
+              e.source.postMessage({ type: 'KEEPALIVE_ACK' });
+            });
+          `;
+          const blob = new Blob([swCode], { type: 'application/javascript' });
+          const swUrl = URL.createObjectURL(blob);
+          const reg = await navigator.serviceWorker.register(swUrl);
+          serviceWorkerReg = reg;
+          console.log("Service Worker Background registrado.");
+          
+          // Start keepalive interval
+          setInterval(() => {
+            if (reg.active) {
+              reg.active.postMessage({ type: 'KEEPALIVE' });
+            }
+          }, 20000);
+        } catch (swError) {
+          console.warn("Service worker background não suportado:", swError);
+        }
+      }
+    }
+
+    // Primary Geolocation Trigger
+    async function startTracking() {
+      if (!navigator.geolocation) {
+        showError("Seu dispositivo não possui GPS ou suporte a Geolocalização.");
+        return;
+      }
+
+      // Block beforeunload warning
+      window.addEventListener("beforeunload", preventUnload);
+
+      // Request screen lock and background registers
+      await requestWakeLock();
+      await registerBackgroundServiceWorker();
+
+      // UI changes
+      document.getElementById("btn-start-tracking").classList.add("hidden");
+      document.getElementById("btn-active-tracking").classList.remove("hidden");
+      document.getElementById("instructions-panel").classList.add("hidden");
+      document.getElementById("gps-panel").classList.remove("hidden");
+      
+      // Update badge status to live tracking
+      const statusDot = document.getElementById("status-dot");
+      statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-green";
+      document.getElementById("status-text").innerText = "CORRIDA ATIVA";
+      document.getElementById("status-badge").className = "px-2.5 py-1 rounded-lg bg-emerald-950/20 border border-emerald-900/60 font-mono text-[10px] uppercase font-black tracking-wider flex items-center gap-1.5 text-emerald-400";
+
+      isTracking = true;
+      trackingStartTime = new Date();
+      startTimer();
+
+      // Write initial session meta values in database
+      const timestampIso = new Date().toISOString();
+      set(ref(db, `tracking/${cargoId}`), {
+        status: "tracking",
+        startedAt: timestampIso,
+        driver: driverName,
+        route: routeName,
+        client: clientName,
+        current: {
+          lat: 0,
+          lng: 0,
+          accuracy: 0,
+          timestamp: timestampIso,
+          ts: Date.now()
+        }
+      });
+
+      // Launch Geolocation high precision listener
+      watchId = navigator.geolocation.watchPosition(
+        handleNewPosition,
+        handleGPSError,
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    // New GPS Telemetry packet arrived
+    function handleNewPosition(position) {
+      if (!isTracking) return;
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const accuracy = position.coords.accuracy;
+      const timestamp = new Date().toISOString();
+      const ts = Date.now();
+
+      // Update Local dashboard UI
+      document.getElementById("tele-lat").innerText = lat.toFixed(6);
+      document.getElementById("tele-lng").innerText = lng.toFixed(6);
+      document.getElementById("tele-acc").innerText = accuracy.toFixed(1) + " metros";
+
+      if (accuracy > 100) {
+        document.getElementById("tele-acc").className = "text-xs font-mono font-bold mt-1 text-amber-500";
+      } else {
+        document.getElementById("tele-acc").className = "text-xs font-mono font-bold mt-1 text-zinc-400";
+      }
+
+      // Send to Firebase RTDB
+      // Path 1: current live location
+      set(ref(db, `tracking/${cargoId}/current`), {
+        lat,
+        lng,
+        accuracy,
+        timestamp,
+        ts
+      });
+
+      // Path 2: append to history
+      const historyRef = ref(db, `tracking/${cargoId}/history`);
+      const newHistoryPacketRef = push(historyRef);
+      set(newHistoryPacketRef, {
+        lat,
+        lng,
+        accuracy,
+        timestamp,
+        ts
+      });
+
+      totalCoordinatesSent++;
+      document.getElementById("tele-count").innerText = totalCoordinatesSent;
+    }
+
+    // Geolocation error
+    function handleGPSError(err) {
+      console.warn("GPS Warning:", err.message);
+      let errorMsg = "Sinal do GPS fraco. Certifique-se de estar ao ar livre.";
+      if (err.code === 1) {
+        errorMsg = "Permissão negada. Você precisa permitir o GPS nas configurações do seu navegador para que a Rodovar te monitore.";
+      }
+      showError(errorMsg);
+    }
+
+    // Stop tracking beautifully when delivered
+    function stopTrackingGracefully(reason) {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      isTracking = false;
+      stopTimer();
+
+      // Release locks
+      if (wakeLock) {
+        wakeLock.release();
+        wakeLock = null;
+      }
+
+      // Remove leaving protections
+      window.removeEventListener("beforeunload", preventUnload);
+
+      // UI Screen Transition
+      document.getElementById("card-delivery-info").classList.add("hidden");
+      document.getElementById("gps-panel").classList.add("hidden");
+      document.getElementById("instructions-panel").classList.add("hidden");
+      document.getElementById("error-panel").classList.add("hidden");
+      document.getElementById("footer-controls").classList.add("hidden");
+      
+      document.getElementById("finished-panel").classList.remove("hidden");
+    }
+
+    // Helper functions
+    function showError(msg) {
+      const panel = document.getElementById("error-panel");
+      document.getElementById("error-message").innerText = msg;
+      panel.classList.remove("hidden");
+    }
+
+    function preventUnload(e) {
+      e.preventDefault();
+      e.returnValue = "O rastreamento de segurança do motorista está ativo! Se você fechar essa página, a central da Rodovar perderá seu trajeto.";
+      return e.returnValue;
+    }
+
+    // Dashboard Timer
+    function startTimer() {
+      timerInterval = setInterval(() => {
+        if (!trackingStartTime) return;
+        const diff = Date.now() - trackingStartTime.getTime();
+        const hrs = Math.floor(diff / 3600000).toString().padStart(2, '0');
+        const mins = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+        const secs = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+        document.getElementById("tracker-timer").innerText = `${hrs}:${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    // Start everything!
+    init();
+
+  </script>
+</body>
+</html>

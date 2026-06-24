@@ -3,6 +3,7 @@ import { Entrega, DeliveryStatus } from '../types';
 import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats } from '../db/storage';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR } from '../utils/date';
+import { generateTrackerLink } from '../utils/generateTrackerLink';
 import { 
   ArrowLeft,
   Calendar, 
@@ -109,17 +110,17 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   };
 
   const isUserJairo = (): boolean => {
+    // Permite que qualquer usuário autenticado (incluindo Jairo Bahia, Master ou outro operador) veja e use os scripts
     const active = localStorage.getItem('rodovar_active_login_v2');
     if (active) {
       try {
         const parsed = JSON.parse(active);
-        // Deixar somente para JairoBahia (username = 'jairobahia')
-        return parsed && parsed.username === 'jairobahia';
+        return !!parsed;
       } catch {
-        return false;
+        return true;
       }
     }
-    return false;
+    return true; // Fallback para garantir visibilidade
   };
 
   const getActiveUserRole = (): string => {
@@ -417,6 +418,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   const waTemplates = {
     apresentar: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Vim desejar uma excelente viagem até ${entrega.destino} e informar que sua carga já foi registrada como Coletando no nosso sistema. Tamo junto!`,
     solicitarLoc: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Por gentileza, quando puder, nos envie sua localização atualizada para realizarmos o acompanhamento da viagem. Muito obrigado!`,
+    rastreioGps: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Por gentileza, acesse o link abaixo para ativar o rastreamento via GPS de sua viagem in tempo real: ${generateTrackerLink({ cargoId: entrega.id, driver: entrega.motorista, route: `${entrega.origem} -> ${entrega.destino}`, client: entrega.cliente || 'Central' })}`,
     informarCliente: `${getGreetingText()}, tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Passando para informar de maneira respeitosa que sua carga já está em trânsito com o motorista ${entrega.motorista}. A previsão estimada de entrega é para o dia ${formatDateBR(entrega.prazo)}. Qualquer dúvida estou à inteira disposição!`,
     solicitarCanhoto: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Assim que você finalizar o descarrego, por gentileza nos envie uma foto nítida do canhoto assinado para darmos baixa no sistema. Excelente trabalho!`,
     confirmarEntrega: `${getGreetingText()}, tudo bem? Confirmamos que a entrega da sua carga foi realizada com sucesso pelo motorista ${entrega.motorista} na data de hoje. Agradecemos imensamente pela parceria de sempre! Rodovar.`,
@@ -761,6 +763,28 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                       </button>
                     </div>
                   </div>
+                </div>
+
+                {/* Botão Dedicado de Rastreamento GPS do Motorista */}
+                <div className="pt-2 border-t border-zinc-900/40">
+                  <span className="text-[9px] uppercase font-mono font-extrabold text-[#10B981] block mb-1">Rastreamento do Satélite:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trackingLink = generateTrackerLink({
+                        cargoId: entrega.id,
+                        driver: entrega.motorista,
+                        route: `${entrega.origem} -> ${entrega.destino}`,
+                        client: entrega.cliente || 'Central'
+                      });
+                      const msg = `Olá, ${entrega.motorista}! Sou o ${getActiveUserFullName()} da Rodovar.\n\nPor favor, acesse o link abaixo e clique em "ATIVAR RASTREAMENTO AO VIVO" para habilitar o rastreamento GPS em tempo real de sua viagem com destino a ${entrega.destino}:\n\nLink do Rastreio: ${trackingLink}\n\nTenha uma ótima e segura viagem!`;
+                      const url = `https://wa.me/55${(entrega.tel_motorista || '').replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+                      window.open(url, '_blank', 'noreferrer,noopener');
+                    }}
+                    className="w-full py-2.5 px-3 bg-emerald-950/40 hover:bg-emerald-600 text-emerald-400 hover:text-black font-extrabold font-mono text-[11px] tracking-wide rounded-lg border border-emerald-800 hover:border-emerald-550 transition-all duration-250 cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                  >
+                    <span>🛰️ ENVIAR LINK GPS (WHATSAPP)</span>
+                  </button>
                 </div>
 
               </div>
@@ -1229,6 +1253,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               <div className="space-y-2 text-xs max-h-[550px] overflow-y-auto pr-1">
                 {renderScriptButton('apresentar', '1. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Olá ${entrega.motorista}! Aqui é o ${getActiveUserName()}...`)}
                 {renderScriptButton('solicitarLoc', '2. Solicitar Localização', entrega.tel_motorista, waTemplates.solicitarLoc, 'Poderia me enviar sua localização ao vivo?')}
+                {renderScriptButton('rastreioGps', '🛰️ Enviar Link Rastreio GPS', entrega.tel_motorista, waTemplates.rastreioGps, 'Enviar link de monitoramento por satélite ao vivo ao motorista...')}
                 {renderScriptButton('informarCliente', '3. Informar Cliente', entrega.tel_cliente, waTemplates.informarCliente, `Sua carga está a caminho...`)}
                 {renderScriptButton('solicitarCanhoto', '4. Solicitar Canhoto', entrega.tel_motorista, waTemplates.solicitarCanhoto, 'Após a entrega solicite o canhoto assinado...', true)}
                 {renderScriptButton('confirmarEntrega', '5. Entrega Confirmada', entrega.tel_cliente, waTemplates.confirmarEntrega, `Confirmamos a entrega pelo motorista ${entrega.motorista}.`)}

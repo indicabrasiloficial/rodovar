@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { Entrega } from '../types';
+import { database } from '../db/firebase';
+import { ref, onValue, off } from 'firebase/database';
+import { generateTrackerLink } from '../utils/generateTrackerLink';
 
 interface DeliveryMapProps {
   entregas: Entrega[];
@@ -52,6 +55,25 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
   const [filterParado, setFilterParado] = useState(true); // "Bloqueadas" represented by "parado"
   const [filterColetando, setFilterColetando] = useState(true);
   const [filterEntregue, setFilterEntregue] = useState(false);
+  const [realtimeLocations, setRealtimeLocations] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const trackingRef = ref(database, 'tracking');
+    const unsubscribe = onValue(trackingRef, (snapshot) => {
+      const val = snapshot.val();
+      if (val) {
+        setRealtimeLocations(val);
+      } else {
+        setRealtimeLocations({});
+      }
+    }, (err) => {
+      console.error("Error loading live GPS coordinates in Map:", err);
+    });
+
+    return () => {
+      off(trackingRef);
+    };
+  }, []);
 
   // Compute active map deliveries based on filters
   const getFilteredDeliveries = () => {
@@ -126,8 +148,18 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
     mapDeliveries.forEach(entrega => {
       let lat = Number(entrega.lat);
       let lng = Number(entrega.lng);
+      let isLiveGps = false;
+      let gpsAccuracy = 0;
+      let lastGpsTimestamp = '';
 
-      if (entrega.localizacaoAtual && entrega.localizacaoAtual.lat && entrega.localizacaoAtual.lng) {
+      const liveData = realtimeLocations[entrega.id];
+      if (liveData && liveData.status === 'tracking' && liveData.current && liveData.current.lat && liveData.current.lng) {
+        lat = Number(liveData.current.lat);
+        lng = Number(liveData.current.lng);
+        gpsAccuracy = Number(liveData.current.accuracy || 0);
+        lastGpsTimestamp = liveData.current.timestamp || '';
+        isLiveGps = true;
+      } else if (entrega.localizacaoAtual && entrega.localizacaoAtual.lat && entrega.localizacaoAtual.lng) {
         lat = Number(entrega.localizacaoAtual.lat);
         lng = Number(entrega.localizacaoAtual.lng);
       }
@@ -149,7 +181,20 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
       const val = entrega.valor_carga || 0;
       let markerHtml = '';
-      if (val >= 100000) {
+      if (isLiveGps) {
+        markerHtml = `
+          <div class="relative flex items-center justify-center">
+            <span class="absolute inline-flex h-9 w-9 rounded-full opacity-70 animate-ping bg-emerald-500"></span>
+            <span class="absolute inline-flex h-6 w-6 rounded-full opacity-35 bg-emerald-500/50"></span>
+            <div class="relative flex items-center justify-center rounded-full border-2 border-emerald-400 shadow-2xl text-center font-extrabold text-[12px] bg-zinc-950 flex items-center justify-center ${isSelected ? 'scale-125' : ''}" style="width: 25px; height: 25px; box-shadow: 0 0 15px rgba(16, 185, 129, 0.9);">
+              <span>🛰️</span>
+            </div>
+            <span class="absolute -bottom-1 -right-1 bg-emerald-600 font-mono font-black text-[6px] text-white px-0.5 rounded shadow border border-zinc-900 leading-none">
+              GPS
+            </span>
+          </div>
+        `;
+      } else if (val >= 100000) {
         // High risk cargo (R$ 100k+)
         const ringBg = val >= 1000000 ? 'bg-rose-500' : val >= 500000 ? 'bg-amber-500' : 'bg-indigo-500';
         const borderCol = val >= 1000000 ? 'border-rose-400' : val >= 500000 ? 'border-amber-400' : 'border-indigo-400';
@@ -191,11 +236,13 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
       // Simple WhatsApp links
       const telMot = entrega.tel_motorista.replace(/\D/g, '');
-      const whatsMsg = `Bom dia, ${entrega.motorista}!
-
-Por favor, envie sua localização atual para acompanhamento da viagem.
-
-Obrigado e tenha um excelente dia!`;
+      const trackingLink = generateTrackerLink({
+        cargoId: entrega.id,
+        driver: entrega.motorista,
+        route: `${entrega.origem} -> ${entrega.destino}`,
+        client: entrega.cliente || 'Central'
+      });
+      const whatsMsg = `Olá, ${entrega.motorista}! Por favor, acesse o link abaixo para ativar o rastreamento GPS de sua viagem em tempo real: ${trackingLink}`;
       const waUrl = `https://wa.me/55${telMot}?text=${encodeURIComponent(whatsMsg)}`;
 
       // Create Popup
@@ -216,6 +263,13 @@ Obrigado e tenha um excelente dia!`;
           <p class="mb-1 text-[11px]"><strong>Valor do Frete:</strong> R$ ${Number(entrega.frete_empresa || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           <p class="mb-1 text-[11px]"><strong>Status:</strong> <span class="px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${color}20; color: ${color}; font-weight: 600;">${statusLabels[entrega.status]}</span></p>
           <p class="mb-1 text-[11px]"><strong>Prazo:</strong> ${entrega.prazo}</p>
+          ${isLiveGps && liveData ? `
+            <div class="bg-emerald-950/40 border border-emerald-500/30 rounded p-2 my-2 flex flex-col gap-0.5 font-mono text-[9px] text-zinc-300">
+              <span class="text-emerald-400 font-extrabold flex items-center gap-1">🟢 MONITORAMENTO ATIVO</span>
+              <span>Precisão: ${gpsAccuracy.toFixed(1)}m</span>
+              <span>Sinal: ${lastGpsTimestamp ? new Date(lastGpsTimestamp).toLocaleTimeString('pt-BR') : 'Tempo Real'}</span>
+            </div>
+          ` : ''}
           ${val ? `
             <div class="my-1.5 border-t border-zinc-905 pt-1.5 text-[11px]">
               <span class="text-zinc-500 font-mono text-[9px] uppercase tracking-wider block">VALOR DA CARGA:</span>

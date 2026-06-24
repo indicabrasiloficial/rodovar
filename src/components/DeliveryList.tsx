@@ -4,6 +4,7 @@ import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores } f
 import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR, formatRegistrationTime } from '../utils/date';
+import { generateTrackerLink } from '../utils/generateTrackerLink';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
@@ -1358,11 +1359,20 @@ export default function DeliveryList({
   };
 
   const getWhatsappDriverMsg = (entrega: Entrega) => {
-    return `Bom dia, ${entrega.motorista}!
+    const trackingLink = generateTrackerLink({
+      cargoId: entrega.id,
+      driver: entrega.motorista,
+      route: `${entrega.origem} -> ${entrega.destino}`,
+      client: entrega.cliente || 'Central'
+    });
 
-Por favor, envie sua localização atual para acompanhamento da viagem.
+    return `Olá, ${entrega.motorista}! Sou o ${getActiveUserFullName()} da Rodovar.
 
-Obrigado e tenha um excelente dia!`;
+Por favor, acesse o link abaixo e clique em "ATIVAR RASTREAMENTO AO VIVO" para habilitar o rastreamento GPS em tempo real de sua viagem com destino a ${entrega.destino}:
+
+Link do Rastreio: ${trackingLink}
+
+Tenha uma ótima e segura viagem!`;
   };
 
   const getWhatsappClientMsg = (entrega: Entrega) => {
@@ -1926,14 +1936,14 @@ Obrigado e tenha um excelente dia!`;
                           </button>
                         )}
 
-                        {/* WhatsApp Motorista */}
+                        {/* WhatsApp Motorista - Enviar Link GPS */}
                         <button
                           onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
-                          className="p-1 px-2 rounded bg-green-950/40 hover:bg-green-600 hover:text-black border border-green-805 text-green-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                          className="p-1 px-2 rounded bg-emerald-950/40 hover:bg-emerald-600 hover:text-black border border-emerald-800 text-emerald-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
                           id={`list-action-wa-motorista-mobile-${e.id}`}
+                          title="Enviar Link de Rastreamento GPS ao Motorista"
                         >
-                          <Phone className="w-2.5 h-2.5" />
-                          Mot
+                          <span>🛰️ Link GPS</span>
                         </button>
 
                         {/* WhatsApp Cliente */}
@@ -2166,15 +2176,14 @@ Obrigado e tenha um excelente dia!`;
                               </button>
                             )}
 
-                            {/* WhatsApp Motorista */}
+                            {/* WhatsApp Motorista - Enviar Link GPS */}
                             <button
                               onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
-                              className="p-1 px-1.5 rounded bg-green-950/40 hover:bg-green-600 hover:text-black border border-green-805 text-green-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                              title="Conversar com Motorista"
+                              className="p-1 px-1.5 rounded bg-emerald-950/40 hover:bg-emerald-600 hover:text-black border border-emerald-800 text-emerald-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                              title="Enviar Link de Rastreamento GPS ao Motorista"
                               id={`list-action-wa-motorista-${e.id}`}
                             >
-                              <Phone className="w-2.5 h-2.5" />
-                              Mot
+                              <span>🛰️ Link GPS</span>
                             </button>
 
                             {/* WhatsApp Cliente */}
