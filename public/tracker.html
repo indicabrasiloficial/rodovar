@@ -313,7 +313,7 @@
     // URL Parameters Parser
     const urlParams = new URLSearchParams(window.location.search);
     const rawCargoId = urlParams.get("cargoId") || urlParams.get("cargoid") || "test-cargo";
-    const cargoId = rawCargoId.toLowerCase();
+    const cargoId = rawCargoId; // Mantém o case original para compatibilidade absoluta com os IDs do Firestore que são case-sensitive
     const driverName = urlParams.get("driver") || "Motorista Convidado";
     const routeName = urlParams.get("route") || "Rota não especificada";
     const clientName = urlParams.get("client") || "Destinatário não especificado";

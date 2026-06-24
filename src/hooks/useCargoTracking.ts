@@ -28,7 +28,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       return;
     }
 
-    const cargoId = entrega.id.toLowerCase();
+    const cargoId = entrega.id; // Mantém o case original para compatibilidade absoluta com os IDs do Firestore que são case-sensitive
     const trackingRef = ref(database, `localizacoes/${cargoId}`);
 
     const handleSync = (rtdbSnap: any) => {
