@@ -53,6 +53,7 @@ export default function LiveMap({ entrega }: LiveMapProps) {
   const markerRef = useRef<L.Marker | null>(null);
 
   const [liveMode, setLiveMode] = useState(true);
+  const [isMapReady, setIsMapReady] = useState(false);
 
   // Load live position tracking
   const { position, source, isLive, lastSeenSeconds } = useCargoTracking(entrega);
@@ -80,6 +81,7 @@ export default function LiveMap({ entrega }: LiveMapProps) {
 
     mapRef.current = map;
     markerRef.current = marker;
+    setIsMapReady(true);
 
     // Fix render layout issues
     setTimeout(() => {
@@ -92,6 +94,7 @@ export default function LiveMap({ entrega }: LiveMapProps) {
         mapRef.current = null;
       }
       markerRef.current = null;
+      setIsMapReady(false);
     };
   }, []);
 
@@ -112,7 +115,7 @@ export default function LiveMap({ entrega }: LiveMapProps) {
     if (liveMode) {
       mapRef.current.panTo([lat, lng], { animate: true, duration: 0.8 });
     }
-  }, [position, isLive, liveMode]);
+  }, [position, isLive, liveMode, isMapReady]);
 
   // Handle map resizing if toggle shifts
   useEffect(() => {

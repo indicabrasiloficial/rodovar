@@ -138,6 +138,7 @@ app.get("/api/firebase-config", (req, res) => {
       storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || configData.storageBucket,
       messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || configData.messagingSenderId,
       appId: process.env.VITE_FIREBASE_APP_ID || configData.appId,
+      firestoreDatabaseId: process.env.VITE_FIREBASE_DATABASE_ID || configData.firestoreDatabaseId || "(default)",
       databaseURL: process.env.VITE_FIREBASE_DATABASE_URL || configData.databaseURL || `https://${process.env.VITE_FIREBASE_PROJECT_ID || configData.projectId}-default-rtdb.firebaseio.com`
     };
     return res.json(config);

@@ -298,6 +298,7 @@
           authDomain: `${defaultProj}.firebaseapp.com`,
           databaseURL: `https://${defaultProj}-default-rtdb.firebaseio.com`,
           projectId: defaultProj,
+          firestoreDatabaseId: defaultProj,
           storageBucket: `${defaultProj}.appspot.com`,
           messagingSenderId: "706858665205",
           appId: "1:706858665205:web:601173b3d89a02a74771bc"
@@ -329,7 +330,9 @@
         const firebaseConfig = await loadFirebaseConfig();
         app = initializeApp(firebaseConfig);
         db = getDatabase(app);
-        firestore = getFirestore(app);
+        
+        const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+        firestore = getFirestore(app, dbId);
 
         // Read historyEnabled configuration once at startup
         try {

@@ -1412,3 +1412,26 @@ export async function updateEntregaField(id: string, updates: Record<string, any
     handleFirestoreError(error, OperationType.UPDATE, `${ENTREGAS_COLLECTION}/${id}`);
   });
 }
+
+export function syncSingleEntregaCache(id: string, freshData: any): void {
+  const index = cachedEntregas.findIndex(e => e.id === id);
+  const updated = {
+    ...(index !== -1 ? cachedEntregas[index] : {}),
+    ...freshData,
+    id
+  } as Entrega;
+
+  if (index !== -1) {
+    cachedEntregas[index] = updated;
+  } else {
+    cachedEntregas.push(updated);
+  }
+
+  lastEntregasFetchTime = Date.now();
+  try {
+    localStorage.setItem('rodovar_cached_entregas_fallback', JSON.stringify(cachedEntregas));
+    localStorage.setItem('rodovar_entregas_cache_timestamp', String(lastEntregasFetchTime));
+  } catch {}
+
+  window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'UPDATE', payload: updated } }));
+}

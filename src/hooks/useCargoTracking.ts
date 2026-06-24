@@ -89,7 +89,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
         setPosition({ lat: selectedLat, lng: selectedLng });
         setSource(activeSource);
         const ageSeconds = selectedTs ? Math.max(0, Math.floor((now - selectedTs) / 1000)) : null;
-        setIsLive(ageSeconds !== null ? ageSeconds < 60 : false);
+        setIsLive(ageSeconds !== null ? ageSeconds < 150 : false);
         setLastSeenSeconds(ageSeconds);
         return true;
       }

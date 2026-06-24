@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
-import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats } from '../db/storage';
+import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats, syncSingleEntregaCache } from '../db/storage';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../db/firebase';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR } from '../utils/date';
 import { generateTrackerLink } from '../utils/generateTrackerLink';
@@ -315,6 +317,17 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     handleSyncChange();
     window.addEventListener('rodovar_realtime_event', handleSyncChange);
 
+    // Register Firestore onSnapshot listener for the active delivery document for real-time geolocation and status syncing
+    const docRef = doc(db, 'entregas', entregaId);
+    const unsubscribeFs = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        syncSingleEntregaCache(entregaId, data);
+      }
+    }, (err) => {
+      console.warn("Firestore live subscription for single delivery failed, falling back to cache:", err);
+    });
+
     // Load clicked scripts for this delivery
     const stored = localStorage.getItem(`clicked_scripts_${entregaId}`);
     if (stored) {
@@ -329,6 +342,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
     return () => {
       window.removeEventListener('rodovar_realtime_event', handleSyncChange);
+      unsubscribeFs();
     };
   }, [entregaId]);
 
