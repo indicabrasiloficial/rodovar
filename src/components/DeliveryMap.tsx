@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { Entrega } from '../types';
-import { database } from '../db/firebase';
-import { ref, onValue, off } from 'firebase/database';
 import { generateTrackerLink } from '../utils/generateTrackerLink';
+import { useAllDriversTracking } from '../hooks/useAllDriversTracking';
+import { createTruckIcon, getDriverPopupContent } from './MapDriverMarker';
 
 interface DeliveryMapProps {
   entregas: Entrega[];
@@ -49,31 +49,16 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
+  const markersMapRef = useRef<Map<string, L.Marker>>(new Map());
 
   // Map Filter toggles (enabled/activated on the map dynamically)
   const [filterTransito, setFilterTransito] = useState(true);
   const [filterParado, setFilterParado] = useState(true); // "Bloqueadas" represented by "parado"
   const [filterColetando, setFilterColetando] = useState(true);
   const [filterEntregue, setFilterEntregue] = useState(false);
-  const [realtimeLocations, setRealtimeLocations] = useState<Record<string, any>>({});
 
-  useEffect(() => {
-    const trackingRef = ref(database, 'tracking');
-    const unsubscribe = onValue(trackingRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setRealtimeLocations(val);
-      } else {
-        setRealtimeLocations({});
-      }
-    }, (err) => {
-      console.error("Error loading live GPS coordinates in Map:", err);
-    });
-
-    return () => {
-      off(trackingRef);
-    };
-  }, []);
+  // Consume live tracking positions using ONE single listener in real-time
+  const liveTrackingData = useAllDriversTracking();
 
   // Compute active map deliveries based on filters
   const getFilteredDeliveries = () => {
@@ -96,6 +81,9 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
     if (!mapInstanceRef.current) {
       let initialCenter: [number, number] = [-14.2350, -51.9253]; // Central Brazil
       let initialZoom = 4;
+
+      // Reset markers cache when creating a brand new map instance to prevent stale detached markers
+      markersMapRef.current.clear();
 
       if (singleView && mapDeliveries.length === 1) {
         const item = mapDeliveries[0];
@@ -132,33 +120,26 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
     const map = mapInstanceRef.current;
 
-
-    // 2. Filter out delivered loads unless it's a single shipment detail view map
-
-    // 3. Clear existing markers safely
-    markersRef.current.forEach(marker => {
-      marker.remove();
-    });
-    markersRef.current = [];
-
-    // 4. Render Markers
-    const activeMarkers: L.Marker[] = [];
+    // 2. Render Markers with database economy & smooth setLatLng movement
+    const activeKeys = new Set<string>();
+    const activeMarkersList: L.Marker[] = [];
     const coordinatesSeen = new Set<string>();
     
     mapDeliveries.forEach(entrega => {
       let lat = Number(entrega.lat);
       let lng = Number(entrega.lng);
-      let isLiveGps = false;
       let gpsAccuracy = 0;
       let lastGpsTimestamp = '';
 
-      const liveData = realtimeLocations[entrega.id];
-      if (liveData && liveData.status === 'tracking' && liveData.current && liveData.current.lat && liveData.current.lng) {
-        lat = Number(liveData.current.lat);
-        lng = Number(liveData.current.lng);
-        gpsAccuracy = Number(liveData.current.accuracy || 0);
-        lastGpsTimestamp = liveData.current.timestamp || '';
-        isLiveGps = true;
+      // Find if this specific delivery has an active live tracking session
+      const liveData = liveTrackingData.find(track => track.cargoId === entrega.id);
+      const isLiveGps = !!liveData;
+
+      if (isLiveGps && liveData) {
+        lat = Number(liveData.lat);
+        lng = Number(liveData.lng);
+        gpsAccuracy = Number(liveData.accuracy || 0);
+        lastGpsTimestamp = liveData.timestamp || '';
       } else if (entrega.localizacaoAtual && entrega.localizacaoAtual.lat && entrega.localizacaoAtual.lng) {
         lat = Number(entrega.localizacaoAtual.lat);
         lng = Number(entrega.localizacaoAtual.lng);
@@ -166,6 +147,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
       if (!lat || !lng) return;
       
+      // Slightly jitter close coordinates to prevent visual overlaps on map
       const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
       if (coordinatesSeen.has(coordKey)) {
         const index = coordinatesSeen.size;
@@ -178,170 +160,189 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
       const color = getStatusColor(entrega.status);
       const isSelected = entrega.id === selectedId;
-
       const val = entrega.valor_carga || 0;
-      let markerHtml = '';
-      if (isLiveGps) {
-        markerHtml = `
-          <div class="relative flex items-center justify-center">
-            <span class="absolute inline-flex h-9 w-9 rounded-full opacity-70 animate-ping bg-emerald-500"></span>
-            <span class="absolute inline-flex h-6 w-6 rounded-full opacity-35 bg-emerald-500/50"></span>
-            <div class="relative flex items-center justify-center rounded-full border-2 border-emerald-400 shadow-2xl text-center font-extrabold text-[12px] bg-zinc-950 flex items-center justify-center ${isSelected ? 'scale-125' : ''}" style="width: 25px; height: 25px; box-shadow: 0 0 15px rgba(16, 185, 129, 0.9);">
-              <span>🛰️</span>
-            </div>
-            <span class="absolute -bottom-1 -right-1 bg-emerald-600 font-mono font-black text-[6px] text-white px-0.5 rounded shadow border border-zinc-900 leading-none">
-              GPS
-            </span>
-          </div>
-        `;
-      } else if (val >= 100000) {
-        // High risk cargo (R$ 100k+)
-        const ringBg = val >= 1000000 ? 'bg-rose-500' : val >= 500000 ? 'bg-amber-500' : 'bg-indigo-500';
-        const borderCol = val >= 1000000 ? 'border-rose-400' : val >= 500000 ? 'border-amber-400' : 'border-indigo-400';
-        const ringStyle = val >= 1000000 ? 'rgba(244, 63, 94, 0.7)' : val >= 500000 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(99, 102, 241, 0.7)';
-        const symbol = val >= 1000000 ? '🚨' : val >= 500000 ? '🔥' : '💎';
-        
-        markerHtml = `
-          <div class="relative flex items-center justify-center">
-            <span class="absolute inline-flex h-8 w-8 rounded-full opacity-60 animate-ping ${ringBg}"></span>
-            <div class="relative flex items-center justify-center rounded-full border-2 ${borderCol} shadow-2xl text-center font-extrabold text-[12px] bg-zinc-950 flex items-center justify-center ${isSelected ? 'scale-125' : ''}" style="width: 25px; height: 25px; box-shadow: 0 0 12px ${ringStyle};">
-              <span>${symbol}</span>
-            </div>
-            <span class="absolute -top-1.5 -right-1.5 bg-red-600 font-mono font-black text-[7px] text-white w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-lg border border-zinc-900">
-              GR
-            </span>
-          </div>
-        `;
+
+      let customIcon: L.DivIcon;
+      let popupContent = '';
+
+      // Build specific Premium Icon and popup details based on GPS Status
+      if (isLiveGps && liveData) {
+        customIcon = createTruckIcon(liveData.liveStatus);
+        popupContent = getDriverPopupContent(
+          liveData.driver,
+          liveData.route,
+          liveData.client,
+          liveData.liveStatus,
+          liveData.ts
+        );
       } else {
-        // Standard cargo
-        markerHtml = `
-          <div class="relative flex items-center justify-center">
-            <span class="absolute inline-flex h-6 w-6 rounded-full opacity-40 animate-ping" style="background-color: ${color}"></span>
-            <div class="relative flex items-center justify-center p-2 rounded-full border-2 ${isSelected ? 'border-white scale-125' : 'border-black'} shadow-lg text-black font-extrabold text-[10px]" style="background-color: ${color}; width: 22px; height: 22px;">
-              🚚
+        // Fallback: Standard or GR High Risk Marker styling
+        let markerHtml = '';
+        if (val >= 100000) {
+          const ringBg = val >= 1000000 ? 'bg-rose-500' : val >= 500000 ? 'bg-amber-500' : 'bg-indigo-500';
+          const borderCol = val >= 1000000 ? 'border-rose-400' : val >= 500000 ? 'border-amber-400' : 'border-indigo-400';
+          const ringStyle = val >= 1000000 ? 'rgba(244, 63, 94, 0.7)' : val >= 500000 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(99, 102, 241, 0.7)';
+          const symbol = val >= 1000000 ? '🚨' : val >= 500000 ? '🔥' : '💎';
+          
+          markerHtml = `
+            <div class="relative flex items-center justify-center">
+              <span class="absolute inline-flex h-8 w-8 rounded-full opacity-60 animate-ping ${ringBg}"></span>
+              <div class="relative flex items-center justify-center rounded-full border-2 ${borderCol} shadow-2xl text-center font-extrabold text-[12px] bg-zinc-950 flex items-center justify-center ${isSelected ? 'scale-125' : ''}" style="width: 25px; height: 25px; box-shadow: 0 0 12px ${ringStyle};">
+                <span>${symbol}</span>
+              </div>
+              <span class="absolute -top-1.5 -right-1.5 bg-red-600 font-mono font-black text-[7px] text-white w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-lg border border-zinc-900">
+                GR
+              </span>
             </div>
-            ${isSelected ? '<div class="absolute -top-1 right-2 w-2 h-2 bg-white rounded-full"></div>' : ''}
-          </div>
-        `;
-      }
-
-      const customIcon = L.divIcon({
-        html: markerHtml,
-        className: 'custom-leaflet-marker',
-        iconSize: [26, 26],
-        iconAnchor: [13, 13]
-      });
-
-      const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
-
-      // Simple WhatsApp links
-      const telMot = entrega.tel_motorista.replace(/\D/g, '');
-      const trackingLink = generateTrackerLink({
-        cargoId: entrega.id,
-        driver: entrega.motorista,
-        route: `${entrega.origem} -> ${entrega.destino}`,
-        client: entrega.cliente || 'Central'
-      });
-      const whatsMsg = `Olá, ${entrega.motorista}! Por favor, acesse o link abaixo para ativar o rastreamento GPS de sua viagem em tempo real: ${trackingLink}`;
-      const waUrl = `https://wa.me/55${telMot}?text=${encodeURIComponent(whatsMsg)}`;
-
-      // Create Popup
-      const statusLabels: Record<string, string> = {
-        coletando: 'Coletando 📦',
-        em_transito: 'Trânsito 🚚',
-        parado: 'Parado 🛑',
-        descarregando: 'Descarregando 🏢',
-        entregue: 'Entregue ✅'
-      };
-
-      const popupContent = `
-        <div class="text-xs font-sans text-gray-200 bg-[#121212] p-2.5 rounded border border-[#FFD600]/40" style="min-width: 190px;">
-          <h4 class="font-bold text-[#FFD600] text-sm mb-1 uppercase tracking-tight">${entrega.destino}</h4>
-          <p class="mb-1 text-[11px]"><strong>Motorista:</strong> ${entrega.motorista}</p>
-          <p class="mb-1 text-[11px]"><strong>Origem:</strong> ${entrega.origem || 'Não informada'}</p>
-          <p class="mb-1 text-[11px]"><strong>Destino:</strong> ${entrega.destino || 'Não informado'}</p>
-          <p class="mb-1 text-[11px]"><strong>Valor do Frete:</strong> R$ ${Number(entrega.frete_empresa || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          <p class="mb-1 text-[11px]"><strong>Status:</strong> <span class="px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${color}20; color: ${color}; font-weight: 600;">${statusLabels[entrega.status]}</span></p>
-          <p class="mb-1 text-[11px]"><strong>Prazo:</strong> ${entrega.prazo}</p>
-          ${isLiveGps && liveData ? `
-            <div class="bg-emerald-950/40 border border-emerald-500/30 rounded p-2 my-2 flex flex-col gap-0.5 font-mono text-[9px] text-zinc-300">
-              <span class="text-emerald-400 font-extrabold flex items-center gap-1">🟢 MONITORAMENTO ATIVO</span>
-              <span>Precisão: ${gpsAccuracy.toFixed(1)}m</span>
-              <span>Sinal: ${lastGpsTimestamp ? new Date(lastGpsTimestamp).toLocaleTimeString('pt-BR') : 'Tempo Real'}</span>
+          `;
+        } else {
+          markerHtml = `
+            <div class="relative flex items-center justify-center">
+              <span class="absolute inline-flex h-6 w-6 rounded-full opacity-40 animate-ping" style="background-color: ${color}"></span>
+              <div class="relative flex items-center justify-center p-2 rounded-full border-2 ${isSelected ? 'border-white scale-125' : 'border-black'} shadow-lg text-black font-extrabold text-[10px]" style="background-color: ${color}; width: 22px; height: 22px;">
+                🚚
+              </div>
+              ${isSelected ? '<div class="absolute -top-1 right-2 w-2 h-2 bg-white rounded-full"></div>' : ''}
             </div>
-          ` : ''}
-          ${val ? `
-            <div class="my-1.5 border-t border-zinc-905 pt-1.5 text-[11px]">
-              <span class="text-zinc-500 font-mono text-[9px] uppercase tracking-wider block">VALOR DA CARGA:</span>
-              <span class="font-mono font-bold text-white uppercase tracking-tight block">R$ ${Math.round(val).toLocaleString('pt-BR')}</span>
-              ${val >= 100000 ? `
-                <span class="bg-red-950/80 border border-red-500/30 text-red-400 font-mono text-[8px] font-black tracking-wide px-1 rounded block mt-1 text-center py-0.5 animate-pulse">
-                  ⚠️ ALTO RISCO / GR
-                </span>
+          `;
+        }
+
+        customIcon = L.divIcon({
+          html: markerHtml,
+          className: 'custom-leaflet-marker',
+          iconSize: [26, 26],
+          iconAnchor: [13, 13]
+        });
+
+        const telMot = entrega.tel_motorista.replace(/\D/g, '');
+        const trackingLink = generateTrackerLink({
+          cargoId: entrega.id,
+          driver: entrega.motorista,
+          route: `${entrega.origem} -> ${entrega.destino}`,
+          client: entrega.cliente || 'Central'
+        });
+        const whatsMsg = `Olá, ${entrega.motorista}! Por favor, acesse o link abaixo para ativar o rastreamento GPS de sua viagem em tempo real: ${trackingLink}`;
+        const waUrl = `https://wa.me/55${telMot}?text=${encodeURIComponent(whatsMsg)}`;
+
+        const statusLabels: Record<string, string> = {
+          coletando: 'Coletando 📦',
+          em_transito: 'Trânsito 🚚',
+          parado: 'Parado 🛑',
+          descarregando: 'Descarregando 🏢',
+          entregue: 'Entregue ✅'
+        };
+
+        popupContent = `
+          <div class="text-xs font-sans text-gray-200 bg-[#121212] p-2.5 rounded border border-[#FFD600]/40" style="min-width: 190px;">
+            <h4 class="font-bold text-[#FFD600] text-sm mb-1 uppercase tracking-tight">${entrega.destino}</h4>
+            <p class="mb-1 text-[11px]"><strong>Motorista:</strong> ${entrega.motorista}</p>
+            <p class="mb-1 text-[11px]"><strong>Origem:</strong> ${entrega.origem || 'Não informada'}</p>
+            <p class="mb-1 text-[11px]"><strong>Destino:</strong> ${entrega.destino || 'Não informado'}</p>
+            <p class="mb-1 text-[11px]"><strong>Valor do Frete:</strong> R$ ${Number(entrega.frete_empresa || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p class="mb-1 text-[11px]"><strong>Status:</strong> <span class="px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${color}20; color: ${color}; font-weight: 600;">${statusLabels[entrega.status]}</span></p>
+            <p class="mb-1 text-[11px]"><strong>Prazo:</strong> ${entrega.prazo}</p>
+            ${val ? `
+              <div class="my-1.5 border-t border-zinc-905 pt-1.5 text-[11px]">
+                <span class="text-zinc-500 font-mono text-[9px] uppercase tracking-wider block">VALOR DA CARGA:</span>
+                <span class="font-mono font-bold text-white uppercase tracking-tight block">R$ ${Math.round(val).toLocaleString('pt-BR')}</span>
+                ${val >= 100000 ? `
+                  <span class="bg-red-950/80 border border-red-500/30 text-red-400 font-mono text-[8px] font-black tracking-wide px-1 rounded block mt-1 text-center py-0.5 animate-pulse">
+                    ⚠️ ALTO RISCO / GR
+                  </span>
+                ` : ''}
+              </div>
+            ` : ''}
+            <div class="mt-2.5 flex flex-col gap-1">
+              <a href="${waUrl}" target="_blank" class="block text-center py-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded text-[10px] no-underline">
+                💬 WhatsApp Motorista
+              </a>
+              ${entrega.id && onSelectDelivery ? `
+                <button id="btn-map-select-${entrega.id}" class="w-full text-center py-1 mt-1 bg-zinc-800 hover:bg-[#FFD600] hover:text-black text-gray-300 font-semibold rounded text-[10px] border border-zinc-700 transition">
+                  🔍 Ver Carga
+                </button>
               ` : ''}
             </div>
-          ` : ''}
-          <div class="mt-2.5 flex flex-col gap-1">
-            <a href="${waUrl}" target="_blank" class="block text-center py-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded text-[10px] no-underline">
-              💬 WhatsApp Motorista
-            </a>
-            ${entrega.id && onSelectDelivery ? `
-              <button id="btn-map-select-${entrega.id}" class="w-full text-center py-1 mt-1 bg-zinc-800 hover:bg-[#FFD600] hover:text-black text-gray-300 font-semibold rounded text-[10px] border border-zinc-700 transition">
-                🔍 Ver Carga
-              </button>
-            ` : ''}
           </div>
-        </div>
-      `;
-
-      marker.bindPopup(popupContent, {
-        closeButton: false,
-        className: 'dark-map-popup'
-      });
-
-      // Handle popup select button listener
-      marker.on('popupopen', () => {
-        const btn = document.getElementById(`btn-map-select-${entrega.id}`);
-        if (btn && onSelectDelivery) {
-          btn.onclick = () => {
-            onSelectDelivery(entrega.id);
-            map.closePopup();
-          };
-        }
-      });
-
-      if (isSelected && !singleView) {
-        marker.openPopup();
+        `;
       }
 
-      activeMarkers.push(marker);
+      // Smooth Position updates without flickering or tearing
+      const markerKey = entrega.id;
+      activeKeys.add(markerKey);
+
+      let existingMarker = markersMapRef.current.get(markerKey);
+      if (existingMarker) {
+        existingMarker.setLatLng([lat, lng]);
+        existingMarker.setIcon(customIcon);
+        existingMarker.setPopupContent(popupContent);
+        // Ensure marker is present on the active map instance
+        if (!map.hasLayer(existingMarker)) {
+          existingMarker.addTo(map);
+        }
+        activeMarkersList.push(existingMarker);
+      } else {
+        const newMarker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
+        newMarker.bindPopup(popupContent, {
+          closeButton: false,
+          className: 'dark-map-popup'
+        });
+
+        // Setup custom event handler on popup opens
+        newMarker.on('popupopen', () => {
+          const btn = document.getElementById(`btn-map-select-${entrega.id}`);
+          if (btn && onSelectDelivery) {
+            btn.onclick = () => {
+              onSelectDelivery(entrega.id);
+              map.closePopup();
+            };
+          }
+        });
+
+        markersMapRef.current.set(markerKey, newMarker);
+        activeMarkersList.push(newMarker);
+      }
+
+      const activeMarker = markersMapRef.current.get(markerKey);
+      if (activeMarker && isSelected && !singleView) {
+        activeMarker.openPopup();
+      }
     });
 
-    markersRef.current = activeMarkers;
+    // Cleanup and remove stale markers that are no longer filtered/active
+    markersMapRef.current.forEach((marker, key) => {
+      if (!activeKeys.has(key)) {
+        marker.remove();
+        markersMapRef.current.delete(key);
+      }
+    });
+
+    markersRef.current = activeMarkersList;
 
     // 5. Instantly pan or zoom smoothly to selected elements
     if (singleView && mapDeliveries.length === 1) {
       const item = mapDeliveries[0];
-      const latVal = (item.localizacaoAtual && item.localizacaoAtual.lat) ? Number(item.localizacaoAtual.lat) : Number(item.lat);
-      const lngVal = (item.localizacaoAtual && item.localizacaoAtual.lng) ? Number(item.localizacaoAtual.lng) : Number(item.lng);
+      const liveData = liveTrackingData.find(track => track.cargoId === item.id);
+      const latVal = liveData ? liveData.lat : (item.localizacaoAtual && item.localizacaoAtual.lat) ? Number(item.localizacaoAtual.lat) : Number(item.lat);
+      const lngVal = liveData ? liveData.lng : (item.localizacaoAtual && item.localizacaoAtual.lng) ? Number(item.localizacaoAtual.lng) : Number(item.lng);
       const currentZoom = map.getZoom() || 8;
       map.setView([latVal, lngVal], currentZoom);
     } else if (selectedId) {
       const selected = mapDeliveries.find(e => e.id === selectedId);
       if (selected) {
-        const latVal = (selected.localizacaoAtual && selected.localizacaoAtual.lat) ? Number(selected.localizacaoAtual.lat) : Number(selected.lat);
-        const lngVal = (selected.localizacaoAtual && selected.localizacaoAtual.lng) ? Number(selected.localizacaoAtual.lng) : Number(selected.lng);
+        const liveData = liveTrackingData.find(track => track.cargoId === selected.id);
+        const latVal = liveData ? liveData.lat : (selected.localizacaoAtual && selected.localizacaoAtual.lat) ? Number(selected.localizacaoAtual.lat) : Number(selected.lat);
+        const lngVal = liveData ? liveData.lng : (selected.localizacaoAtual && selected.localizacaoAtual.lng) ? Number(selected.localizacaoAtual.lng) : Number(selected.lng);
         const currentZoom = map.getZoom() || 6;
         map.setView([latVal, lngVal], currentZoom);
       }
-    } else if (activeMarkers.length > 1) {
-      const group = L.featureGroup(activeMarkers);
+    } else if (activeMarkersList.length > 1) {
+      const group = L.featureGroup(activeMarkersList);
       if (group.getBounds().isValid()) {
         map.fitBounds(group.getBounds().pad(0.15));
       }
     }
 
-  }, [entregas, selectedId, singleView, filterTransito, filterParado, filterColetando, filterEntregue]);
+  }, [entregas, selectedId, singleView, filterTransito, filterParado, filterColetando, filterEntregue, liveTrackingData]);
 
   // Clean up on component unmount
   useEffect(() => {

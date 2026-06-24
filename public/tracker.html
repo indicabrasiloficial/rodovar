@@ -165,7 +165,7 @@
       <!-- Quick background warning -->
       <div class="bg-zinc-950 p-3 rounded-lg border border-zinc-900 flex items-start gap-2 text-[10px] text-zinc-400 leading-relaxed">
         <span class="text-emerald-400 mt-0.5">✔</span>
-        <span><strong>Rastreamento em Background Ativo:</strong> Você pode desligar a tela ou abrir outros aplicativos. O GPS continuará enviando a sua localização.</span>
+        <span><strong>Rastreamento Ativo (Filtro 10s):</strong> O GPS foi programado para economia inteligente de sua bateria. A sua rota está sendo gravada com segurança de forma contínua em segundo plano.</span>
       </div>
     </div>
 
@@ -183,7 +183,7 @@
         </li>
         <li class="flex gap-2 items-start">
           <span class="text-brand-yellow font-bold">3.</span>
-          <span>Mantenha a página aberta. Você pode desligar a tela, colocar no bolso ou usar o GPS de sua preferência. O monitoramento continuará enviando a sua posição automaticamente.</span>
+          <span>Mantenha a página aberta. Você pode desligar a tela, colocar no bolso ou usar o GPS de sua preferência. O monitoramento continuará enviando a sua posição de 10 em 10 segundos automaticamente.</span>
         </li>
         <li class="flex gap-2 items-start">
           <span class="text-brand-yellow font-bold">4.</span>
@@ -215,7 +215,7 @@
   <!-- Bottom Buttons Controls -->
   <footer class="mt-6 flex flex-col gap-2" id="footer-controls">
     <!-- Main Big Button: Iniciar Corrida -->
-    <button id="btn-start-tracking" class="w-full bg-brand-yellow hover:bg-yellow-400 text-black py-4 px-6 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.98]">
+    <button id="btn-start-tracking" class="w-full bg-brand-yellow hover:bg-yellow-400 text-black py-4 px-6 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.98] cursor-pointer">
       <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
       INICIAR CORRIDA
     </button>
@@ -227,14 +227,14 @@
     </button>
 
     <div class="text-center">
-      <p class="text-[9px] text-zinc-600 font-mono">RODOVAR MONITORA v2.8 • SISTEMA SEGURO DA CRIPTO-FROTA</p>
+      <p class="text-[9px] text-zinc-600 font-mono">RODOVAR MONITORA v3.0 • ECONOMIA INTELIGENTE DE BATERIA</p>
     </div>
   </footer>
 
   <!-- Firebase CDN imports -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, set, push, onValue, off, get, child } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
     // Global Tracker States
     let app, db;
@@ -245,6 +245,14 @@
     let totalCoordinatesSent = 0;
     let trackingStartTime = null;
     let timerInterval = null;
+
+    // Database economy states
+    let lastSendTs = 0;
+    let lastHistoryTs = 0;
+    let historyEnabled = false; // default configuration
+
+    const SEND_INTERVAL_MS = 10000;    // Throttle: 10 seconds
+    const HISTORY_INTERVAL_MS = 300000; // History: 5 minutes
 
     // URL Parameters Parser
     const urlParams = new URLSearchParams(window.location.search);
@@ -269,7 +277,7 @@
       document.getElementById("conn-text").innerText = "DESCONECTADO";
     });
 
-    // 1. Fetch Firebase Configuration from our proxy/API dynamically or fallback to config schema
+    // Fetch Firebase Configuration from our proxy/API dynamically or fallback to config schema
     async function loadFirebaseConfig() {
       try {
         const response = await fetch('/api/firebase-config');
@@ -278,8 +286,6 @@
         return config;
       } catch (e) {
         console.warn("Could not fetch remote Firebase config, using native local defaults: ", e);
-        // Clean absolute fallback default configuration structure
-        const loc = window.location;
         const defaultProj = "ai-studio-ee2f781e-146e-4680-8c47-4b030d3ec113";
         return {
           apiKey: "",
@@ -305,13 +311,25 @@
         app = initializeApp(firebaseConfig);
         db = getDatabase(app);
 
+        // Read historyEnabled configuration once at startup
+        try {
+          const configRef = ref(db, 'config/tracking/historyEnabled');
+          const configSnap = await get(configRef);
+          if (configSnap.exists()) {
+            historyEnabled = !!configSnap.val();
+          }
+          console.log("Config: tracking historyEnabled =", historyEnabled);
+        } catch (confError) {
+          console.warn("Could not load config/tracking/historyEnabled, defaulting to false", confError);
+        }
+
         // Listen for automatic delivery/finish status from control room
         listenToStatusChanges();
 
         // Bind Start Trigger
         document.getElementById("btn-start-tracking").addEventListener("click", startTracking);
         document.getElementById("btn-active-tracking").addEventListener("click", () => {
-          alert("Sua corrida está ativa! O rastreamento de segurança está bloqueado em background para sua segurança.");
+          alert("Sua corrida está ativa! O rastreamento de segurança está rodando em segundo plano para sua segurança.");
         });
 
       } catch (error) {
@@ -347,7 +365,6 @@
     async function registerBackgroundServiceWorker() {
       if ('serviceWorker' in navigator) {
         try {
-          // Generates a background keepalive service worker via Blob
           const swCode = `
             self.addEventListener('install', (e) => {
               self.skipWaiting();
@@ -356,7 +373,6 @@
               e.waitUntil(self.clients.claim());
             });
             self.addEventListener('message', (e) => {
-              // Echo message to maintain event loops
               e.source.postMessage({ type: 'KEEPALIVE_ACK' });
             });
           `;
@@ -366,7 +382,6 @@
           serviceWorkerReg = reg;
           console.log("Service Worker Background registrado.");
           
-          // Start keepalive interval
           setInterval(() => {
             if (reg.active) {
               reg.active.postMessage({ type: 'KEEPALIVE' });
@@ -441,11 +456,18 @@
     function handleNewPosition(position) {
       if (!isTracking) return;
 
+      const now = Date.now();
+      
+      // Throttle Check: Enviar no máximo 1 vez a cada 10 segundos
+      if (now - lastSendTs < SEND_INTERVAL_MS) {
+        return; // descarta o envio excessivamente frequente para economizar dados
+      }
+      lastSendTs = now;
+
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
       const accuracy = position.coords.accuracy;
       const timestamp = new Date().toISOString();
-      const ts = Date.now();
 
       // Update Local dashboard UI
       document.getElementById("tele-lat").innerText = lat.toFixed(6);
@@ -458,26 +480,26 @@
         document.getElementById("tele-acc").className = "text-xs font-mono font-bold mt-1 text-zinc-400";
       }
 
-      // Send to Firebase RTDB
-      // Path 1: current live location
-      set(ref(db, `tracking/${cargoId}/current`), {
+      // Payload structure
+      const payload = {
         lat,
         lng,
         accuracy,
         timestamp,
-        ts
-      });
+        ts: now
+      };
 
-      // Path 2: append to history
-      const historyRef = ref(db, `tracking/${cargoId}/history`);
-      const newHistoryPacketRef = push(historyRef);
-      set(newHistoryPacketRef, {
-        lat,
-        lng,
-        accuracy,
-        timestamp,
-        ts
-      });
+      // Sempre atualiza a posição atual (barato: 1 write, sempre sobrescreve o nó current)
+      set(ref(db, `tracking/${cargoId}/current`), payload);
+
+      // Gravação condicional do Histórico para economizar dados (se ativo + intervalo de 5 minutos)
+      if (historyEnabled && (now - lastHistoryTs >= HISTORY_INTERVAL_MS)) {
+        lastHistoryTs = now;
+        const historyRef = ref(db, `tracking/${cargoId}/history`);
+        const newHistoryPacketRef = push(historyRef);
+        set(newHistoryPacketRef, payload);
+        console.log("Histórico gravado com sucesso.");
+      }
 
       totalCoordinatesSent++;
       document.getElementById("tele-count").innerText = totalCoordinatesSent;
@@ -546,6 +568,7 @@
       }, 1000);
     }
 
+    // Stop Timer
     function stopTimer() {
       if (timerInterval) {
         clearInterval(timerInterval);
