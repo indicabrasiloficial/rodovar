@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ref, onValue, off } from 'firebase/database';
 import { database } from '../db/firebase';
 import { Entrega } from '../types';
@@ -16,6 +16,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
   const [source, setSource] = useState<'gps' | 'whatsapp' | 'none'>('none');
   const [isLive, setIsLive] = useState<boolean>(false);
   const [lastSeenSeconds, setLastSeenSeconds] = useState<number | null>(null);
+  const lastTsRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!entrega) {
@@ -23,6 +24,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       setSource('none');
       setIsLive(false);
       setLastSeenSeconds(null);
+      lastTsRef.current = null;
       return;
     }
 
@@ -88,6 +90,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       if (selectedLat && selectedLng) {
         setPosition({ lat: selectedLat, lng: selectedLng });
         setSource(activeSource);
+        lastTsRef.current = selectedTs;
         const ageSeconds = selectedTs ? Math.max(0, Math.floor((now - selectedTs) / 1000)) : null;
         setIsLive(ageSeconds !== null ? ageSeconds < 150 : false);
         setLastSeenSeconds(ageSeconds);
@@ -107,6 +110,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
             setSource('whatsapp');
             setIsLive(false);
             setLastSeenSeconds(null);
+            lastTsRef.current = null;
             return;
           }
         }
@@ -117,22 +121,28 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
           setSource(entrega.link_localizacao ? 'whatsapp' : 'none');
           setIsLive(false);
           setLastSeenSeconds(null);
+          lastTsRef.current = null;
         } else {
           setPosition(null);
           setSource('none');
           setIsLive(false);
           setLastSeenSeconds(null);
+          lastTsRef.current = null;
         }
       }
     }, (error) => {
       console.error("Error reading specific cargo tracking from Realtime DB:", error);
     });
 
-    // Setup an interval to recalculate active/offline status (every 5s)
+    // Setup an interval to recalculate active/offline status locally (every 5s)
     const interval = setInterval(() => {
-      onValue(trackingRef, (snap) => {
-        handleSync(snap);
-      }, { onlyOnce: true });
+      const now = Date.now();
+      const selectedTs = lastTsRef.current;
+      if (selectedTs) {
+        const ageSeconds = Math.max(0, Math.floor((now - selectedTs) / 1000));
+        setIsLive(ageSeconds < 150);
+        setLastSeenSeconds(ageSeconds);
+      }
     }, 5000);
 
     return () => {

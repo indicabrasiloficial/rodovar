@@ -132,7 +132,7 @@
 
           <div class="bg-zinc-900/40 p-3 rounded-lg border border-zinc-900/80">
             <span class="text-[9px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">Frequência do Sinal GPS</span>
-            <span id="disp-tracking-mode" class="text-sm font-bold text-emerald-400 block leading-snug">⚡ Carregando configuração...</span>
+            <span id="disp-tracking-mode" class="text-sm font-bold text-emerald-400 block leading-snug">⚡ Padrão Express (30s)</span>
           </div>
         </div>
       </div>
@@ -201,6 +201,19 @@
     <div id="error-panel" class="bg-red-950/20 border border-red-900/50 p-4 rounded-xl text-red-400 text-xs hidden flex-col gap-2">
       <strong class="font-bold flex items-center gap-1 font-mono uppercase text-[10px]">⚠️ Erro Detectado</strong>
       <span id="error-message">Erro desconhecido. Por favor, recarregue a página ou contate o suporte.</span>
+      
+      <!-- Permission Guide Helper (shown when permission is denied) -->
+      <div id="permission-guide" class="hidden mt-2 p-3 bg-black/40 rounded-lg text-zinc-300 border border-zinc-800 flex flex-col gap-2">
+        <p class="font-black text-[10px] uppercase text-brand-yellow">Como liberar o GPS no seu celular:</p>
+        <ul class="list-disc pl-4 space-y-1.5 text-[11px] leading-relaxed">
+          <li><strong>No Android (Chrome):</strong> Toque nos 3 pontinhos no canto superior direito &rarr; <strong>Configurações</strong> &rarr; <strong>Configurações do site</strong> &rarr; <strong>Localização</strong> &rarr; Selecione <strong>Permitido</strong> para este site.</li>
+          <li><strong>No iPhone (Safari - Direto):</strong> Toque no ícone de opções <strong>aA</strong> ou de cadeado na barra de endereço &rarr; <strong>Configurações do Site</strong> &rarr; <strong>Localização</strong> &rarr; Altere para <strong>Permitir</strong>.</li>
+          <li><strong>No iPhone (Safari - Ajustes):</strong> Abra o app <strong>Ajustes</strong> &rarr; <strong>Privacidade e Segurança</strong> &rarr; <strong>Serviços de Localização</strong> &rarr; <strong>Safari</strong> &rarr; Escolha <strong>Durante o Uso do App</strong>.</li>
+        </ul>
+        <button id="btn-retry-gps" type="button" class="mt-2 w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-wider py-2.5 px-3 rounded-lg text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
+          🔄 Tentar Novamente
+        </button>
+      </div>
     </div>
 
     <!-- Finished Screen -->
@@ -262,7 +275,7 @@
 
     // URL Parameters Parser
     const urlParams = new URLSearchParams(window.location.search);
-    const cargoId = urlParams.get("cargoId");
+    const cargoId = urlParams.get("cargoId") || urlParams.get("cargoid");
     const driverName = urlParams.get("driver") || "Motorista Convidado";
     const routeName = urlParams.get("route") || "Rota não especificada";
     const clientName = urlParams.get("client") || "Destinatário não especificado";
@@ -326,6 +339,36 @@
         };
       }
 
+      // Bind retry GPS click event
+      const btnRetry = document.getElementById("btn-retry-gps");
+      if (btnRetry) {
+        btnRetry.onclick = () => {
+          console.log("Retry button clicked. Requesting new position prompt...");
+          document.getElementById("error-panel").classList.add("hidden");
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              console.log("Retry GPS acquisition succeeded.");
+              const guide = document.getElementById("permission-guide");
+              if (guide) guide.classList.add("hidden");
+              if (isTracking) {
+                handleNewPosition(pos, true);
+              } else {
+                startTracking();
+              }
+            },
+            (err) => {
+              console.warn("Retry GPS acquisition failed:", err.message);
+              handleGPSError(err);
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0
+            }
+          );
+        };
+      }
+
       try {
         const firebaseConfig = await loadFirebaseConfig();
         app = initializeApp(firebaseConfig);
@@ -334,22 +377,25 @@
         const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
         firestore = getFirestore(app, dbId);
 
-        // Read historyEnabled configuration once at startup
-        try {
-          const configRef = ref(db, 'config/tracking/historyEnabled');
-          const configSnap = await get(configRef);
-          if (configSnap.exists()) {
-            historyEnabled = !!configSnap.val();
+        // Read historyEnabled configuration asynchronously (non-blocking)
+        Promise.resolve().then(async () => {
+          try {
+            const configRef = ref(db, 'config/tracking/historyEnabled');
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
+            const configSnap = await Promise.race([get(configRef), timeoutPromise]);
+            if (configSnap && configSnap.exists()) {
+              historyEnabled = !!configSnap.val();
+            }
+            console.log("Config: tracking historyEnabled =", historyEnabled);
+          } catch (confError) {
+            console.warn("Could not load config/tracking/historyEnabled dynamically, defaulting to false", confError);
           }
-          console.log("Config: tracking historyEnabled =", historyEnabled);
-        } catch (confError) {
-          console.warn("Could not load config/tracking/historyEnabled, defaulting to false", confError);
-        }
+        });
 
         // Listen for automatic delivery/finish status from control room
         listenToStatusChanges();
 
-        // Listen to tracking mode configuration dynamically
+        // Listen to tracking mode configuration dynamically (non-blocking)
         try {
           const modeRef = ref(db, 'config/tracking/mode');
           onValue(modeRef, (snap) => {
@@ -379,6 +425,8 @@
             if (warningEl) {
               warningEl.innerHTML = `<strong>Rastreamento Ativo (${activeLabel}):</strong> O GPS foi programado para economia inteligente de sua bateria. A sua rota está sendo gravada com segurança de forma contínua em segundo plano.`;
             }
+          }, (err) => {
+            console.warn("Realtime DB mode listener blocked or failed:", err);
           });
         } catch (modeError) {
           console.warn("Could not load config/tracking/mode, defaulting to express", modeError);
@@ -637,6 +685,10 @@
       let errorMsg = "Sinal do GPS fraco. Certifique-se de estar ao ar livre.";
       if (err.code === 1) {
         errorMsg = "Permissão negada. Você precisa permitir o GPS nas configurações do seu navegador para que a Rodovar te monitore.";
+        const guide = document.getElementById("permission-guide");
+        if (guide) {
+          guide.classList.remove("hidden");
+        }
       }
       showError(errorMsg);
     }
