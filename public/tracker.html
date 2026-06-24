@@ -235,9 +235,10 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getDatabase, ref, set, push, onValue, off, get, child } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getFirestore, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // Global Tracker States
-    let app, db;
+    let app, db, firestore;
     let watchId = null;
     let isTracking = false;
     let wakeLock = null;
@@ -323,6 +324,7 @@
         const firebaseConfig = await loadFirebaseConfig();
         app = initializeApp(firebaseConfig);
         db = getDatabase(app);
+        firestore = getFirestore(app);
 
         // Read historyEnabled configuration once at startup
         try {
@@ -470,6 +472,18 @@
           console.warn("Banco de dados não conectado ainda. Iniciando em modo offline.");
         }
 
+        if (firestore) {
+          const docRef = doc(firestore, "entregas", cargoId);
+          updateDoc(docRef, {
+            status: "em_transito",
+            ultimaAtualizacao: timestampIso
+          }).catch(fsErr => {
+            console.error("Erro ao gravar status inicial no Firestore:", fsErr);
+          });
+        } else {
+          console.warn("Firestore não conectado ainda.");
+        }
+
         // Launch Geolocation high precision listener
         watchId = navigator.geolocation.watchPosition(
           handleNewPosition,
@@ -523,16 +537,33 @@
         ts: now
       };
 
-      // Sempre atualiza a posição atual (barato: 1 write, sempre sobrescreve o nó current)
-      set(ref(db, `tracking/${cargoId}/current`), payload);
+      // Sempre atualiza a posição atual no Realtime Database (barato: 1 write, sempre sobrescreve o nó current)
+      if (db) {
+        set(ref(db, `tracking/${cargoId}/current`), payload).catch(dbErr => {
+          console.error("Erro ao gravar current no Realtime DB:", dbErr);
+        });
+      }
 
-      // Gravação condicional do Histórico para economizar dados (se ativo + intervalo de 5 minutos)
-      if (historyEnabled && (now - lastHistoryTs >= HISTORY_INTERVAL_MS)) {
+      // Gravação condicional do Histórico para economizar dados no Realtime Database (se ativo + intervalo de 5 minutos)
+      if (db && historyEnabled && (now - lastHistoryTs >= HISTORY_INTERVAL_MS)) {
         lastHistoryTs = now;
         const historyRef = ref(db, `tracking/${cargoId}/history`);
         const newHistoryPacketRef = push(historyRef);
-        set(newHistoryPacketRef, payload);
+        set(newHistoryPacketRef, payload).catch(dbErr => {
+          console.error("Erro ao gravar histórico no Realtime DB:", dbErr);
+        });
         console.log("Histórico gravado com sucesso.");
+      }
+
+      // Sincroniza em tempo real com o Firestore para robustez e compatibilidade absoluta com o mapa
+      if (firestore) {
+        const docRef = doc(firestore, "entregas", cargoId);
+        updateDoc(docRef, {
+          localizacaoAtual: { lat, lng },
+          ultimaAtualizacao: timestamp
+        }).catch(fsErr => {
+          console.error("Erro ao sincronizar localização com o Firestore:", fsErr);
+        });
       }
 
       totalCoordinatesSent++;
