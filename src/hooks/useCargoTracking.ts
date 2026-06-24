@@ -29,7 +29,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     }
 
     const cargoId = entrega.id.toLowerCase();
-    const trackingRef = ref(database, `tracking/${cargoId}/current`);
+    const trackingRef = ref(database, `localizacoes/${cargoId}`);
 
     const handleSync = (rtdbSnap: any) => {
       const now = Date.now();
@@ -40,9 +40,11 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
 
       if (rtdbSnap && rtdbSnap.exists()) {
         const val = rtdbSnap.val();
-        rtdbLat = Number(val.lat);
-        rtdbLng = Number(val.lng);
-        rtdbTs = Number(val.ts || 0);
+        // Support both direct flat fields and nested current object
+        const current = val.current || val;
+        rtdbLat = Number(current.lat ?? 0);
+        rtdbLng = Number(current.lng ?? 0);
+        rtdbTs = Number(current.ts ?? val.ts ?? 0);
       }
 
       let fsLat = 0;

@@ -619,12 +619,17 @@
         const timestampIso = new Date().toISOString();
         if (db) {
           masterLog("Gravando dados iniciais da viagem no Realtime Database...", "info");
-          set(ref(db, `tracking/${cargoId}`), {
+          set(ref(db, `localizacoes/${cargoId}`), {
             status: "tracking",
             startedAt: timestampIso,
             driver: driverName,
             route: routeName,
             client: clientName,
+            lat: 0,
+            lng: 0,
+            accuracy: 0,
+            timestamp: timestampIso,
+            ts: Date.now(),
             current: {
               lat: 0,
               lng: 0,
@@ -638,6 +643,7 @@
           })
           .catch(dbErr => {
             masterLog("Erro ao gravar status inicial no Realtime Database: " + dbErr.message, "error");
+            console.error("Erro ao gravar GPS:", dbErr);
           });
         } else {
           masterLog("Aviso: Realtime Database não inicializado. Rodando em modo local/offline.", "warn");
@@ -730,37 +736,56 @@
         document.getElementById("tele-acc").className = "text-xs font-mono font-bold mt-1 text-zinc-400";
       }
 
-      // Payload structure
+      // Payload structure (flat fields + nested current object for absolute backward-compatibility)
       const payload = {
         lat,
         lng,
         accuracy,
         timestamp,
-        ts: now
+        ts: now,
+        driver: driverName,
+        route: routeName,
+        client: clientName,
+        status: "tracking",
+        current: {
+          lat,
+          lng,
+          accuracy,
+          timestamp,
+          ts: now
+        }
       };
 
-      // Sempre atualiza a posição atual no Realtime Database (barato: 1 write, sempre sobrescreve o nó current)
+      // Sempre atualiza a posição atual no Realtime Database (barato: 1 write, sempre sobrescreve o nó)
       if (db) {
-        set(ref(db, `tracking/${cargoId}/current`), payload)
+        set(ref(db, `localizacoes/${cargoId}`), payload)
         .then(() => {
           masterLog("✔ Posição atualizada com sucesso no Realtime Database.", "success");
         })
         .catch(dbErr => {
           masterLog("❌ Erro ao atualizar posição no Realtime DB (Verifique as Rules!): " + dbErr.message, "error");
+          console.error("Erro ao gravar GPS:", dbErr);
         });
       }
 
       // Gravação condicional do Histórico para economizar dados no Realtime Database (se ativo + intervalo de 5 minutos)
       if (db && historyEnabled && (now - lastHistoryTs >= HISTORY_INTERVAL_MS)) {
         lastHistoryTs = now;
-        const historyRef = ref(db, `tracking/${cargoId}/history`);
+        const historyRef = ref(db, `localizacoes/${cargoId}/history`);
         const newHistoryPacketRef = push(historyRef);
-        set(newHistoryPacketRef, payload)
+        set(newHistoryPacketRef, {
+          lat,
+          lng,
+          accuracy,
+          timestamp,
+          ts: now
+        })
         .then(() => {
           masterLog("✔ Histórico de rota gravado com sucesso no Realtime DB.", "success");
         })
         .catch(dbErr => {
           masterLog("❌ Erro ao gravar histórico no Realtime DB: " + dbErr.message, "error");
+          console.error("Erro ao gravar GPS:", dbErr);
         });
       }
 
