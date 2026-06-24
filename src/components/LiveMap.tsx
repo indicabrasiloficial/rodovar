@@ -61,8 +61,8 @@ export default function LiveMap({ entrega }: LiveMapProps) {
   useEffect(() => {
     if (!divRef.current || mapRef.current) return;
 
-    const initialLat = entrega?.lat ? Number(entrega.lat) : -12.97;
-    const initialLng = entrega?.lng ? Number(entrega.lng) : -38.50;
+    const initialLat = position?.lat || (entrega?.lat ? Number(entrega.lat) : -12.97);
+    const initialLng = position?.lng || (entrega?.lng ? Number(entrega.lng) : -38.50);
 
     const map = L.map(divRef.current, {
       center: [initialLat, initialLng],

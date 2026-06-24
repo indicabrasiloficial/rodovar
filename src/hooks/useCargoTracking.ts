@@ -29,29 +29,76 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     const cargoId = entrega.id;
     const trackingRef = ref(database, `tracking/${cargoId}/current`);
 
-    const handleGpsUpdate = (snap: any): boolean => {
+    const handleSync = (rtdbSnap: any) => {
       const now = Date.now();
-      if (snap.exists()) {
-        const val = snap.val();
-        const lat = Number(val.lat);
-        const lng = Number(val.lng);
-        const ts = Number(val.ts || 0);
+      
+      let rtdbLat = 0;
+      let rtdbLng = 0;
+      let rtdbTs = 0;
 
-        if (lat && lng) {
-          setPosition({ lat, lng });
-          setSource('gps');
-          const ageSeconds = Math.max(0, Math.floor((now - ts) / 1000));
-          setIsLive(ageSeconds < 60);
-          setLastSeenSeconds(ageSeconds);
-          return true;
+      if (rtdbSnap && rtdbSnap.exists()) {
+        const val = rtdbSnap.val();
+        rtdbLat = Number(val.lat);
+        rtdbLng = Number(val.lng);
+        rtdbTs = Number(val.ts || 0);
+      }
+
+      let fsLat = 0;
+      let fsLng = 0;
+      let fsTs = 0;
+
+      if (entrega.localizacaoAtual && entrega.localizacaoAtual.lat && entrega.localizacaoAtual.lng) {
+        fsLat = Number(entrega.localizacaoAtual.lat);
+        fsLng = Number(entrega.localizacaoAtual.lng);
+        if (entrega.ultimaAtualizacao) {
+          fsTs = Date.parse(entrega.ultimaAtualizacao) || 0;
         }
+      }
+
+      // Determine which source is newer and valid
+      let selectedLat = 0;
+      let selectedLng = 0;
+      let selectedTs = 0;
+      let activeSource: 'gps' | 'whatsapp' | 'none' = 'none';
+
+      if (rtdbLat && rtdbLng && fsLat && fsLng) {
+        if (rtdbTs >= fsTs) {
+          selectedLat = rtdbLat;
+          selectedLng = rtdbLng;
+          selectedTs = rtdbTs;
+          activeSource = 'gps';
+        } else {
+          selectedLat = fsLat;
+          selectedLng = fsLng;
+          selectedTs = fsTs;
+          activeSource = 'gps';
+        }
+      } else if (rtdbLat && rtdbLng) {
+        selectedLat = rtdbLat;
+        selectedLng = rtdbLng;
+        selectedTs = rtdbTs;
+        activeSource = 'gps';
+      } else if (fsLat && fsLng) {
+        selectedLat = fsLat;
+        selectedLng = fsLng;
+        selectedTs = fsTs;
+        activeSource = 'gps';
+      }
+
+      if (selectedLat && selectedLng) {
+        setPosition({ lat: selectedLat, lng: selectedLng });
+        setSource(activeSource);
+        const ageSeconds = selectedTs ? Math.max(0, Math.floor((now - selectedTs) / 1000)) : null;
+        setIsLive(ageSeconds !== null ? ageSeconds < 60 : false);
+        setLastSeenSeconds(ageSeconds);
+        return true;
       }
       return false;
     };
 
     const unsubscribe = onValue(trackingRef, (snap) => {
-      const foundGps = handleGpsUpdate(snap);
-      if (!foundGps) {
+      const found = handleSync(snap);
+      if (!found) {
         // Fallback 1: Link WhatsApp coordinates
         if (entrega.link_localizacao) {
           const waCoords = extractCoordsFromLink(entrega.link_localizacao);
@@ -67,7 +114,6 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
         // Fallback 2: General coordinates from delivery object
         if (entrega.lat && entrega.lng) {
           setPosition({ lat: Number(entrega.lat), lng: Number(entrega.lng) });
-          // If they entered a link_localizacao but it couldn't be parsed, it's still shown as none/whatsapp
           setSource(entrega.link_localizacao ? 'whatsapp' : 'none');
           setIsLive(false);
           setLastSeenSeconds(null);
@@ -82,19 +128,26 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       console.error("Error reading specific cargo tracking from Realtime DB:", error);
     });
 
-    // Setup an interval to recalculate active/offline status (every 10s)
+    // Setup an interval to recalculate active/offline status (every 5s)
     const interval = setInterval(() => {
-      // Re-evaluate live state based on last seen timestamp
       onValue(trackingRef, (snap) => {
-        handleGpsUpdate(snap);
+        handleSync(snap);
       }, { onlyOnce: true });
-    }, 10000);
+    }, 5000);
 
     return () => {
       off(trackingRef, 'value', unsubscribe);
       clearInterval(interval);
     };
-  }, [entrega?.id, entrega?.link_localizacao, entrega?.lat, entrega?.lng]);
+  }, [
+    entrega?.id, 
+    entrega?.link_localizacao, 
+    entrega?.lat, 
+    entrega?.lng,
+    entrega?.localizacaoAtual?.lat,
+    entrega?.localizacaoAtual?.lng,
+    entrega?.ultimaAtualizacao
+  ]);
 
   return { position, source, isLive, lastSeenSeconds };
 }

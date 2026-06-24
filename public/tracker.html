@@ -526,11 +526,27 @@
 
         // Launch Geolocation high precision listener
         watchId = navigator.geolocation.watchPosition(
-          handleNewPosition,
+          (pos) => handleNewPosition(pos),
           handleGPSError,
           {
             enableHighAccuracy: true,
             timeout: 15000,
+            maximumAge: 0
+          }
+        );
+
+        // Fetch current position immediately to bypass watchPosition delay
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            console.log("Initial position fetched successfully:", pos.coords.latitude, pos.coords.longitude);
+            handleNewPosition(pos, true);
+          },
+          (err) => {
+            console.warn("Initial position quick-fetch failed, waiting for watchPosition:", err.message);
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
             maximumAge: 0
           }
         );
@@ -541,16 +557,18 @@
     }
 
     // New GPS Telemetry packet arrived
-    function handleNewPosition(position) {
+    function handleNewPosition(position, forceSend = false) {
       if (!isTracking) return;
 
       const now = Date.now();
       
       // Throttle Check
-      if (now - lastSendTs < currentSendIntervalMs) {
+      if (!forceSend && (now - lastSendTs < currentSendIntervalMs)) {
         return; // descarta o envio excessivamente frequente para economizar dados
       }
-      lastSendTs = now;
+      if (!forceSend) {
+        lastSendTs = now;
+      }
 
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;

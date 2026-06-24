@@ -282,6 +282,9 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       const id = navigator.geolocation.watchPosition(successCallback, errorCallback, options);
       watchIdRef.current = id;
 
+      // 4b. Fetch initial position immediately to register coordinates instantly
+      navigator.geolocation.getCurrentPosition(successCallback, errorCallback, options);
+
       // 5. Build an aggressive double heartbeat. Many mobile browsers sleep passive watchPosition callbacks if screen is off.
       // Launching active getCurrentPosition calls every 25 seconds requests direct hardware satellite refresh.
       heartbeatIntervalRef.current = setInterval(() => {
