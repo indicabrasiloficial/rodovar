@@ -36,16 +36,18 @@ interface DashboardProps {
 }
 
 const statusColorMap: Record<string, string> = {
-  coletando: '#3B82F6',   // Blue
-  em_transito: '#FFD600', // Yellow
-  parado: '#EF4444',      // Red
-  entregue: '#10B981'     // Green
+  coletando: '#3B82F6',     // Blue
+  em_transito: '#FFD600',   // Yellow
+  parado: '#EF4444',        // Red
+  descarregando: '#A855F7',  // Purple
+  entregue: '#10B981'       // Green
 };
 
 const statusLabelMap: Record<string, string> = {
   coletando: 'Coletando',
   em_transito: 'Trânsito',
   parado: 'Parado',
+  descarregando: 'Descarregando',
   entregue: 'Entregue'
 };
 export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFilterCargas }: DashboardProps) {
@@ -75,6 +77,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFil
     let totalCargas = entregas.length;
     let coletando = entregas.filter(e => e.status === 'coletando').length;
     let emTransito = entregas.filter(e => e.status === 'em_transito').length;
+    let descarregando = entregas.filter(e => e.status === 'descarregando').length;
     let entregues = entregas.filter(e => e.status === 'entregue').length;
     let paradas = entregas.filter(e => e.status === 'parado').length;
     
@@ -86,6 +89,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFil
       totalCargas,
       coletando,
       emTransito,
+      descarregando,
       entregues,
       paradas,
       faturamentoTotal,
@@ -148,6 +152,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFil
       coletando: 0,
       em_transito: 0,
       parado: 0,
+      descarregando: 0,
       entregue: 0
     };
     
@@ -654,7 +659,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFil
       </div>
 
       {/* Grid of Key Metric cards (Custom High Density without financial metrics) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {/* Metric Total */}
         <div 
           onClick={() => onFilterCargas?.('all')}
@@ -697,6 +702,21 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFil
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-2xl md:text-3xl font-extrabold font-sans text-white">{metrics.emTransito}</span>
             <span className="text-[10px] font-bold text-[#FFD600] bg-[#FFD600]/10 px-1.5 py-0.5 rounded font-mono font-black">EM ATIVIDADES</span>
+          </div>
+        </div>
+
+        {/* Metric Descarregando */}
+        <div 
+          onClick={() => onFilterCargas?.('descarregando')}
+          className="bg-[#121212] border border-zinc-800 hover:border-purple-900/50 hover:bg-purple-950/10 p-4 rounded-xl flex flex-col justify-between transition-all group shadow-sm id-metric-unloading cursor-pointer"
+        >
+          <div className="flex justify-between items-start">
+            <span className="text-[11px] uppercase tracking-wider font-mono text-purple-400">Descarregando</span>
+            <Layers className="w-4 h-4 text-purple-400" />
+          </div>
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="text-2xl md:text-3xl font-extrabold font-sans text-white">{metrics.descarregando}</span>
+            <span className="text-[10px] font-bold text-purple-400 bg-purple-950/30 px-1.5 py-0.5 rounded font-mono font-black">DESCARGA</span>
           </div>
         </div>
 
@@ -746,6 +766,9 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFil
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#FFD600]" /> Trânsito
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#A855F7]" /> Descarregando
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]" /> Parado

@@ -129,7 +129,7 @@ export function falarRodovar(texto: string, onEndCallback?: () => void) {
   utterance.lang = 'pt-BR';
   utterance.pitch = 1.0; 
   utterance.volume = 1.0; 
-  utterance.rate = 1.0; // Definindo velocidade em 1.0 (ritmo natural) como solicitado
+  utterance.rate = 1.25; // Velocidade ajustada para 1.25 (voz mais rápida e dinâmica) como solicitado
 
   const voices = window.speechSynthesis.getVoices();
   
@@ -145,14 +145,29 @@ export function falarRodovar(texto: string, onEndCallback?: () => void) {
       const name = voice.name.toLowerCase();
       let score = 0;
 
-      // Prefer "Google português do Brasil"
-      if (name.includes('google português do brasil') || name.includes('google portugues do brasil')) {
-        score += 1000;
-      } else if (name.includes('google')) {
-        score += 300;
-      }
+      // Check for female voice indicators to prioritize female voices
+      const isFemale = name.includes('luciana') || 
+                       name.includes('sandra') || 
+                       name.includes('female') || 
+                       name.includes('mulher') || 
+                       name.includes('maria') || 
+                       name.includes('helena') || 
+                       name.includes('zita') ||
+                       name.includes('leticia') ||
+                       name.includes('fernanda') ||
+                       name.includes('yara') ||
+                       name.includes('victoria') ||
+                       name.includes('francisca') ||
+                       name.includes('heloisa') ||
+                       name.includes('maysa') ||
+                       name.includes('luzia') ||
+                       name.includes('heloa') ||
+                       name.includes('vitoria') ||
+                       name.includes('isabela') ||
+                       name.includes('gabriela') ||
+                       name.includes('giovana');
 
-      // Check for male voice indicators
+      // Check for male voice indicators to heavily penalize them
       const isMale = name.includes('daniel') || 
                      name.includes('felipe') || 
                      name.includes('male') || 
@@ -160,22 +175,26 @@ export function falarRodovar(texto: string, onEndCallback?: () => void) {
                      name.includes('guy') || 
                      name.includes('antonio') || 
                      name.includes('junior') ||
-                     name.includes('helio');
-      
+                     name.includes('helio') ||
+                     name.includes('ricardo') ||
+                     name.includes('thiago') ||
+                     name.includes('lucas') ||
+                     name.includes('gustavo');
+
+      if (isFemale) {
+        score += 2000;
+      }
       if (isMale) {
-        score += 500;
+        score -= 2000;
       }
 
-      // Penalize female voices to prefer male unless it's the premium google voice
-      const isFemale = name.includes('luciana') || 
-                       name.includes('sandra') || 
-                       name.includes('female') || 
-                       name.includes('mulher') || 
-                       name.includes('maria') || 
-                       name.includes('helena') || 
-                       name.includes('zita');
-      if (isFemale && !name.includes('google')) {
-        score -= 200;
+      // Prefer Google's Portuguese (Brazil) voices since they are highly natural and native
+      if (name.includes('google português do brasil') || name.includes('google portugues do brasil')) {
+        if (!isMale) {
+          score += 1000;
+        }
+      } else if (name.includes('google') && !isMale) {
+        score += 500;
       }
 
       return score;
