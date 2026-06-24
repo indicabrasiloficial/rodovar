@@ -306,6 +306,19 @@
         return;
       }
 
+      // Bind Start Trigger immediately so it is ALWAYS clickable and responsive
+      const btnStart = document.getElementById("btn-start-tracking");
+      if (btnStart) {
+        // Clear previous listeners if any, then bind
+        btnStart.onclick = startTracking;
+      }
+      const btnActive = document.getElementById("btn-active-tracking");
+      if (btnActive) {
+        btnActive.onclick = () => {
+          alert("Sua corrida está ativa! O rastreamento de segurança está rodando em segundo plano para sua segurança.");
+        };
+      }
+
       try {
         const firebaseConfig = await loadFirebaseConfig();
         app = initializeApp(firebaseConfig);
@@ -326,20 +339,15 @@
         // Listen for automatic delivery/finish status from control room
         listenToStatusChanges();
 
-        // Bind Start Trigger
-        document.getElementById("btn-start-tracking").addEventListener("click", startTracking);
-        document.getElementById("btn-active-tracking").addEventListener("click", () => {
-          alert("Sua corrida está ativa! O rastreamento de segurança está rodando em segundo plano para sua segurança.");
-        });
-
       } catch (error) {
-        console.error("Erro na inicialização de telemetria:", error);
-        showError("Não foi possível conectar com o servidor central da Rodovar. Verifique seu 4G.");
+        console.error("Erro na inicialização de telemetria Firebase:", error);
+        // Do not block the driver from clicking "Iniciar Corrida" since tracking can fall back or retry
       }
     }
 
     // Watch status changes in database to auto-close
     function listenToStatusChanges() {
+      if (!db) return;
       const statusRef = ref(db, `tracking/${cargoId}/status`);
       onValue(statusRef, (snapshot) => {
         const statusVal = snapshot.val();
@@ -395,61 +403,87 @@
 
     // Primary Geolocation Trigger
     async function startTracking() {
-      if (!navigator.geolocation) {
-        showError("Seu dispositivo não possui GPS ou suporte a Geolocalização.");
-        return;
+      try {
+        if (!navigator.geolocation) {
+          showError("Seu dispositivo não possui GPS ou suporte a Geolocalização.");
+          return;
+        }
+
+        // Block beforeunload warning
+        window.addEventListener("beforeunload", preventUnload);
+
+        // Request screen lock and background registers (run asynchronously so they don't block GPS initiation)
+        requestWakeLock().catch(err => console.warn("Wake lock request error:", err));
+        registerBackgroundServiceWorker().catch(err => console.warn("Service worker registration error:", err));
+
+        // UI changes
+        const btnStart = document.getElementById("btn-start-tracking");
+        if (btnStart) btnStart.classList.add("hidden");
+
+        const btnActive = document.getElementById("btn-active-tracking");
+        if (btnActive) btnActive.classList.remove("hidden");
+
+        const instructionsPanel = document.getElementById("instructions-panel");
+        if (instructionsPanel) instructionsPanel.classList.add("hidden");
+
+        const gpsPanel = document.getElementById("gps-panel");
+        if (gpsPanel) gpsPanel.classList.remove("hidden");
+        
+        // Update badge status to live tracking
+        const statusDot = document.getElementById("status-dot");
+        if (statusDot) {
+          statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-green";
+        }
+        const statusText = document.getElementById("status-text");
+        if (statusText) {
+          statusText.innerText = "CORRIDA ATIVA";
+        }
+        const statusBadge = document.getElementById("status-badge");
+        if (statusBadge) {
+          statusBadge.className = "px-2.5 py-1 rounded-lg bg-emerald-950/20 border border-emerald-900/60 font-mono text-[10px] uppercase font-black tracking-wider flex items-center gap-1.5 text-emerald-400";
+        }
+
+        isTracking = true;
+        trackingStartTime = new Date();
+        startTimer();
+
+        // Write initial session meta values in database if ready
+        const timestampIso = new Date().toISOString();
+        if (db) {
+          set(ref(db, `tracking/${cargoId}`), {
+            status: "tracking",
+            startedAt: timestampIso,
+            driver: driverName,
+            route: routeName,
+            client: clientName,
+            current: {
+              lat: 0,
+              lng: 0,
+              accuracy: 0,
+              timestamp: timestampIso,
+              ts: Date.now()
+            }
+          }).catch(dbErr => {
+            console.error("Erro ao gravar status inicial no banco:", dbErr);
+          });
+        } else {
+          console.warn("Banco de dados não conectado ainda. Iniciando em modo offline.");
+        }
+
+        // Launch Geolocation high precision listener
+        watchId = navigator.geolocation.watchPosition(
+          handleNewPosition,
+          handleGPSError,
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0
+          }
+        );
+      } catch (err) {
+        console.error("Erro geral no acionamento do rastreamento:", err);
+        showError("Não foi possível iniciar o rastreamento: " + err.message);
       }
-
-      // Block beforeunload warning
-      window.addEventListener("beforeunload", preventUnload);
-
-      // Request screen lock and background registers
-      await requestWakeLock();
-      await registerBackgroundServiceWorker();
-
-      // UI changes
-      document.getElementById("btn-start-tracking").classList.add("hidden");
-      document.getElementById("btn-active-tracking").classList.remove("hidden");
-      document.getElementById("instructions-panel").classList.add("hidden");
-      document.getElementById("gps-panel").classList.remove("hidden");
-      
-      // Update badge status to live tracking
-      const statusDot = document.getElementById("status-dot");
-      statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-green";
-      document.getElementById("status-text").innerText = "CORRIDA ATIVA";
-      document.getElementById("status-badge").className = "px-2.5 py-1 rounded-lg bg-emerald-950/20 border border-emerald-900/60 font-mono text-[10px] uppercase font-black tracking-wider flex items-center gap-1.5 text-emerald-400";
-
-      isTracking = true;
-      trackingStartTime = new Date();
-      startTimer();
-
-      // Write initial session meta values in database
-      const timestampIso = new Date().toISOString();
-      set(ref(db, `tracking/${cargoId}`), {
-        status: "tracking",
-        startedAt: timestampIso,
-        driver: driverName,
-        route: routeName,
-        client: clientName,
-        current: {
-          lat: 0,
-          lng: 0,
-          accuracy: 0,
-          timestamp: timestampIso,
-          ts: Date.now()
-        }
-      });
-
-      // Launch Geolocation high precision listener
-      watchId = navigator.geolocation.watchPosition(
-        handleNewPosition,
-        handleGPSError,
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0
-        }
-      );
     }
 
     // New GPS Telemetry packet arrived
