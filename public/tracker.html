@@ -129,6 +129,11 @@
             <span class="text-[9px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">Cliente Destinatário</span>
             <span id="disp-client" class="text-sm font-medium text-zinc-300 block">Carregando...</span>
           </div>
+
+          <div class="bg-zinc-900/40 p-3 rounded-lg border border-zinc-900/80">
+            <span class="text-[9px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">Frequência do Sinal GPS</span>
+            <span id="disp-tracking-mode" class="text-sm font-bold text-emerald-400 block leading-snug">⚡ Carregando configuração...</span>
+          </div>
         </div>
       </div>
     </div>
@@ -165,7 +170,7 @@
       <!-- Quick background warning -->
       <div class="bg-zinc-950 p-3 rounded-lg border border-zinc-900 flex items-start gap-2 text-[10px] text-zinc-400 leading-relaxed">
         <span class="text-emerald-400 mt-0.5">✔</span>
-        <span><strong>Rastreamento Ativo (Filtro 10s):</strong> O GPS foi programado para economia inteligente de sua bateria. A sua rota está sendo gravada com segurança de forma contínua em segundo plano.</span>
+        <span id="gps-warning-text"><strong>Rastreamento Ativo (Filtro 10s):</strong> O GPS foi programado para economia inteligente de sua bateria. A sua rota está sendo gravada com segurança de forma contínua em segundo plano.</span>
       </div>
     </div>
 
@@ -251,8 +256,8 @@
     let lastSendTs = 0;
     let lastHistoryTs = 0;
     let historyEnabled = false; // default configuration
+    let currentSendIntervalMs = 30000; // Throttle interval in ms, dynamically synced from DB (Express default)
 
-    const SEND_INTERVAL_MS = 10000;    // Throttle: 10 seconds
     const HISTORY_INTERVAL_MS = 300000; // History: 5 minutes
 
     // URL Parameters Parser
@@ -340,6 +345,41 @@
 
         // Listen for automatic delivery/finish status from control room
         listenToStatusChanges();
+
+        // Listen to tracking mode configuration dynamically
+        try {
+          const modeRef = ref(db, 'config/tracking/mode');
+          onValue(modeRef, (snap) => {
+            const mode = snap.exists() ? snap.val() : 'express';
+            const intervals = {
+              normal: 10000,   // 10s
+              express: 30000,  // 30s
+              economy: 120000, // 2min
+            };
+            currentSendIntervalMs = intervals[mode] || 30000;
+            console.log("Config: tracking mode updated dynamically to:", mode, "interval:", currentSendIntervalMs);
+
+            // Update mode UI in driver dashboard
+            const modeLabels = {
+              normal: '🎯 Alta Precisão (10s)',
+              express: '⚡ Padrão Express (30s)',
+              economy: '🌿 Economia de Bateria (2min)'
+            };
+            const activeLabel = modeLabels[mode] || '⚡ Padrão Express (30s)';
+            const el = document.getElementById("disp-tracking-mode");
+            if (el) {
+              el.innerText = activeLabel;
+            }
+
+            // Also update the warning box text if visible
+            const warningEl = document.getElementById("gps-warning-text");
+            if (warningEl) {
+              warningEl.innerHTML = `<strong>Rastreamento Ativo (${activeLabel}):</strong> O GPS foi programado para economia inteligente de sua bateria. A sua rota está sendo gravada com segurança de forma contínua em segundo plano.`;
+            }
+          });
+        } catch (modeError) {
+          console.warn("Could not load config/tracking/mode, defaulting to express", modeError);
+        }
 
       } catch (error) {
         console.error("Erro na inicialização de telemetria Firebase:", error);
@@ -506,8 +546,8 @@
 
       const now = Date.now();
       
-      // Throttle Check: Enviar no máximo 1 vez a cada 10 segundos
-      if (now - lastSendTs < SEND_INTERVAL_MS) {
+      // Throttle Check
+      if (now - lastSendTs < currentSendIntervalMs) {
         return; // descarta o envio excessivamente frequente para economizar dados
       }
       lastSendTs = now;

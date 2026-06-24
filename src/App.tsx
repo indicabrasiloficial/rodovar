@@ -21,6 +21,7 @@ import { Rastrear } from './components/Rastrear';
 import { MotoristaTracking } from './components/MotoristaTracking';
 import OperatorPanel from './components/OperatorPanel';
 import Agenda from './components/Agenda';
+import TrackingModeSelector from './components/TrackingModeSelector';
 
 import { 
   Truck, 
@@ -706,6 +707,9 @@ export default function App() {
 
           {/* High Density Right Side Info Items */}
           <div className="flex items-center gap-3.5">
+            {/* Tracking Frequency Mode Selector */}
+            <TrackingModeSelector />
+
             {/* Mute Speech Button */}
             <button
               onClick={toggleMuteSpeech}
@@ -799,6 +803,9 @@ export default function App() {
                 <Database className="w-3.5 h-3.5 text-[#FFD600]" />
                 <span>{isLightMode ? "MODO LIGHT" : "MODO EXPRESS"}</span>
               </button>
+
+              {/* Tracking Frequency Mode Selector */}
+              <TrackingModeSelector />
 
               {/* Mute Speech Button */}
               <button

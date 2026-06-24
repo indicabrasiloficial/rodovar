@@ -35,7 +35,8 @@ import {
   Plus,
   Truck
 } from 'lucide-react';
-import DeliveryMap from './DeliveryMap';
+import LiveMap from './LiveMap';
+import { useCargoTracking } from '../hooks/useCargoTracking';
 
 const formatTimestamp = (isoString: string) => {
   try {
@@ -139,6 +140,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   };
 
   const [entrega, setEntrega] = useState<Entrega | null>(null);
+  const { position, source, isLive, lastSeenSeconds } = useCargoTracking(entrega);
   const [locLinkInput, setLocLinkInput] = useState('');
   const [showDetailsLocModal, setShowDetailsLocModal] = useState(false);
   const [isSavingLink, setIsSavingLink] = useState(false);
@@ -1300,21 +1302,45 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
           {/* Map region reference coordinates */}
           <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 space-y-3 shadow-sm">
-            <h4 className="font-bold text-xs uppercase tracking-wider font-mono text-gray-300 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-[#FFD600]" />
-              LOCALIZAÇÃO DA CARGA
-            </h4>
-            <div className="w-full h-80 rounded-lg overflow-hidden border border-zinc-900">
-              {/* SingleView map showing city coordinates */}
-              <DeliveryMap 
-                entregas={[entrega]} 
-                selectedId={entrega.id}
-                singleView={true}
-              />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-900 pb-2">
+              <h4 className="font-bold text-xs uppercase tracking-wider font-mono text-gray-300 flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-[#FFD600]" />
+                LOCALIZAÇÃO DA CARGA
+              </h4>
+              {(() => {
+                if (source === 'gps') {
+                  if (isLive) {
+                    return (
+                      <span className="px-2.5 py-0.5 rounded text-[9px] font-mono font-black border bg-emerald-950/40 text-emerald-400 border-emerald-800/60 animate-pulse self-start sm:self-auto">
+                        🛰️ GPS ATIVO EM TEMPO REAL
+                      </span>
+                    );
+                  } else {
+                    return (
+                      <span className="px-2.5 py-0.5 rounded text-[9px] font-mono font-black border bg-red-950/40 text-red-400 border-red-800/60 self-start sm:self-auto" title={`Último sinal visto há ${lastSeenSeconds || 0}s`}>
+                        🔴 GPS SEM SINAL {lastSeenSeconds !== null ? `(${lastSeenSeconds}s)` : ''}
+                      </span>
+                    );
+                  }
+                } else if (source === 'whatsapp') {
+                  return (
+                    <span className="px-2.5 py-0.5 rounded text-[9px] font-mono font-black border bg-amber-950/40 text-amber-400 border-amber-800/60 self-start sm:self-auto">
+                      📍 LOCALIZAÇÃO MANUAL (WHATSAPP)
+                    </span>
+                  );
+                } else {
+                  return (
+                    <span className="px-2.5 py-0.5 rounded text-[9px] font-mono font-black border bg-zinc-900/45 text-zinc-400 border-zinc-800 self-start sm:self-auto">
+                      ⚠️ SEM RASTREAMENTO ATIVO
+                    </span>
+                  );
+                }
+              })()}
             </div>
-            <div className="text-[10px] font-mono text-gray-500 flex justify-between px-1">
-              <span>LAT: {entrega.lat.toFixed(4)}</span>
-              <span>LNG: {entrega.lng.toFixed(4)}</span>
+            <div className="w-full h-80 rounded-lg overflow-hidden border border-zinc-900">
+              {entrega && (
+                <LiveMap entrega={entrega} />
+              )}
             </div>
           </div>
 
