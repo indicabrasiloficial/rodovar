@@ -216,6 +216,20 @@
       </div>
     </div>
 
+    <!-- MASTER Diagnostics console -->
+    <div id="master-diagnostics-panel" class="bg-brand-card border border-zinc-900 p-4 rounded-xl text-xs flex flex-col gap-2 shadow-xl">
+      <div class="flex justify-between items-center border-b border-zinc-900 pb-2">
+        <strong class="font-bold flex items-center gap-1.5 font-mono uppercase text-[10px] text-brand-yellow">
+          <span class="w-1.5 h-1.5 rounded-full bg-brand-yellow animate-pulse"></span>
+          DIAGNÓSTICO MASTER (LOGS GPS & TELEMETRIA)
+        </strong>
+        <span class="text-[8px] font-mono text-zinc-500 uppercase tracking-wider">Modo Realtime</span>
+      </div>
+      <div id="master-logs-container" class="max-h-[140px] overflow-y-auto font-mono text-[10px] text-zinc-400 space-y-1.5 scrollbar-thin pr-1 select-text">
+        <!-- Logs will be appended here dynamically -->
+      </div>
+    </div>
+
     <!-- Finished Screen -->
     <div id="finished-panel" class="bg-emerald-950/20 border border-emerald-900/60 p-8 rounded-xl text-center hidden flex flex-col items-center gap-4 animate-fade-in my-auto">
       <div class="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center text-emerald-400 text-3xl font-black">
@@ -257,6 +271,29 @@
 
     // Global Tracker States
     let app, db, firestore;
+
+    // MASTER log helper
+    function masterLog(message, type = 'info') {
+      const logsContainer = document.getElementById("master-logs-container");
+      if (!logsContainer) {
+        console.log(`[MASTER LOG pending UI] ${message}`);
+        return;
+      }
+      const timeStr = new Date().toLocaleTimeString("pt-BR", { hour12: false });
+      const div = document.createElement("div");
+      
+      let colorClass = "text-zinc-400";
+      if (type === 'error') colorClass = "text-red-400 font-bold";
+      if (type === 'success') colorClass = "text-emerald-400 font-bold";
+      if (type === 'warn') colorClass = "text-amber-400";
+      if (type === 'sys') colorClass = "text-brand-yellow font-bold";
+      
+      div.className = `${colorClass} leading-tight text-[10px] border-l border-zinc-800 pl-1.5`;
+      div.innerText = `[${timeStr}] ${message}`;
+      logsContainer.appendChild(div);
+      logsContainer.scrollTop = logsContainer.scrollHeight;
+      console.log(`[MASTER LOG] ${message}`);
+    }
     let watchId = null;
     let isTracking = false;
     let wakeLock = null;
@@ -322,8 +359,20 @@
 
     // Initialize tracking logic on load
     async function init() {
+      // 1. Initial MASTER console logs
+      masterLog("SISTEMA MASTER TELEMETRIA INICIALIZADO.", "sys");
+      masterLog("Rastreando ID: " + cargoId, "info");
+      masterLog("Motorista: " + driverName, "info");
+
+      if (!window.isSecureContext) {
+        masterLog("⚠️ ALERTA DE SEGURANÇA: Página carregada em contexto inseguro (HTTP). O GPS do dispositivo pode ser desabilitado ou as permissões bloqueadas.", "error");
+      } else {
+        masterLog("Ambiente seguro HTTPS/Secure Context verificado. Permissões de localização operacionais.", "success");
+      }
+
       if (!cargoId) {
         showError("ID da Carga inválido ou ausente na URL. Solicite um novo link.");
+        masterLog("Erro: ID da carga ausente na URL.", "error");
         return;
       }
 
@@ -344,11 +393,11 @@
       const btnRetry = document.getElementById("btn-retry-gps");
       if (btnRetry) {
         btnRetry.onclick = () => {
-          console.log("Retry button clicked. Requesting new position prompt...");
+          masterLog("Tentando reiniciar requisição de coordenadas GPS...", "warn");
           document.getElementById("error-panel").classList.add("hidden");
           navigator.geolocation.getCurrentPosition(
             (pos) => {
-              console.log("Retry GPS acquisition succeeded.");
+              masterLog("Aquisição de coordenadas rápida via clique obteve sucesso!", "success");
               const guide = document.getElementById("permission-guide");
               if (guide) guide.classList.add("hidden");
               if (isTracking) {
@@ -358,7 +407,7 @@
               }
             },
             (err) => {
-              console.warn("Retry GPS acquisition failed:", err.message);
+              masterLog("Aquisição de coordenadas rápida via clique falhou: " + err.message, "error");
               handleGPSError(err);
             },
             {
@@ -371,12 +420,18 @@
       }
 
       try {
+        masterLog("Buscando configurações dinâmicas de Firebase no servidor...", "info");
         const firebaseConfig = await loadFirebaseConfig();
+        masterLog("Configuração de Firebase carregada. Projeto ID: " + firebaseConfig.projectId, "success");
+        masterLog("Realtime Database URL: " + firebaseConfig.databaseURL, "info");
+
         app = initializeApp(firebaseConfig);
         db = getDatabase(app);
+        masterLog("Conectando ao Realtime Database...", "info");
         
         const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
         firestore = getFirestore(app, dbId);
+        masterLog("Conectando ao Firestore (Database ID: " + dbId + ")...", "info");
 
         // Read historyEnabled configuration asynchronously (non-blocking)
         Promise.resolve().then(async () => {
@@ -387,9 +442,9 @@
             if (configSnap && configSnap.exists()) {
               historyEnabled = !!configSnap.val();
             }
-            console.log("Config: tracking historyEnabled =", historyEnabled);
+            masterLog("Configuração: histórico de trilha habilitado = " + historyEnabled, "success");
           } catch (confError) {
-            console.warn("Could not load config/tracking/historyEnabled dynamically, defaulting to false", confError);
+            masterLog("Falha ao ler 'config/tracking/historyEnabled' no RTDB (regras do banco bloqueadas?): " + confError.message, "warn");
           }
         });
 
@@ -407,7 +462,7 @@
               economy: 120000, // 2min
             };
             currentSendIntervalMs = intervals[mode] || 30000;
-            console.log("Config: tracking mode updated dynamically to:", mode, "interval:", currentSendIntervalMs);
+            masterLog("Modo de frequência do GPS atualizado via RTDB para: " + mode + " (" + (currentSendIntervalMs / 1000) + " segundos)", "success");
 
             // Update mode UI in driver dashboard
             const modeLabels = {
@@ -427,14 +482,14 @@
               warningEl.innerHTML = `<strong>Rastreamento Ativo (${activeLabel}):</strong> O GPS foi programado para economia inteligente de sua bateria. A sua rota está sendo gravada com segurança de forma contínua em segundo plano.`;
             }
           }, (err) => {
-            console.warn("Realtime DB mode listener blocked or failed:", err);
+            masterLog("Erro ao ouvir nó 'config/tracking/mode' (regras de leitura do banco bloqueadas?): " + err.message, "error");
           });
         } catch (modeError) {
-          console.warn("Could not load config/tracking/mode, defaulting to express", modeError);
+          masterLog("Falha ao iniciar listener 'config/tracking/mode': " + modeError.message, "warn");
         }
 
       } catch (error) {
-        console.error("Erro na inicialização de telemetria Firebase:", error);
+        masterLog("Falha crítica ao inicializar módulos Firebase: " + error.message, "error");
         // Do not block the driver from clicking "Iniciar Corrida" since tracking can fall back or retry
       }
     }
@@ -443,21 +498,23 @@
     function listenToStatusChanges() {
       if (!firestore) return;
       try {
+        masterLog("Iniciando monitoramento em tempo real do status da entrega no Firestore...", "info");
         const docRef = doc(firestore, "entregas", cargoId);
         onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
             const statusVal = data.status;
+            masterLog(`Status da entrega atualizado no Firestore: ${statusVal}`, "info");
             if (statusVal === 'entregue' || statusVal === 'delivered' || statusVal === 'finished') {
-              console.log("Status change detected in Firestore: ", statusVal, ". Stop tracking gracefully.");
+              masterLog(`Corrida encerrada remotamente pelo operador. Status: ${statusVal}. Desligando GPS...`, "sys");
               stopTrackingGracefully(statusVal);
             }
           }
         }, (err) => {
-          console.warn("Firestore status listener error:", err);
+          masterLog("Erro no monitor de status do Firestore: " + err.message, "error");
         });
       } catch (e) {
-        console.warn("Error setting up Firestore status listener:", e);
+        masterLog("Falha ao configurar monitor de status do Firestore: " + e.message, "error");
       }
     }
 
@@ -508,17 +565,24 @@
     // Primary Geolocation Trigger
     async function startTracking() {
       try {
+        masterLog("Iniciando rastreamento de viagem...", "sys");
         if (!navigator.geolocation) {
           showError("Seu dispositivo não possui GPS ou suporte a Geolocalização.");
+          masterLog("Erro: Dispositivo não suporta Geolocalização/GPS.", "error");
           return;
         }
 
         // Block beforeunload warning
         window.addEventListener("beforeunload", preventUnload);
 
-        // Request screen lock and background registers (run asynchronously so they don't block GPS initiation)
-        requestWakeLock().catch(err => console.warn("Wake lock request error:", err));
-        registerBackgroundServiceWorker().catch(err => console.warn("Service worker registration error:", err));
+        // Request screen lock and background registers
+        requestWakeLock()
+          .then(() => masterLog("Wake Lock (Tela Ativa) ativado com sucesso.", "success"))
+          .catch(err => masterLog("Wake Lock recusado pelo dispositivo: " + err.message, "warn"));
+          
+        registerBackgroundServiceWorker()
+          .then(() => masterLog("Background Service Worker registrado para manter GPS rodando.", "success"))
+          .catch(err => masterLog("Service Worker não suportado/recusado: " + err.message, "warn"));
 
         // UI changes
         const btnStart = document.getElementById("btn-start-tracking");
@@ -554,6 +618,7 @@
         // Write initial session meta values in database if ready
         const timestampIso = new Date().toISOString();
         if (db) {
+          masterLog("Gravando dados iniciais da viagem no Realtime Database...", "info");
           set(ref(db, `tracking/${cargoId}`), {
             status: "tracking",
             startedAt: timestampIso,
@@ -567,29 +632,42 @@
               timestamp: timestampIso,
               ts: Date.now()
             }
-          }).catch(dbErr => {
-            console.error("Erro ao gravar status inicial no banco:", dbErr);
+          })
+          .then(() => {
+            masterLog("Sessão gravada com sucesso no Realtime Database!", "success");
+          })
+          .catch(dbErr => {
+            masterLog("Erro ao gravar status inicial no Realtime Database: " + dbErr.message, "error");
           });
         } else {
-          console.warn("Banco de dados não conectado ainda. Iniciando em modo offline.");
+          masterLog("Aviso: Realtime Database não inicializado. Rodando em modo local/offline.", "warn");
         }
 
         if (firestore) {
+          masterLog("Sincronizando status de viagem 'em_transito' com Firestore...", "info");
           const docRef = doc(firestore, "entregas", cargoId);
           updateDoc(docRef, {
             status: "em_transito",
             ultimaAtualizacao: timestampIso
-          }).catch(fsErr => {
-            console.error("Erro ao gravar status inicial no Firestore:", fsErr);
+          })
+          .then(() => {
+            masterLog("Status sincronizado com sucesso no Firestore!", "success");
+          })
+          .catch(fsErr => {
+            masterLog("Erro ao gravar status inicial no Firestore: " + fsErr.message, "error");
           });
         } else {
-          console.warn("Firestore não conectado ainda.");
+          masterLog("Aviso: Firestore não conectado ainda.", "warn");
         }
 
         // Launch Geolocation high precision listener
+        masterLog("Iniciando watchPosition() de alta precisão...", "info");
         watchId = navigator.geolocation.watchPosition(
           (pos) => handleNewPosition(pos),
-          handleGPSError,
+          (err) => {
+            masterLog("Erro contínuo no watchPosition: " + err.message, "error");
+            handleGPSError(err);
+          },
           {
             enableHighAccuracy: true,
             timeout: 15000,
@@ -598,13 +676,14 @@
         );
 
         // Fetch current position immediately to bypass watchPosition delay
+        masterLog("Solicitando primeira coordenada imediata (getCurrentPosition)...", "info");
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            console.log("Initial position fetched successfully:", pos.coords.latitude, pos.coords.longitude);
+            masterLog("Coordenada inicial imediata capturada: " + pos.coords.latitude.toFixed(6) + ", " + pos.coords.longitude.toFixed(6), "success");
             handleNewPosition(pos, true);
           },
           (err) => {
-            console.warn("Initial position quick-fetch failed, waiting for watchPosition:", err.message);
+            masterLog("Busca imediata falhou (aguardando watchPosition): " + err.message, "warn");
           },
           {
             enableHighAccuracy: true,
@@ -613,7 +692,7 @@
           }
         );
       } catch (err) {
-        console.error("Erro geral no acionamento do rastreamento:", err);
+        masterLog("Erro geral no acionamento do rastreamento: " + err.message, "error");
         showError("Não foi possível iniciar o rastreamento: " + err.message);
       }
     }
@@ -637,6 +716,8 @@
       const accuracy = position.coords.accuracy;
       const timestamp = new Date().toISOString();
 
+      masterLog(`Nova coordenada GPS capturada: ${lat.toFixed(6)}, ${lng.toFixed(6)} (Precisão: ${accuracy.toFixed(1)}m)`, "info");
+
       // Update Local dashboard UI
       document.getElementById("tele-lat").innerText = lat.toFixed(6);
       document.getElementById("tele-lng").innerText = lng.toFixed(6);
@@ -644,6 +725,7 @@
 
       if (accuracy > 100) {
         document.getElementById("tele-acc").className = "text-xs font-mono font-bold mt-1 text-amber-500";
+        masterLog("Sinal de GPS fraco ou impreciso (>100m). Recomenda-se ficar ao ar livre.", "warn");
       } else {
         document.getElementById("tele-acc").className = "text-xs font-mono font-bold mt-1 text-zinc-400";
       }
@@ -659,8 +741,12 @@
 
       // Sempre atualiza a posição atual no Realtime Database (barato: 1 write, sempre sobrescreve o nó current)
       if (db) {
-        set(ref(db, `tracking/${cargoId}/current`), payload).catch(dbErr => {
-          console.error("Erro ao gravar current no Realtime DB:", dbErr);
+        set(ref(db, `tracking/${cargoId}/current`), payload)
+        .then(() => {
+          masterLog("✔ Posição atualizada com sucesso no Realtime Database.", "success");
+        })
+        .catch(dbErr => {
+          masterLog("❌ Erro ao atualizar posição no Realtime DB (Verifique as Rules!): " + dbErr.message, "error");
         });
       }
 
@@ -669,10 +755,13 @@
         lastHistoryTs = now;
         const historyRef = ref(db, `tracking/${cargoId}/history`);
         const newHistoryPacketRef = push(historyRef);
-        set(newHistoryPacketRef, payload).catch(dbErr => {
-          console.error("Erro ao gravar histórico no Realtime DB:", dbErr);
+        set(newHistoryPacketRef, payload)
+        .then(() => {
+          masterLog("✔ Histórico de rota gravado com sucesso no Realtime DB.", "success");
+        })
+        .catch(dbErr => {
+          masterLog("❌ Erro ao gravar histórico no Realtime DB: " + dbErr.message, "error");
         });
-        console.log("Histórico gravado com sucesso.");
       }
 
       // Sincroniza em tempo real com o Firestore para robustez e compatibilidade absoluta com o mapa
@@ -681,8 +770,12 @@
         updateDoc(docRef, {
           localizacaoAtual: { lat, lng },
           ultimaAtualizacao: timestamp
-        }).catch(fsErr => {
-          console.error("Erro ao sincronizar localização com o Firestore:", fsErr);
+        })
+        .then(() => {
+          masterLog("✔ Localização sincronizada com sucesso no Firestore.", "success");
+        })
+        .catch(fsErr => {
+          masterLog("❌ Erro ao sincronizar localização com o Firestore: " + fsErr.message, "error");
         });
       }
 
