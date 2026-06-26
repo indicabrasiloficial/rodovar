@@ -796,8 +796,8 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   } catch {}
   window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'UPSERT', payload } }));
 
-  // [RODOVAR FIX v3] CORREÇÃO 3 — Operador muda status para Parado ou Entregue
-  if (entrega.status && (entrega.status === 'parado' || entrega.status === 'entregue')) {
+  // [RODOVAR FIX v3] CORREÇÃO 3 — Sincronizar todos os status do operador com RTDB
+  if (entrega.status) {
     try {
       set(ref(database, `tracking/${cleanId}/operatorStatus`), entrega.status);
       set(ref(database, `tracking/${cleanId}/operatorStatusAt`), Date.now());
@@ -1446,8 +1446,8 @@ export async function updateEntregaField(id: string, updates: Record<string, any
     window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'UPDATE', payload: freshObject } }));
   }
 
-  // [RODOVAR FIX v3] CORREÇÃO 3 — Operador muda status para Parado ou Entregue
-  if (updates.status && (updates.status === 'parado' || updates.status === 'entregue')) {
+  // [RODOVAR FIX v3] CORREÇÃO 3 — Sincronizar todos os status do operador com RTDB
+  if (updates.status) {
     try {
       set(ref(database, `tracking/${id}/operatorStatus`), updates.status);
       set(ref(database, `tracking/${id}/operatorStatusAt`), Date.now());
