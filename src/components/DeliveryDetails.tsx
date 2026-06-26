@@ -1345,7 +1345,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                 } else if (source === 'whatsapp') {
                   return (
                     <span className="px-2.5 py-0.5 rounded text-[9px] font-mono font-black border bg-amber-950/40 text-amber-400 border-amber-800/60 self-start sm:self-auto">
-                      📍 LOCALIZAÇÃO MANUAL (WHATSAPP)
+                      📍 LOCALIZAÇÃO LOCAL (WHATSAPP)
                     </span>
                   );
                 } else {

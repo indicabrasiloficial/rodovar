@@ -71,7 +71,7 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
 
     if (source === 'whatsapp') {
       return {
-        text: '📍 Localização Manual',
+        text: '📍 Localização Local (WhatsApp)',
         color: 'bg-amber-500/10 border-amber-500/20 text-amber-500',
         dotClass: 'bg-amber-500'
       };

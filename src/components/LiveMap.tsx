@@ -9,9 +9,21 @@ interface LiveMapProps {
 }
 
 // Custom live pulse icon creator
-function createLiveIcon(status: 'live' | 'weak' | 'offline' | 'idle') {
-  const color = status === 'live' ? '#22c55e' : status === 'weak' ? '#fbbf24' : status === 'offline' ? '#ef4444' : '#a1a1aa';
-  const label = status === 'live' ? 'AO VIVO' : status === 'weak' ? 'SINAL FRACO' : status === 'offline' ? 'DESCONECTADO' : 'AGUARD.';
+function createLiveIcon(status: 'live' | 'weak' | 'offline' | 'local' | 'idle') {
+  const color = 
+    status === 'live' ? '#22c55e' : 
+    status === 'weak' ? '#fbbf24' : 
+    status === 'local' ? '#3b82f6' : 
+    status === 'offline' ? '#ef4444' : 
+    '#a1a1aa';
+
+  const label = 
+    status === 'live' ? 'AO VIVO' : 
+    status === 'weak' ? 'SINAL FRACO' : 
+    status === 'local' ? 'LOCAL' : 
+    status === 'offline' ? 'DESCONECTADO' : 
+    'AGUARD.';
+
   const pulse = status === 'live' ? `
     <style>
       @keyframes rip { 0%{transform:scale(1);opacity:.8} 100%{transform:scale(2.2);opacity:0} }
@@ -76,7 +88,8 @@ export default function LiveMap({ entrega }: LiveMapProps) {
       maxZoom: 18,
     }).addTo(map);
 
-    const icon = createLiveIcon(isLive ? 'live' : 'offline');
+    const initialStatus = source === 'whatsapp' ? 'local' : (connectionStatus === 'live' ? 'live' : connectionStatus === 'weak' ? 'weak' : 'offline');
+    const icon = createLiveIcon(initialStatus);
     const marker = L.marker([initialLat, initialLng], { icon }).addTo(map);
 
     mapRef.current = map;
@@ -108,13 +121,15 @@ export default function LiveMap({ entrega }: LiveMapProps) {
     markerRef.current.setLatLng([lat, lng]);
 
     // Update icon status
-    markerRef.current.setIcon(createLiveIcon(connectionStatus));
+    const iconStatus = source === 'whatsapp' ? 'local' : connectionStatus;
+    markerRef.current.setIcon(createLiveIcon(iconStatus));
 
-    // Pan to position if liveMode is active and status is not offline
-    if (liveMode && connectionStatus !== 'offline') {
+    // Pan to position if liveMode is active and status is local or not offline
+    const shouldPan = liveMode && (source === 'whatsapp' || connectionStatus !== 'offline');
+    if (shouldPan) {
       mapRef.current.panTo([lat, lng], { animate: true, duration: 0.8 });
     }
-  }, [position, connectionStatus, liveMode, isMapReady]);
+  }, [position, connectionStatus, source, liveMode, isMapReady]);
 
   // Handle map resizing if toggle shifts
   useEffect(() => {
@@ -127,16 +142,17 @@ export default function LiveMap({ entrega }: LiveMapProps) {
   const getBadgeConfig = () => {
     if (source === 'gps') {
       if (connectionStatus === 'live') {
-        return { label: '🟢 GPS AO VIVO', color: 'bg-emerald-950/80 text-emerald-400 border-emerald-500/30' };
+        return { label: '🟢 LOCALIZAÇÃO AO VIVO (GPS CONECTADO)', color: 'bg-emerald-950/90 text-emerald-400 border-emerald-500/40' };
       } else if (connectionStatus === 'weak') {
-        return { label: '🟡 SINAL FRACO', color: 'bg-yellow-950/80 text-amber-400 border-yellow-500/30' };
+        return { label: '🟡 SINAL FRACO (GPS)', color: 'bg-yellow-950/90 text-amber-400 border-yellow-500/40' };
       } else {
-        return { label: '🔴 DESCONECTADO', color: 'bg-red-950/80 text-red-400 border-red-500/30' };
+        const timeText = lastSeenSeconds !== null ? ` (HÁ ${lastSeenSeconds}s)` : ' (SEM SINAL)';
+        return { label: `🔴 GPS DESCONECTADO${timeText}`, color: 'bg-red-950/90 text-red-400 border-red-500/40' };
       }
     } else if (source === 'whatsapp') {
-      return { label: '📍 Pin WhatsApp', color: 'bg-amber-950/80 text-amber-400 border-amber-500/30' };
+      return { label: '📍 LOCALIZAÇÃO LOCAL (WHATSAPP)', color: 'bg-blue-950/95 text-blue-400 border-blue-500/30' };
     }
-    return { label: '⚫ Sem localização', color: 'bg-zinc-900/80 text-zinc-400 border-zinc-800' };
+    return { label: '⚫ SEM LOCALIZAÇÃO ATIVA', color: 'bg-zinc-900/90 text-zinc-400 border-zinc-800' };
   };
 
   const badge = getBadgeConfig();
@@ -153,11 +169,6 @@ export default function LiveMap({ entrega }: LiveMapProps) {
         <span className={`px-2.5 py-1 rounded-lg text-[9px] font-mono font-bold tracking-wider border backdrop-blur-md shadow-lg ${badge.color}`}>
           {badge.label}
         </span>
-        {source === 'gps' && (
-          <span className="px-2.5 py-0.5 rounded-lg text-[8px] font-mono text-zinc-400 bg-black/80 border border-zinc-800 backdrop-blur-sm self-start">
-            {connectionStatus === 'live' ? '🟢 CONECTADO' : connectionStatus === 'weak' ? '🟡 SINAL FRACO' : `🔴 DESCONECTADO: ${lastSeenSeconds !== null ? `${lastSeenSeconds}s` : 'sem sinal'}`}
-          </span>
-        )}
       </div>
 
       {/* Floating Interactive Live Action Controller */}

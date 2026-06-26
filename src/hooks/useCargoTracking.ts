@@ -9,7 +9,7 @@ export interface CargoTrackingResult {
   source: 'gps' | 'whatsapp' | 'none';
   isLive: boolean;
   lastSeenSeconds: number | null;
-  connectionStatus: 'live' | 'weak' | 'offline';
+  connectionStatus: 'live' | 'weak' | 'offline' | 'local';
 }
 
 export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
@@ -17,7 +17,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
   const [source, setSource] = useState<'gps' | 'whatsapp' | 'none'>('none');
   const [isLive, setIsLive] = useState<boolean>(false);
   const [lastSeenSeconds, setLastSeenSeconds] = useState<number | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<'live' | 'weak' | 'offline'>('offline');
+  const [connectionStatus, setConnectionStatus] = useState<'live' | 'weak' | 'offline' | 'local'>('offline');
   const lastTsRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -131,7 +131,6 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     };
 
     const applyFallbacks = () => {
-      setConnectionStatus('offline');
       setIsLive(false);
       setLastSeenSeconds(null);
       lastTsRef.current = null;
@@ -140,16 +139,20 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
         if (waCoords) {
           setPosition(waCoords);
           setSource('whatsapp');
+          setConnectionStatus('local');
           return;
         }
       }
 
       if (entrega.lat && entrega.lng) {
         setPosition({ lat: Number(entrega.lat), lng: Number(entrega.lng) });
-        setSource(entrega.link_localizacao ? 'whatsapp' : 'none');
+        const hasWaLink = !!entrega.link_localizacao;
+        setSource(hasWaLink ? 'whatsapp' : 'none');
+        setConnectionStatus(hasWaLink ? 'local' : 'offline');
       } else {
         setPosition(null);
         setSource('none');
+        setConnectionStatus('offline');
       }
     };
 
