@@ -37,22 +37,43 @@ export function useDriverTracker(cargoId: string | undefined) {
       return;
     }
 
-    const trackerRef = ref(database, `localizacoes/${cargoId}`);
+    const trackerRef = ref(database, `tracking/${cargoId}`);
     
     const unsubscribe = onValue(trackerRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        setTrackerState({
-          position: data.current || (data.lat !== undefined ? {
+        let position = null;
+        if (data.location) {
+          position = {
+            lat: Number(data.location.lat),
+            lng: Number(data.location.lng),
+            accuracy: Number(data.location.accuracy || 0),
+            timestamp: data.location.timestamp || '',
+            ts: Number(data.updatedAt || 0)
+          };
+        } else if (data.lat !== undefined) {
+          position = {
             lat: Number(data.lat),
             lng: Number(data.lng),
             accuracy: Number(data.accuracy || 0),
             timestamp: data.timestamp || '',
             ts: Number(data.ts || 0)
-          } : null),
+          };
+        } else if (data.current) {
+          position = {
+            lat: Number(data.current.lat),
+            lng: Number(data.current.lng),
+            accuracy: Number(data.current.accuracy || 0),
+            timestamp: data.current.timestamp || '',
+            ts: Number(data.current.ts || 0)
+          };
+        }
+
+        setTrackerState({
+          position,
           status: data.status || 'tracking',
-          startedAt: data.startedAt || null,
-          driver: data.driver || null,
+          startedAt: data.startedAt || (data.updatedAt ? new Date(data.updatedAt).toISOString() : null),
+          driver: data.driverName || data.driver || null,
           route: data.route || null,
           client: data.client || null,
           error: null,
@@ -80,7 +101,7 @@ export function useDriverTracker(cargoId: string | undefined) {
   const markAsDelivered = async () => {
     if (!cargoId) return;
     try {
-      const trackerRef = ref(database, `localizacoes/${cargoId}`);
+      const trackerRef = ref(database, `tracking/${cargoId}`);
       await update(trackerRef, {
         status: 'delivered',
         finishedAt: new Date().toISOString()
@@ -95,7 +116,7 @@ export function useDriverTracker(cargoId: string | undefined) {
   const stopTracking = async () => {
     if (!cargoId) return;
     try {
-      const trackerRef = ref(database, `localizacoes/${cargoId}`);
+      const trackerRef = ref(database, `tracking/${cargoId}`);
       await update(trackerRef, {
         status: 'finished',
         finishedAt: new Date().toISOString()

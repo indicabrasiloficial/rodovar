@@ -20,7 +20,7 @@ export function useAllDriversTracking() {
   const [trackingData, setTrackingData] = useState<DriverTrackingData[]>([]);
 
   useEffect(() => {
-    const trackingRef = ref(database, 'localizacoes');
+    const trackingRef = ref(database, 'tracking');
 
     const unsubscribe = onValue(trackingRef, (snapshot) => {
       const data = snapshot.val();
@@ -35,19 +35,32 @@ export function useAllDriversTracking() {
       Object.entries(data).forEach(([cargoId, val]: [string, any]) => {
         if (!val) return;
 
-        // Support flat coordinates or nested current
-        const current = val.current || val;
-        
-        const lat = Number(current.lat ?? 0);
-        const lng = Number(current.lng ?? 0);
+        let lat = 0;
+        let lng = 0;
+        let ts = 0;
+        let accuracy = 0;
+        let timestamp = '';
+        const trackingStatus = val.status || 'tracking';
+        const driverNameStr = val.driverName || val.driver || 'Motorista';
+
+        if (val.location) {
+          lat = Number(val.location.lat ?? 0);
+          lng = Number(val.location.lng ?? 0);
+          accuracy = Number(val.location.accuracy ?? 0);
+          timestamp = val.location.timestamp ?? '';
+          ts = Number(val.updatedAt ?? 0);
+        } else {
+          // Fallback parsing
+          const current = val.current || val;
+          lat = Number(current.lat ?? 0);
+          lng = Number(current.lng ?? 0);
+          accuracy = Number(current.accuracy ?? 0);
+          timestamp = current.timestamp ?? val.timestamp ?? '';
+          ts = Number(current.ts ?? val.ts ?? 0);
+        }
         
         // Skip invalid zero-coordinates if not started yet
         if (!lat && !lng) return;
-
-        const accuracy = Number(current.accuracy ?? 0);
-        const ts = Number(current.ts ?? val.ts ?? 0);
-        const timestamp = current.timestamp ?? val.timestamp ?? '';
-        const trackingStatus = val.status || 'tracking';
 
         // Filters out delivered/finished drivers if last update is more than 5 minutes ago (300,000ms)
         const isDelivered = trackingStatus === 'delivered' || trackingStatus === 'finished';
@@ -65,7 +78,7 @@ export function useAllDriversTracking() {
 
         activeDrivers.push({
           cargoId,
-          driver: val.driver || 'Motorista',
+          driver: driverNameStr,
           route: val.route || '',
           client: val.client || '',
           lat,

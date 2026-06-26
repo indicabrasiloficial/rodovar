@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FFD700">
   <title>RODOVAR MONITORA - Rastreamento de Viagem</title>
   <!-- Tailwind CSS Play CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -313,15 +314,42 @@
 
     const HISTORY_INTERVAL_MS = 300000; // History: 5 minutes
 
-    // [RODOVAR FIX] CORREÇÃO 6 — PWA (ícone na tela inicial) e Manifest dinâmico
-    const svgString = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-      <rect width="512" height="512" fill="#0a0a0a"/>
-      <circle cx="256" cy="256" r="200" fill="#FFD600"/>
-      <text x="256" y="320" font-family="system-ui, sans-serif" font-size="200" font-weight="900" fill="#000000" text-anchor="middle">R</text>
-    </svg>
-    `;
-    const svgBase64 = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgString)));
+    // [RODOVAR FIX] CORREÇÃO 6 — PWA (ícone na tela inicial) e Manifest dinâmico com PNGs válidos gerados via Canvas
+    function generatePngIconBase64(size) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return '';
+        
+        // Background - Dark Charcoal
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, size, size);
+        
+        // Yellow circle
+        ctx.beginPath();
+        ctx.arc(size/2, size/2, size * 0.42, 0, 2 * Math.PI);
+        ctx.fillStyle = '#FFD600';
+        ctx.fill();
+        
+        // Bold italic text 'R' inside the circle
+        ctx.fillStyle = '#000000';
+        const fontWeight = '900';
+        ctx.font = `${fontWeight} italic ${size * 0.52}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('R', size/2, size/2 + size * 0.02);
+        
+        return canvas.toDataURL('image/png');
+      } catch (e) {
+        console.error("Erro ao gerar ícone PNG:", e);
+        return '';
+      }
+    }
+
+    const png192 = generatePngIconBase64(192);
+    const png512 = generatePngIconBase64(512);
 
     const manifestObj = {
       name: "RODOVAR Tracker",
@@ -332,14 +360,14 @@
       start_url: window.location.href,
       icons: [
         {
-          src: svgBase64,
+          src: png192,
           sizes: "192x192",
-          type: "image/svg+xml"
+          type: "image/png"
         },
         {
-          src: svgBase64,
+          src: png512,
           sizes: "512x512",
-          type: "image/svg+xml"
+          type: "image/png"
         }
       ]
     };
@@ -671,21 +699,72 @@
       if ('serviceWorker' in navigator) {
         try {
           const swCode = `
+            const CACHE_NAME = 'rodovar-tracker-v3';
+            const ASSETS = [
+              '${window.location.pathname}',
+              'https://cdn.tailwindcss.com',
+              'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap'
+            ];
+
             self.addEventListener('install', (e) => {
+              e.waitUntil(
+                caches.open(CACHE_NAME).then((cache) => {
+                  return cache.addAll(ASSETS).catch(err => {
+                    console.warn('Erro ao pré-salvar recursos no cache:', err);
+                  });
+                })
+              );
               self.skipWaiting();
             });
+
             self.addEventListener('activate', (e) => {
-              e.waitUntil(self.clients.claim());
+              e.waitUntil(
+                caches.keys().then((keys) => {
+                  return Promise.all(
+                    keys.map((key) => {
+                      if (key !== CACHE_NAME) {
+                        return caches.delete(key);
+                      }
+                    })
+                  );
+                }).then(() => self.clients.claim())
+              );
             });
+
+            self.addEventListener('fetch', (e) => {
+              // Interceptar chamadas fetch para permitir o funcionamento offline completo
+              e.respondWith(
+                caches.match(e.request).then((cachedResponse) => {
+                  if (cachedResponse) {
+                    // Atualiza o cache em segundo plano (stale-while-revalidate)
+                    fetch(e.request).then((networkResponse) => {
+                      if (networkResponse && networkResponse.status === 200) {
+                        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, networkResponse));
+                      }
+                    }).catch(() => {});
+                    return cachedResponse;
+                  }
+                  return fetch(e.request).catch(() => {
+                    // Fallback offline se for navegação
+                    if (e.request.mode === 'navigate') {
+                      return caches.match('${window.location.pathname}');
+                    }
+                  });
+                })
+              );
+            });
+
             self.addEventListener('message', (e) => {
-              e.source.postMessage({ type: 'KEEPALIVE_ACK' });
+              if (e.data && e.data.type === 'KEEPALIVE') {
+                e.source.postMessage({ type: 'KEEPALIVE_ACK' });
+              }
             });
           `;
           const blob = new Blob([swCode], { type: 'application/javascript' });
           const swUrl = URL.createObjectURL(blob);
           const reg = await navigator.serviceWorker.register(swUrl);
           serviceWorkerReg = reg;
-          console.log("Service Worker Background registrado.");
+          console.log("Service Worker Background e Offline registrado.");
           
           setInterval(() => {
             if (reg.active) {
@@ -769,34 +848,6 @@
         // Write initial session meta values in database if ready
         const timestampIso = new Date().toISOString();
         if (db) {
-          masterLog("Gravando dados iniciais da viagem no Realtime Database...", "info");
-          set(ref(db, `localizacoes/${cargoId}`), {
-            status: "tracking",
-            startedAt: timestampIso,
-            driver: driverName,
-            route: routeName,
-            client: clientName,
-            lat: 0,
-            lng: 0,
-            accuracy: 0,
-            timestamp: timestampIso,
-            ts: Date.now(),
-            current: {
-              lat: 0,
-              lng: 0,
-              accuracy: 0,
-              timestamp: timestampIso,
-              ts: Date.now()
-            }
-          })
-          .then(() => {
-            masterLog("Sessão gravada com sucesso no Realtime Database!", "success");
-          })
-          .catch(dbErr => {
-            masterLog("Erro ao gravar status inicial no Realtime Database: " + dbErr.message, "error");
-            console.error("Erro ao gravar GPS:", dbErr);
-          });
-
           // [RODOVAR FIX] CORREÇÃO 3 — Inicializar localidade inicial em tracking/ no RTDB correto
           set(ref(db, `tracking/${cargoId}`), {
             location: {
@@ -948,18 +999,8 @@
         }
       };
 
-      // Sempre atualiza a posição atual no Realtime Database (barato: 1 write, sempre sobrescreve o nó)
+      // [RODOVAR FIX] CORREÇÃO 1 — Gravar localização a cada atualização unificada no caminho de tracking
       if (db) {
-        set(ref(db, `localizacoes/${cargoId}`), payload)
-        .then(() => {
-          masterLog("✔ Posição atualizada com sucesso no Realtime Database.", "success");
-        })
-        .catch(dbErr => {
-          masterLog("❌ Erro ao atualizar posição no Realtime DB (Verifique as Rules!): " + dbErr.message, "error");
-          console.error("Erro ao gravar GPS:", dbErr);
-        });
-
-        // [RODOVAR FIX] CORREÇÃO 3 — Gravar localização a cada atualização no caminho de tracking
         const trackingPayload = {
           location: {
             lat: lat,
@@ -981,24 +1022,20 @@
         });
       }
 
-      // Gravação condicional do Histórico para economizar dados no Realtime Database (se ativo + intervalo de 5 minutos)
+      // [RODOVAR FIX] CORREÇÃO 2 — Gravação condicional do Histórico de rota unificado sob tracking/{cargoId}/history/{timestamp}
       if (db && historyEnabled && (now - lastHistoryTs >= HISTORY_INTERVAL_MS)) {
         lastHistoryTs = now;
-        const historyRef = ref(db, `localizacoes/${cargoId}/history`);
-        const newHistoryPacketRef = push(historyRef);
-        set(newHistoryPacketRef, {
+        const cleanTimestamp = timestamp.replace(/[.#$\[\]\/]/g, '_');
+        set(ref(db, `tracking/${cargoId}/history/${cleanTimestamp}`), {
           lat,
-          lng,
-          accuracy,
-          timestamp,
-          ts: now
+          lng
         })
         .then(() => {
-          masterLog("✔ Histórico de rota gravado com sucesso no Realtime DB.", "success");
+          masterLog("✔ [RODOVAR FIX] Histórico de rota gravado com sucesso em tracking/.", "success");
         })
         .catch(dbErr => {
-          masterLog("❌ Erro ao gravar histórico no Realtime DB: " + dbErr.message, "error");
-          console.error("Erro ao gravar GPS:", dbErr);
+          masterLog("❌ [RODOVAR FIX] Erro ao gravar histórico no Realtime DB: " + dbErr.message, "error");
+          console.error("Erro ao gravar histórico GPS:", dbErr);
         });
       }
 

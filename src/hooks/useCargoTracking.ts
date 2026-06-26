@@ -29,7 +29,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     }
 
     const cargoId = entrega.id; // Mantém o case original para compatibilidade absoluta com os IDs do Firestore que são case-sensitive
-    const trackingRef = ref(database, `localizacoes/${cargoId}`);
+    const trackingRef = ref(database, `tracking/${cargoId}`);
 
     const handleSync = (rtdbSnap: any) => {
       const now = Date.now();
@@ -40,11 +40,17 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
 
       if (rtdbSnap && rtdbSnap.exists()) {
         const val = rtdbSnap.val();
-        // Support both direct flat fields and nested current object
-        const current = val.current || val;
-        rtdbLat = Number(current.lat ?? 0);
-        rtdbLng = Number(current.lng ?? 0);
-        rtdbTs = Number(current.ts ?? val.ts ?? 0);
+        if (val && val.location) {
+          rtdbLat = Number(val.location.lat ?? 0);
+          rtdbLng = Number(val.location.lng ?? 0);
+          rtdbTs = Number(val.updatedAt ?? 0);
+        } else if (val) {
+          // Fallback support for legacy flat fields
+          const current = val.current || val;
+          rtdbLat = Number(current.lat ?? 0);
+          rtdbLng = Number(current.lng ?? 0);
+          rtdbTs = Number(current.ts ?? val.ts ?? 0);
+        }
       }
 
       let fsLat = 0;
