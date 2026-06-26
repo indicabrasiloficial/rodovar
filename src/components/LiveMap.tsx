@@ -32,6 +32,8 @@ function createLiveIcon(status: 'live' | 'weak' | 'offline' | 'local' | 'idle') 
     <div class="rip" style="position:absolute;top:4px;left:4px;width:40px;height:40px;
       border-radius:50%;border:3px solid #22c55e;"></div>` : '';
 
+  const textColor = (status === 'live' || status === 'weak') ? '#000000' : '#ffffff';
+
   return L.divIcon({
     className: 'custom-live-marker',
     iconSize: [48, 60],
@@ -49,7 +51,7 @@ function createLiveIcon(status: 'live' | 'weak' | 'offline' | 'local' | 'idle') 
         <div style="
           position:absolute;bottom:-4px;left:50%;
           transform:translateX(-50%);
-          background:${color};color:#000;
+          background:${color};color:${textColor};
           font-size:8px;font-weight:900;
           padding:2px 6px;border-radius:100px;
           white-space:nowrap;font-family:monospace;box-shadow: 0 2px 4px rgba(0,0,0,0.5);">
@@ -142,17 +144,37 @@ export default function LiveMap({ entrega }: LiveMapProps) {
   const getBadgeConfig = () => {
     if (source === 'gps') {
       if (connectionStatus === 'live') {
-        return { label: '🟢 LOCALIZAÇÃO AO VIVO (GPS CONECTADO)', color: 'bg-emerald-950/90 text-emerald-400 border-emerald-500/40' };
+        return { 
+          label: 'LOCALIZAÇÃO AO VIVO', 
+          color: 'bg-emerald-950/90 text-emerald-400 border-emerald-500/50',
+          dotClass: 'bg-emerald-400 animate-pulse'
+        };
       } else if (connectionStatus === 'weak') {
-        return { label: '🟡 SINAL FRACO (GPS)', color: 'bg-yellow-950/90 text-amber-400 border-yellow-500/40' };
+        return { 
+          label: 'SINAL FRACO (GPS)', 
+          color: 'bg-yellow-950/90 text-amber-400 border-yellow-500/50',
+          dotClass: 'bg-amber-400'
+        };
       } else {
-        const timeText = lastSeenSeconds !== null ? ` (HÁ ${lastSeenSeconds}s)` : ' (SEM SINAL)';
-        return { label: `🔴 GPS DESCONECTADO${timeText}`, color: 'bg-red-950/90 text-red-400 border-red-500/40' };
+        const timeText = lastSeenSeconds !== null ? ` (${lastSeenSeconds}s)` : '';
+        return { 
+          label: `GPS DESCONECTADO${timeText}`, 
+          color: 'bg-red-950/90 text-red-400 border-red-500/60 animate-pulse',
+          dotClass: 'bg-red-500 animate-ping'
+        };
       }
     } else if (source === 'whatsapp') {
-      return { label: '📍 LOCALIZAÇÃO LOCAL (WHATSAPP)', color: 'bg-blue-950/95 text-blue-400 border-blue-500/30' };
+      return { 
+        label: 'LOCALIZAÇÃO LOCAL', 
+        color: 'bg-blue-950/90 text-blue-400 border-blue-500/50',
+        dotClass: 'bg-blue-400'
+      };
     }
-    return { label: '⚫ SEM LOCALIZAÇÃO ATIVA', color: 'bg-zinc-900/90 text-zinc-400 border-zinc-800' };
+    return { 
+      label: 'SEM LOCALIZAÇÃO ATIVA', 
+      color: 'bg-zinc-950/90 text-zinc-400 border-zinc-800',
+      dotClass: 'bg-zinc-500'
+    };
   };
 
   const badge = getBadgeConfig();
@@ -164,10 +186,11 @@ export default function LiveMap({ entrega }: LiveMapProps) {
       {/* Map Container */}
       <div ref={divRef} className="w-full h-full" style={{ minHeight: '300px' }} />
 
-      {/* Floating Status & Source Badge */}
+      {/* Floating Status & Source Badge (Same size, design, and style as the top-right action button) */}
       <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-1.5 pointer-events-none">
-        <span className={`px-2.5 py-1 rounded-lg text-[9px] font-mono font-bold tracking-wider border backdrop-blur-md shadow-lg ${badge.color}`}>
-          {badge.label}
+        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-mono font-black tracking-wider border backdrop-blur-md shadow-lg flex items-center gap-1.5 ${badge.color}`}>
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${badge.dotClass}`}></span>
+          <span>{badge.label}</span>
         </span>
       </div>
 
