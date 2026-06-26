@@ -266,8 +266,11 @@
   <!-- Firebase CDN imports -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, off, get, child } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, set, push, onValue, off, get, child, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
     import { getFirestore, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    // [RODOVAR FIX] CORREÇÃO 1 — URL do Realtime Database Correto
+    const RTDB_URL = "https://gen-lang-client-0851305506-default-rtdb.firebaseio.com";
 
     // Global Tracker States
     let app, db, firestore;
@@ -310,6 +313,132 @@
 
     const HISTORY_INTERVAL_MS = 300000; // History: 5 minutes
 
+    // [RODOVAR FIX] CORREÇÃO 6 — PWA (ícone na tela inicial) e Manifest dinâmico
+    const svgString = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#0a0a0a"/>
+      <circle cx="256" cy="256" r="200" fill="#FFD600"/>
+      <text x="256" y="320" font-family="system-ui, sans-serif" font-size="200" font-weight="900" fill="#000000" text-anchor="middle">R</text>
+    </svg>
+    `;
+    const svgBase64 = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgString)));
+
+    const manifestObj = {
+      name: "RODOVAR Tracker",
+      short_name: "RODOVAR GPS",
+      display: "standalone",
+      background_color: "#0a0a0a",
+      theme_color: "#FFD700",
+      start_url: window.location.href,
+      icons: [
+        {
+          src: svgBase64,
+          sizes: "192x192",
+          type: "image/svg+xml"
+        },
+        {
+          src: svgBase64,
+          sizes: "512x512",
+          type: "image/svg+xml"
+        }
+      ]
+    };
+    const manifestStr = JSON.stringify(manifestObj);
+    const manifestBlob = new Blob([manifestStr], { type: 'application/json' });
+    const manifestUrl = URL.createObjectURL(manifestBlob);
+
+    // Inserir tag manifest no head
+    const linkManifest = document.createElement('link');
+    linkManifest.rel = 'manifest';
+    linkManifest.href = manifestUrl;
+    document.head.appendChild(linkManifest);
+
+    // Meta tags adicionais para compatibilidade PWA Mobile
+    const metaApple = document.createElement('meta');
+    metaApple.name = 'apple-mobile-web-app-capable';
+    metaApple.content = 'yes';
+    document.head.appendChild(metaApple);
+
+    const metaMobile = document.createElement('meta');
+    metaMobile.name = 'mobile-web-app-capable';
+    metaMobile.content = 'yes';
+    document.head.appendChild(metaMobile);
+
+    const metaAppleTitle = document.createElement('meta');
+    metaAppleTitle.name = 'apple-mobile-web-app-title';
+    metaAppleTitle.content = 'RODOVAR GPS';
+    document.head.appendChild(metaAppleTitle);
+
+    // Banner automático orientando motorista a instalar na tela inicial
+    function setupPWABanner() {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      if (isStandalone) {
+        masterLog("[RODOVAR PWA] Executando em modo Standalone (PWA instalado).", "success");
+        return;
+      }
+
+      const banner = document.createElement('div');
+      banner.id = 'pwa-install-banner';
+      banner.className = 'bg-brand-card border border-brand-yellow/30 rounded-xl p-4 shadow-2xl flex flex-col gap-2.5 mb-4 relative overflow-hidden';
+      banner.innerHTML = `
+        <div class="absolute top-0 left-0 bottom-0 w-1.5 bg-brand-yellow"></div>
+        <div class="flex justify-between items-start pl-2">
+          <div class="flex gap-2.5 items-start">
+            <div class="w-10 h-10 rounded-lg bg-brand-yellow/15 border border-brand-yellow/30 flex items-center justify-center text-brand-yellow text-lg font-black shrink-0">
+              🛰️
+            </div>
+            <div>
+              <h4 class="text-xs font-black text-white uppercase tracking-wider">Instalar RODOVAR GPS</h4>
+              <p class="text-[11px] text-zinc-400 mt-0.5 leading-tight">Adicione à tela inicial para garantir o GPS ativo sem interrupções de tela.</p>
+            </div>
+          </div>
+          <button id="pwa-close-btn" class="text-zinc-500 hover:text-white text-sm p-1 transition-colors cursor-pointer">&times;</button>
+        </div>
+        <div class="flex gap-2 pl-2">
+          <button id="pwa-install-btn" class="flex-1 bg-brand-yellow hover:bg-yellow-400 text-black font-black uppercase tracking-wider py-2 rounded-lg text-[10px] transition-all cursor-pointer">
+            ✨ Adicionar à Tela Inicial
+          </button>
+          <div class="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg py-2 px-2.5 text-[9px] leading-tight flex flex-col justify-center">
+            <span class="font-bold text-brand-yellow uppercase block mb-0.5">Dica de Ouro:</span>
+            No iPhone, toque em <strong class="text-white">Compartilhar</strong> e depois em <strong class="text-white">Adicionar à Tela de Início</strong>.
+          </div>
+        </div>
+      `;
+
+      const mainEl = document.querySelector('main');
+      if (mainEl) {
+        mainEl.insertBefore(banner, mainEl.firstChild);
+      }
+
+      const closeBtn = document.getElementById('pwa-close-btn');
+      if (closeBtn) {
+        closeBtn.onclick = () => {
+          banner.remove();
+          masterLog("[RODOVAR PWA] Banner de instalação fechado pelo motorista.", "info");
+        };
+      }
+
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        masterLog("[RODOVAR PWA] Evento beforeinstallprompt capturado. Pronto para instalação.", "success");
+        
+        const installBtn = document.getElementById('pwa-install-btn');
+        if (installBtn) {
+          installBtn.onclick = async () => {
+            if (deferredPrompt) {
+              deferredPrompt.prompt();
+              const { outcome } = await deferredPrompt.userChoice;
+              masterLog(`[RODOVAR PWA] Escolha de instalação do usuário: ${outcome}`, "info");
+              deferredPrompt = null;
+              banner.remove();
+            }
+          };
+        }
+      });
+    }
+
     // URL Parameters Parser
     const urlParams = new URLSearchParams(window.location.search);
     const rawCargoId = urlParams.get("cargoId") || urlParams.get("cargoid") || "test-cargo";
@@ -347,7 +476,7 @@
         return {
           apiKey: "",
           authDomain: `${defaultProj}.firebaseapp.com`,
-          databaseURL: `https://${defaultProj}-default-rtdb.firebaseio.com`,
+          databaseURL: "https://gen-lang-client-0851305506-default-rtdb.firebaseio.com", // [RODOVAR FIX] CORREÇÃO 1
           projectId: defaultProj,
           firestoreDatabaseId: defaultProj,
           storageBucket: `${defaultProj}.appspot.com`,
@@ -359,6 +488,9 @@
 
     // Initialize tracking logic on load
     async function init() {
+      // [RODOVAR FIX] CORREÇÃO 6 — Injetar o banner de instalação do PWA
+      setupPWABanner();
+
       // 1. Initial MASTER console logs
       masterLog("SISTEMA MASTER TELEMETRIA INICIALIZADO.", "sys");
       masterLog("Rastreando ID: " + cargoId, "info");
@@ -426,25 +558,29 @@
         masterLog("Realtime Database URL: " + firebaseConfig.databaseURL, "info");
 
         app = initializeApp(firebaseConfig);
-        db = getDatabase(app);
+        db = getDatabase(app, RTDB_URL); // [RODOVAR FIX] CORREÇÃO 1 — Inicialização explícita
         masterLog("Conectando ao Realtime Database...", "info");
         
         const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
         firestore = getFirestore(app, dbId);
         masterLog("Conectando ao Firestore (Database ID: " + dbId + ")...", "info");
 
-        // Read historyEnabled configuration asynchronously (non-blocking)
+        // [RODOVAR FIX] CORREÇÃO 2 — Fallback se historyEnabled não existir
         Promise.resolve().then(async () => {
           try {
             const configRef = ref(db, 'config/tracking/historyEnabled');
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
             const configSnap = await Promise.race([get(configRef), timeoutPromise]);
-            if (configSnap && configSnap.exists()) {
+            if (configSnap && configSnap.exists() && configSnap.val() !== null) {
               historyEnabled = !!configSnap.val();
+              masterLog("Configuração: histórico de trilha habilitado = " + historyEnabled, "success");
+            } else {
+              historyEnabled = true;
+              masterLog("[RODOVAR FIX] [INFO] historyEnabled assumido como true (fallback)", "sys");
             }
-            masterLog("Configuração: histórico de trilha habilitado = " + historyEnabled, "success");
           } catch (confError) {
-            masterLog("Falha ao ler 'config/tracking/historyEnabled' no RTDB (regras do banco bloqueadas?): " + confError.message, "warn");
+            historyEnabled = true;
+            masterLog("[RODOVAR FIX] [INFO] historyEnabled assumido como true (fallback): " + confError.message, "warn");
           }
         });
 
@@ -584,12 +720,20 @@
           .then(() => masterLog("Background Service Worker registrado para manter GPS rodando.", "success"))
           .catch(err => masterLog("Service Worker não suportado/recusado: " + err.message, "warn"));
 
-        // UI changes
+        // [RODOVAR FIX] CORREÇÃO 4 — Botão bloqueado e atualizado
         const btnStart = document.getElementById("btn-start-tracking");
-        if (btnStart) btnStart.classList.add("hidden");
+        if (btnStart) {
+          btnStart.disabled = true;
+          btnStart.classList.remove("bg-brand-yellow", "hover:bg-yellow-400", "cursor-pointer");
+          btnStart.classList.add("bg-zinc-800", "text-zinc-500", "cursor-not-allowed");
+          btnStart.innerHTML = `
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-green"></span>
+            🛰️ GPS ATIVO — AGUARDANDO OPERADOR
+          `;
+        }
 
         const btnActive = document.getElementById("btn-active-tracking");
-        if (btnActive) btnActive.classList.remove("hidden");
+        if (btnActive) btnActive.classList.add("hidden");
 
         const instructionsPanel = document.getElementById("instructions-panel");
         if (instructionsPanel) instructionsPanel.classList.add("hidden");
@@ -610,6 +754,13 @@
         if (statusBadge) {
           statusBadge.className = "px-2.5 py-1 rounded-lg bg-emerald-950/20 border border-emerald-900/60 font-mono text-[10px] uppercase font-black tracking-wider flex items-center gap-1.5 text-emerald-400";
         }
+
+        // [RODOVAR FIX] CORREÇÃO 5 — Exibir aviso de GPS ativo em segundo plano
+        const warningEl = document.getElementById("gps-warning-text");
+        if (warningEl) {
+          warningEl.innerHTML = `<strong>✅ GPS ativo em segundo plano. Pode minimizar o app.</strong><br/>A sua rota está sendo gravada com segurança de forma contínua. Tela ativa via Wake Lock e Service Worker ativo.`;
+        }
+        masterLog("✅ GPS ativo em segundo plano. Pode minimizar o app.", "success");
 
         isTracking = true;
         trackingStartTime = new Date();
@@ -645,6 +796,47 @@
             masterLog("Erro ao gravar status inicial no Realtime Database: " + dbErr.message, "error");
             console.error("Erro ao gravar GPS:", dbErr);
           });
+
+          // [RODOVAR FIX] CORREÇÃO 3 — Inicializar localidade inicial em tracking/ no RTDB correto
+          set(ref(db, `tracking/${cargoId}`), {
+            location: {
+              lat: 0,
+              lng: 0,
+              timestamp: timestampIso,
+              accuracy: 0,
+              speed: 0
+            },
+            status: "em_transito",
+            driverName: driverName,
+            updatedAt: Date.now()
+          }).then(() => {
+            masterLog("[RODOVAR FIX] Inicialização de tracking/ concluída no RTDB.", "success");
+          }).catch(err => {
+            masterLog("[RODOVAR FIX] Erro ao inicializar tracking/ no RTDB: " + err.message, "error");
+          });
+
+          // [RODOVAR FIX] CORREÇÃO 4 — Escutar operatorStatus em tempo real
+          const operatorStatusRef = ref(db, `tracking/${cargoId}/operatorStatus`);
+          onValue(operatorStatusRef, (snap) => {
+            const operatorStatus = snap.val();
+            masterLog(`[RODOVAR FIX] operatorStatus recebido: ${operatorStatus}`, "info");
+            if (operatorStatus === "parado" || operatorStatus === "entregue") {
+              masterLog(`[RODOVAR FIX] operatorStatus é '${operatorStatus}'. Liberando botão e finalizando...`, "sys");
+              stopTrackingGracefully(operatorStatus);
+              if (btnStart) {
+                btnStart.disabled = false;
+                btnStart.classList.remove("bg-zinc-800", "text-zinc-500", "cursor-not-allowed");
+                btnStart.classList.add("bg-brand-yellow", "hover:bg-yellow-400", "cursor-pointer");
+                btnStart.innerHTML = `
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                  INICIAR CORRIDA
+                `;
+              }
+            }
+          }, (err) => {
+            masterLog("[RODOVAR FIX] Erro ao ouvir operatorStatus: " + err.message, "error");
+          });
+
         } else {
           masterLog("Aviso: Realtime Database não inicializado. Rodando em modo local/offline.", "warn");
         }
@@ -765,6 +957,27 @@
         .catch(dbErr => {
           masterLog("❌ Erro ao atualizar posição no Realtime DB (Verifique as Rules!): " + dbErr.message, "error");
           console.error("Erro ao gravar GPS:", dbErr);
+        });
+
+        // [RODOVAR FIX] CORREÇÃO 3 — Gravar localização a cada atualização no caminho de tracking
+        const trackingPayload = {
+          location: {
+            lat: lat,
+            lng: lng,
+            timestamp: timestamp,
+            accuracy: accuracy,
+            speed: position.coords.speed !== null && position.coords.speed !== undefined ? position.coords.speed : 0
+          },
+          status: "em_transito",
+          driverName: driverName,
+          updatedAt: Date.now()
+        };
+        update(ref(db, `tracking/${cargoId}`), trackingPayload)
+        .then(() => {
+          masterLog("✔ [RODOVAR FIX] Localização gravada em tracking/ com sucesso.", "success");
+        })
+        .catch(dbErr => {
+          masterLog("❌ [RODOVAR FIX] Erro ao gravar localização em tracking/: " + dbErr.message, "error");
         });
       }
 
