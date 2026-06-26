@@ -169,6 +169,17 @@
       <span class="text-[10px] font-mono bg-emerald-950/50 border border-emerald-900/30 text-emerald-400 px-3 py-1 rounded-full uppercase">Serviço Encerrado</span>
     </div>
 
+    <!-- [RODOVAR RECOMEÇAR] PAINEL DE VIAGEM PARADA -->
+    <div id="paused-panel" class="bg-zinc-900/90 border border-amber-500/30 p-8 rounded-xl text-center hidden flex flex-col items-center gap-4 my-auto relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-[3px] bg-amber-500"></div>
+      <div class="w-16 h-16 rounded-full bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center text-amber-500 text-2xl font-black">⏸</div>
+      <div>
+        <h3 class="text-lg font-black text-white font-sans">Viagem Parada / Pausada</h3>
+        <p class="text-xs text-zinc-400 mt-2 leading-relaxed">O operador pausou o rastreamento desta viagem.<br/>Aguardando liberação do operador para retomar.</p>
+      </div>
+      <span class="text-[10px] font-mono bg-amber-950/50 border border-amber-900/30 text-amber-500 px-3 py-1 rounded-full uppercase">Viagem Parada</span>
+    </div>
+
   </main>
 
   <footer class="mt-6 flex flex-col gap-2" id="footer-controls">
@@ -342,6 +353,56 @@
     // [RODOVAR FIX v3.1] ESCUTAR STATUS DO OPERADOR — 100% RTDB
     // Detecta: operatorStatus, status e connected
     // ============================================================
+    let lastHandledStatus = "";
+
+    function handleStatusChange(status) {
+      if (status === lastHandledStatus) return;
+      lastHandledStatus = status;
+
+      masterLog(`[RTDB] Mudança de status detectada: "${status}"`, "sys");
+
+      if (status === "parado") {
+        masterLog("Operador pausou a corrida.", "sys");
+        stopTrackingGracefully("parado");
+      } else if (status === "entregue" || status === "encerrado") {
+        masterLog("Operador finalizou a viagem.", "sys");
+        stopTrackingGracefully(status);
+      } else if (status === "coletando" || status === "transmitido" || status === "em_transito" || status === "descarregando") {
+        if (!isTracking) {
+          masterLog(`Viagem ativa/liberada pelo operador (${status}). Liberando botão de Recomeçar/Retomar...`, "success");
+          restoreTrackingScreen("RECOMEÇAR VIAGEM");
+        }
+      }
+    }
+
+    function restoreTrackingScreen(buttonText) {
+      isTracking = false;
+      
+      // Mostrar os painéis normais da viagem
+      document.getElementById("card-delivery-info").classList.remove("hidden");
+      document.getElementById("instructions-panel").classList.remove("hidden");
+      document.getElementById("footer-controls").classList.remove("hidden");
+      
+      // Ocultar os painéis de conclusão e pausa
+      document.getElementById("finished-panel").classList.add("hidden");
+      const pausedPanel = document.getElementById("paused-panel");
+      if (pausedPanel) pausedPanel.classList.add("hidden");
+      
+      // Restaurar o status badge para AGUARDANDO
+      document.getElementById("status-dot").className = "w-2 h-2 rounded-full bg-zinc-500 animate-pulse";
+      document.getElementById("status-text").innerText = "PRONTO PARA RETOMAR";
+      document.getElementById("status-badge").className = "px-2.5 py-1 rounded-lg bg-zinc-950 text-brand-yellow border border-zinc-800 font-mono text-[10px] uppercase font-black tracking-wider flex items-center gap-1.5";
+      
+      // Ocultar painel GPS (até que o motorista inicie novamente)
+      document.getElementById("gps-panel").classList.add("hidden");
+      
+      // Restaurar o botão principal
+      const btn = document.getElementById("btn-start-tracking");
+      btn.disabled = false;
+      btn.className = "w-full bg-brand-yellow hover:bg-yellow-400 text-black py-4 px-6 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.98] cursor-pointer";
+      btn.innerHTML = `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>${buttonText || 'INICIAR CORRIDA'}`;
+    }
+
     function listenOperatorStatus() {
       if (!db) return;
 
@@ -350,9 +411,8 @@
       onValue(opRef, (snap) => {
         const val = (snap.val() || "").toString().toLowerCase().trim();
         masterLog(`[RTDB] operatorStatus = "${val}"`, "info");
-        if (val === "parado" || val === "entregue" || val === "encerrado") {
-          masterLog(`[RTDB] Operador sinalizou "${val}". Encerrando corrida...`, "sys");
-          stopTrackingGracefully(val);
+        if (val) {
+          handleStatusChange(val);
         }
       });
 
@@ -360,9 +420,9 @@
       const stRef = ref(db, `tracking/${cargoId}/status`);
       onValue(stRef, (snap) => {
         const val = (snap.val() || "").toString().toLowerCase().trim();
-        if (val === "parado" || val === "entregue" || val === "encerrado") {
-          masterLog(`[RTDB] status = "${val}". Encerrando corrida...`, "sys");
-          stopTrackingGracefully(val);
+        masterLog(`[RTDB] status = "${val}"`, "info");
+        if (val) {
+          handleStatusChange(val);
         }
       });
     }
@@ -599,7 +659,11 @@
     function stopTrackingGracefully(reason) {
       if (!isTracking && reason !== 'force') {
         // Evita chamadas duplicadas
-        if (document.getElementById("finished-panel").classList.contains("hidden") === false) return;
+        if (reason === 'parado') {
+          if (document.getElementById("paused-panel") && !document.getElementById("paused-panel").classList.contains("hidden")) return;
+        } else {
+          if (document.getElementById("finished-panel").classList.contains("hidden") === false) return;
+        }
       }
       isTracking = false;
 
@@ -627,24 +691,37 @@
           onDisconnect(ref(db, `tracking/${cargoId}/lastSeen`)).cancel();
         } catch(e) {}
 
+        const finalStatus = (reason === "parado") ? "parado" : "encerrado";
+
         update(trackRef, {
           connected: false,
-          status: "encerrado",
+          status: finalStatus,
           operatorStatus: reason,
           endedAt: nowTs,
           updatedAt: nowTs,
           lastSeen: nowTs
-        }).then(() => masterLog("[RTDB] Estado final gravado com sucesso.", "success"))
+        }).then(() => masterLog("[RTDB] Estado final gravado com sucesso: " + finalStatus, "success"))
           .catch(e => masterLog("[RTDB] Erro ao gravar estado final: " + e.message, "error"));
       }
 
-      // UI — tela de conclusão
+      // UI — configurar as telas correspondentes
       document.getElementById("card-delivery-info").classList.add("hidden");
       document.getElementById("gps-panel").classList.add("hidden");
       document.getElementById("instructions-panel").classList.add("hidden");
       document.getElementById("error-panel").classList.add("hidden");
       document.getElementById("footer-controls").classList.add("hidden");
-      document.getElementById("finished-panel").classList.remove("hidden");
+
+      if (reason === 'parado') {
+        if (document.getElementById("paused-panel")) {
+          document.getElementById("paused-panel").classList.remove("hidden");
+        }
+        document.getElementById("finished-panel").classList.add("hidden");
+      } else {
+        if (document.getElementById("paused-panel")) {
+          document.getElementById("paused-panel").classList.add("hidden");
+        }
+        document.getElementById("finished-panel").classList.remove("hidden");
+      }
     }
 
     // ============================================================
