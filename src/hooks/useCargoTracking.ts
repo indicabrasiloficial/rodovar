@@ -79,42 +79,56 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       let selectedTs = 0;
       let activeSource: 'gps' | 'whatsapp' | 'none' = 'none';
 
-      if (rtdbLat && rtdbLng && fsLat && fsLng) {
-        if (rtdbTs >= fsTs) {
+      // Parse WhatsApp link coordinates if present
+      const waCoords = entrega.link_localizacao ? extractCoordsFromLink(entrega.link_localizacao) : null;
+
+      if (waCoords && !rtdbConnected) {
+        // If there is a WhatsApp link and the live tracker is disconnected (not actively live),
+        // we prioritize the WhatsApp link coordinates!
+        selectedLat = waCoords.lat;
+        selectedLng = waCoords.lng;
+        selectedTs = 0;
+        activeSource = 'whatsapp';
+      } else {
+        if (rtdbLat && rtdbLng && fsLat && fsLng) {
+          if (rtdbTs >= fsTs) {
+            selectedLat = rtdbLat;
+            selectedLng = rtdbLng;
+            selectedTs = rtdbTs;
+            activeSource = 'gps';
+          } else {
+            selectedLat = fsLat;
+            selectedLng = fsLng;
+            selectedTs = fsTs;
+            activeSource = 'gps';
+          }
+        } else if (rtdbLat && rtdbLng) {
           selectedLat = rtdbLat;
           selectedLng = rtdbLng;
           selectedTs = rtdbTs;
           activeSource = 'gps';
-        } else {
+        } else if (fsLat && fsLng) {
           selectedLat = fsLat;
           selectedLng = fsLng;
           selectedTs = fsTs;
           activeSource = 'gps';
         }
-      } else if (rtdbLat && rtdbLng) {
-        selectedLat = rtdbLat;
-        selectedLng = rtdbLng;
-        selectedTs = rtdbTs;
-        activeSource = 'gps';
-      } else if (fsLat && fsLng) {
-        selectedLat = fsLat;
-        selectedLng = fsLng;
-        selectedTs = fsTs;
-        activeSource = 'gps';
       }
 
       if (selectedLat && selectedLng) {
         setPosition({ lat: selectedLat, lng: selectedLng });
         setSource(activeSource);
-        lastTsRef.current = selectedTs;
+        lastTsRef.current = activeSource === 'whatsapp' ? null : selectedTs;
 
         // [RODOVAR FIX v3] CORREÇÃO 2 — Escutar connected e lastSeen em tempo real
         const lastSeen = rtdbLastSeen || selectedTs;
         const ageSeconds = lastSeen ? Math.max(0, Math.floor((now - lastSeen) / 1000)) : null;
         const minutosOffline = lastSeen ? (now - lastSeen) / 60000 : Infinity;
 
-        let statusVal: 'live' | 'weak' | 'offline' = 'offline';
-        if (rtdbConnected === true && minutosOffline < 2) {
+        let statusVal: 'live' | 'weak' | 'offline' | 'local' = 'offline';
+        if (activeSource === 'whatsapp') {
+          statusVal = 'local';
+        } else if (rtdbConnected === true && minutosOffline < 2) {
           statusVal = 'live';
         } else if (minutosOffline < 5) {
           statusVal = 'weak';
@@ -124,7 +138,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
 
         setConnectionStatus(statusVal);
         setIsLive(statusVal === 'live');
-        setLastSeenSeconds(ageSeconds);
+        setLastSeenSeconds(activeSource === 'whatsapp' ? null : ageSeconds);
         return true;
       }
       return false;
