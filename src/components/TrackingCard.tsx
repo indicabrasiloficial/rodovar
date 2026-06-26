@@ -2,17 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Entrega } from '../types';
 import { TrackingProgressBar } from './TrackingProgressBar';
 import { Calendar, MapPin, Milestone, Sparkles } from 'lucide-react';
+import { useCargoTracking } from '../hooks/useCargoTracking';
 
 interface TrackingCardProps {
   carga: Entrega;
 }
 
 export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
+  const { position, source, isLive, lastSeenSeconds, connectionStatus } = useCargoTracking(carga);
   const [resolvedAddress, setResolvedAddress] = useState<string>('');
   const [isResolvingAddress, setIsResolvingAddress] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!carga.localizacaoAtual || !carga.localizacaoAtual.lat || !carga.localizacaoAtual.lng) {
+    if (!position || !position.lat || !position.lng) {
       setResolvedAddress('');
       return;
     }
@@ -21,7 +23,7 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
     const fetchAddress = async () => {
       setIsResolvingAddress(true);
       try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${carga.localizacaoAtual!.lat}&lon=${carga.localizacaoAtual!.lng}`;
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${position.lat}&lon=${position.lng}`;
         const res = await fetch(url, {
           headers: {
             'Accept-Language': 'pt-BR,pt;q=0.9',
@@ -46,7 +48,7 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
     return () => {
       isMounted = false;
     };
-  }, [carga.localizacaoAtual?.lat, carga.localizacaoAtual?.lng, carga.trackingCode]);
+  }, [position?.lat, position?.lng, carga.trackingCode]);
 
   const formatStatus = (status: string) => {
     switch (status) {
@@ -59,38 +61,40 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
   };
 
   const getLiveIndicator = () => {
-    if (!carga.localizacaoAtual || !carga.ultimaAtualizacao) {
+    if (source === 'none') {
       return {
-        text: 'Sem sinal de GPS',
+        text: 'Sem monitoramento ativo',
         color: 'bg-zinc-900 border-zinc-800 text-zinc-500',
         dotClass: 'bg-zinc-600'
       };
     }
 
-    try {
-      const now = new Date();
-      const lastUpdate = new Date(carga.ultimaAtualizacao);
-      const diffMs = now.getTime() - lastUpdate.getTime();
-      const diffMin = Math.floor(diffMs / (1000 * 60));
-
-      if (diffMin < 5) {
-        return {
-          text: '🟢 AO VIVO',
-          color: 'bg-green-500/10 border-green-500/30 text-green-400 animate-pulse',
-          dotClass: 'bg-green-400 animate-ping'
-        };
-      } else {
-        return {
-          text: `Última localização há ${diffMin} min`,
-          color: 'bg-amber-500/10 border-amber-500/20 text-amber-500',
-          dotClass: 'bg-amber-500'
-        };
-      }
-    } catch {
+    if (source === 'whatsapp') {
       return {
-        text: 'Sem sinal',
-        color: 'bg-zinc-550/10 border-zinc-800 text-zinc-500',
-        dotClass: 'bg-zinc-500'
+        text: '📍 Localização Manual',
+        color: 'bg-amber-500/10 border-amber-500/20 text-amber-500',
+        dotClass: 'bg-amber-500'
+      };
+    }
+
+    if (connectionStatus === 'live') {
+      return {
+        text: '🟢 AO VIVO',
+        color: 'bg-green-500/10 border-green-500/30 text-green-400 animate-pulse',
+        dotClass: 'bg-green-400 animate-ping'
+      };
+    } else if (connectionStatus === 'weak') {
+      return {
+        text: '🟡 SINAL FRACO',
+        color: 'bg-yellow-500/10 border-yellow-500/20 text-amber-500',
+        dotClass: 'bg-amber-500 animate-pulse'
+      };
+    } else {
+      const min = lastSeenSeconds ? Math.floor(lastSeenSeconds / 60) : 0;
+      return {
+        text: `🔴 DESCONECTADO ${min > 0 ? `(${min}m)` : ''}`,
+        color: 'bg-red-500/10 border-red-500/20 text-red-500',
+        dotClass: 'bg-red-500'
       };
     }
   };

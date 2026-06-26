@@ -1,5 +1,6 @@
 import { Entrega, BlacklistMotorista, BlacklistCliente, GroupChatMessage } from '../types';
-import { db, auth, OperationType, handleFirestoreError } from './firebase';
+import { db, auth, database, OperationType, handleFirestoreError } from './firebase';
+import { ref, set } from 'firebase/database';
 import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
 import { 
   collection, 
@@ -795,6 +796,16 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   } catch {}
   window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'UPSERT', payload } }));
 
+  // [RODOVAR FIX v3] CORREÇÃO 3 — Operador muda status para Parado ou Entregue
+  if (entrega.status && (entrega.status === 'parado' || entrega.status === 'entregue')) {
+    try {
+      set(ref(database, `tracking/${cleanId}/operatorStatus`), entrega.status);
+      set(ref(database, `tracking/${cleanId}/operatorStatusAt`), Date.now());
+    } catch (err) {
+      console.error("[RODOVAR FIX v3] Erro ao salvar status do operador no Realtime Database:", err);
+    }
+  }
+
   // Firestore update (Background)
   setDoc(doc(db, ENTREGAS_COLLECTION, cleanId), payload).catch((error) => {
     handleFirestoreError(error, OperationType.WRITE, `${ENTREGAS_COLLECTION}/${cleanId}`);
@@ -1433,6 +1444,16 @@ export async function updateEntregaField(id: string, updates: Record<string, any
     } catch {}
     
     window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'UPDATE', payload: freshObject } }));
+  }
+
+  // [RODOVAR FIX v3] CORREÇÃO 3 — Operador muda status para Parado ou Entregue
+  if (updates.status && (updates.status === 'parado' || updates.status === 'entregue')) {
+    try {
+      set(ref(database, `tracking/${id}/operatorStatus`), updates.status);
+      set(ref(database, `tracking/${id}/operatorStatusAt`), Date.now());
+    } catch (err) {
+      console.error("[RODOVAR FIX v3] Erro ao salvar status do operador no Realtime Database:", err);
+    }
   }
 
   await updateDoc(doc(db, ENTREGAS_COLLECTION, id), updates).catch((error) => {

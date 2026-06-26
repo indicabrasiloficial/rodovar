@@ -267,7 +267,7 @@
   <!-- Firebase CDN imports -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, off, get, child, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, set, push, onValue, off, get, child, update, onDisconnect, ServerValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
     import { getFirestore, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // [RODOVAR FIX] CORREÇÃO 1 — URL do Realtime Database Correto
@@ -848,8 +848,11 @@
         // Write initial session meta values in database if ready
         const timestampIso = new Date().toISOString();
         if (db) {
-          // [RODOVAR FIX] CORREÇÃO 3 — Inicializar localidade inicial em tracking/ no RTDB correto
-          set(ref(db, `tracking/${cargoId}`), {
+          // [RODOVAR FIX v3] CORREÇÃO 1 — Inicializar e configurar onDisconnect no RTDB correto
+          const trackingPath = `tracking/${cargoId}`;
+          const nowTs = Date.now();
+          
+          set(ref(db, trackingPath), {
             location: {
               lat: 0,
               lng: 0,
@@ -859,20 +862,39 @@
             },
             status: "em_transito",
             driverName: driverName,
-            updatedAt: Date.now()
+            updatedAt: nowTs,
+            connected: true,
+            lastSeen: nowTs,
+            startedAt: nowTs
           }).then(() => {
-            masterLog("[RODOVAR FIX] Inicialização de tracking/ concluída no RTDB.", "success");
+            masterLog("[RODOVAR FIX v3] Inicialização de tracking/ concluída no RTDB.", "success");
+            
+            // Configurar onDisconnect() para que se o motorista perder rede ou fechar o app, o RTDB marque instantaneamente:
+            // connected = false, lastSeen = ServerValue.TIMESTAMP, status = "desconectado"
+            try {
+              const connectedRef = ref(db, `${trackingPath}/connected`);
+              const lastSeenRef = ref(db, `${trackingPath}/lastSeen`);
+              const statusRef = ref(db, `${trackingPath}/status`);
+
+              onDisconnect(connectedRef).set(false);
+              onDisconnect(lastSeenRef).set(ServerValue.TIMESTAMP);
+              onDisconnect(statusRef).set("desconectado");
+              
+              masterLog("[RODOVAR FIX v3] onDisconnect configurado com sucesso.", "success");
+            } catch (disErr) {
+              masterLog("[RODOVAR FIX v3] Erro ao configurar onDisconnect: " + disErr.message, "error");
+            }
           }).catch(err => {
-            masterLog("[RODOVAR FIX] Erro ao inicializar tracking/ no RTDB: " + err.message, "error");
+            masterLog("[RODOVAR FIX v3] Erro ao inicializar tracking/ no RTDB: " + err.message, "error");
           });
 
-          // [RODOVAR FIX] CORREÇÃO 4 — Escutar operatorStatus em tempo real
+          // [RODOVAR FIX v3] CORREÇÃO 4 — Escutar operatorStatus em tempo real
           const operatorStatusRef = ref(db, `tracking/${cargoId}/operatorStatus`);
           onValue(operatorStatusRef, (snap) => {
             const operatorStatus = snap.val();
-            masterLog(`[RODOVAR FIX] operatorStatus recebido: ${operatorStatus}`, "info");
+            masterLog(`[RODOVAR FIX v3] operatorStatus recebido: ${operatorStatus}`, "info");
             if (operatorStatus === "parado" || operatorStatus === "entregue") {
-              masterLog(`[RODOVAR FIX] operatorStatus é '${operatorStatus}'. Liberando botão e finalizando...`, "sys");
+              masterLog(`[RODOVAR FIX v3] operatorStatus é '${operatorStatus}'. Liberando botão e finalizando...`, "sys");
               stopTrackingGracefully(operatorStatus);
               if (btnStart) {
                 btnStart.disabled = false;
@@ -885,7 +907,7 @@
               }
             }
           }, (err) => {
-            masterLog("[RODOVAR FIX] Erro ao ouvir operatorStatus: " + err.message, "error");
+            masterLog("[RODOVAR FIX v3] Erro ao ouvir operatorStatus: " + err.message, "error");
           });
 
         } else {
@@ -999,7 +1021,7 @@
         }
       };
 
-      // [RODOVAR FIX] CORREÇÃO 1 — Gravar localização a cada atualização unificada no caminho de tracking
+      // [RODOVAR FIX v3] CORREÇÃO 1 — Gravar localização e status de presença a cada atualização unificada no caminho de tracking
       if (db) {
         const trackingPayload = {
           location: {
@@ -1011,14 +1033,16 @@
           },
           status: "em_transito",
           driverName: driverName,
-          updatedAt: Date.now()
+          updatedAt: now,
+          connected: true,
+          lastSeen: now
         };
         update(ref(db, `tracking/${cargoId}`), trackingPayload)
         .then(() => {
-          masterLog("✔ [RODOVAR FIX] Localização gravada em tracking/ com sucesso.", "success");
+          masterLog("✔ [RODOVAR FIX v3] Localização e presença atualizadas em tracking/ com sucesso.", "success");
         })
         .catch(dbErr => {
-          masterLog("❌ [RODOVAR FIX] Erro ao gravar localização em tracking/: " + dbErr.message, "error");
+          masterLog("❌ [RODOVAR FIX v3] Erro ao atualizar no Realtime DB: " + dbErr.message, "error");
         });
       }
 
@@ -1089,6 +1113,38 @@
 
       // Remove leaving protections
       window.removeEventListener("beforeunload", preventUnload);
+
+      // [RODOVAR FIX v3] Ao ENCERRAR CORRIDA (motorista chegando ou finalizando):
+      // Gravar no RTDB: connected = false, status = "entregue", endedAt = Date.now() e cancelar onDisconnect
+      if (db) {
+        const trackingPath = `tracking/${cargoId}`;
+        const connectedRef = ref(db, `${trackingPath}/connected`);
+        const lastSeenRef = ref(db, `${trackingPath}/lastSeen`);
+        const statusRef = ref(db, `${trackingPath}/status`);
+
+        // Cancel onDisconnect active listeners
+        try {
+          onDisconnect(connectedRef).cancel();
+          onDisconnect(lastSeenRef).cancel();
+          onDisconnect(statusRef).cancel();
+        } catch (canErr) {
+          console.warn("Erro ao cancelar onDisconnect:", canErr);
+        }
+
+        // Set final values
+        const nowTs = Date.now();
+        update(ref(db, trackingPath), {
+          connected: false,
+          status: "entregue",
+          endedAt: nowTs,
+          updatedAt: nowTs,
+          lastSeen: nowTs
+        }).then(() => {
+          masterLog("[RODOVAR FIX v3] Status final gravado no RTDB com sucesso.", "success");
+        }).catch(err => {
+          masterLog("[RODOVAR FIX v3] Erro ao gravar status final no RTDB: " + err.message, "error");
+        });
+      }
 
       // UI Screen Transition
       document.getElementById("card-delivery-info").classList.add("hidden");

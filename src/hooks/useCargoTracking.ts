@@ -9,6 +9,7 @@ export interface CargoTrackingResult {
   source: 'gps' | 'whatsapp' | 'none';
   isLive: boolean;
   lastSeenSeconds: number | null;
+  connectionStatus: 'live' | 'weak' | 'offline';
 }
 
 export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
@@ -16,6 +17,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
   const [source, setSource] = useState<'gps' | 'whatsapp' | 'none'>('none');
   const [isLive, setIsLive] = useState<boolean>(false);
   const [lastSeenSeconds, setLastSeenSeconds] = useState<number | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'live' | 'weak' | 'offline'>('offline');
   const lastTsRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -24,6 +26,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       setSource('none');
       setIsLive(false);
       setLastSeenSeconds(null);
+      setConnectionStatus('offline');
       lastTsRef.current = null;
       return;
     }
@@ -37,13 +40,18 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       let rtdbLat = 0;
       let rtdbLng = 0;
       let rtdbTs = 0;
+      let rtdbConnected = false;
+      let rtdbLastSeen = 0;
 
       if (rtdbSnap && rtdbSnap.exists()) {
         const val = rtdbSnap.val();
+        rtdbConnected = val.connected === true;
+        rtdbLastSeen = Number(val.lastSeen ?? 0);
+        
         if (val && val.location) {
           rtdbLat = Number(val.location.lat ?? 0);
           rtdbLng = Number(val.location.lng ?? 0);
-          rtdbTs = Number(val.updatedAt ?? 0);
+          rtdbTs = Number(val.location.timestamp ?? val.updatedAt ?? 0);
         } else if (val) {
           // Fallback support for legacy flat fields
           const current = val.current || val;
@@ -99,8 +107,23 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
         setPosition({ lat: selectedLat, lng: selectedLng });
         setSource(activeSource);
         lastTsRef.current = selectedTs;
-        const ageSeconds = selectedTs ? Math.max(0, Math.floor((now - selectedTs) / 1000)) : null;
-        setIsLive(ageSeconds !== null ? ageSeconds < 150 : false);
+
+        // [RODOVAR FIX v3] CORREÇÃO 2 — Escutar connected e lastSeen em tempo real
+        const lastSeen = rtdbLastSeen || selectedTs;
+        const ageSeconds = lastSeen ? Math.max(0, Math.floor((now - lastSeen) / 1000)) : null;
+        const minutosOffline = lastSeen ? (now - lastSeen) / 60000 : Infinity;
+
+        let statusVal: 'live' | 'weak' | 'offline' = 'offline';
+        if (rtdbConnected === true && minutosOffline < 2) {
+          statusVal = 'live';
+        } else if (minutosOffline < 5) {
+          statusVal = 'weak';
+        } else {
+          statusVal = 'offline';
+        }
+
+        setConnectionStatus(statusVal);
+        setIsLive(statusVal === 'live');
         setLastSeenSeconds(ageSeconds);
         return true;
       }
@@ -108,14 +131,15 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     };
 
     const applyFallbacks = () => {
+      setConnectionStatus('offline');
+      setIsLive(false);
+      setLastSeenSeconds(null);
+      lastTsRef.current = null;
       if (entrega.link_localizacao) {
         const waCoords = extractCoordsFromLink(entrega.link_localizacao);
         if (waCoords) {
           setPosition(waCoords);
           setSource('whatsapp');
-          setIsLive(false);
-          setLastSeenSeconds(null);
-          lastTsRef.current = null;
           return;
         }
       }
@@ -123,15 +147,9 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       if (entrega.lat && entrega.lng) {
         setPosition({ lat: Number(entrega.lat), lng: Number(entrega.lng) });
         setSource(entrega.link_localizacao ? 'whatsapp' : 'none');
-        setIsLive(false);
-        setLastSeenSeconds(null);
-        lastTsRef.current = null;
       } else {
         setPosition(null);
         setSource('none');
-        setIsLive(false);
-        setLastSeenSeconds(null);
-        lastTsRef.current = null;
       }
     };
 
@@ -161,7 +179,19 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       const selectedTs = lastTsRef.current;
       if (selectedTs) {
         const ageSeconds = Math.max(0, Math.floor((now - selectedTs) / 1000));
-        setIsLive(ageSeconds < 150);
+        const minutosOffline = ageSeconds / 60;
+        
+        let statusVal: 'live' | 'weak' | 'offline' = 'offline';
+        if (minutosOffline < 2 && isLive) {
+          statusVal = 'live';
+        } else if (minutosOffline < 5) {
+          statusVal = 'weak';
+        } else {
+          statusVal = 'offline';
+        }
+        
+        setConnectionStatus(statusVal);
+        setIsLive(statusVal === 'live');
         setLastSeenSeconds(ageSeconds);
       }
     }, 5000);
@@ -180,5 +210,5 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     entrega?.ultimaAtualizacao
   ]);
 
-  return { position, source, isLive, lastSeenSeconds };
+  return { position, source, isLive, lastSeenSeconds, connectionStatus };
 }

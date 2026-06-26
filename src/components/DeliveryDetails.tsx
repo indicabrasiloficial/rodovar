@@ -142,7 +142,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   };
 
   const [entrega, setEntrega] = useState<Entrega | null>(null);
-  const { position, source, isLive, lastSeenSeconds } = useCargoTracking(entrega);
+  const { position, source, isLive, lastSeenSeconds, connectionStatus } = useCargoTracking(entrega);
   const [locLinkInput, setLocLinkInput] = useState('');
   const [showDetailsLocModal, setShowDetailsLocModal] = useState(false);
   const [isSavingLink, setIsSavingLink] = useState(false);
@@ -1323,16 +1323,22 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               </h4>
               {(() => {
                 if (source === 'gps') {
-                  if (isLive) {
+                  if (connectionStatus === 'live') {
                     return (
                       <span className="px-2.5 py-0.5 rounded text-[9px] font-mono font-black border bg-emerald-950/40 text-emerald-400 border-emerald-800/60 animate-pulse self-start sm:self-auto">
-                        🛰️ GPS ATIVO EM TEMPO REAL
+                        🟢 GPS AO VIVO
+                      </span>
+                    );
+                  } else if (connectionStatus === 'weak') {
+                    return (
+                      <span className="px-2.5 py-0.5 rounded text-[9px] font-mono font-black border bg-yellow-950/40 text-amber-400 border-yellow-800/60 self-start sm:self-auto" title={`Sinal fraco há ${lastSeenSeconds || 0}s`}>
+                        🟡 SINAL FRACO {lastSeenSeconds !== null ? `(${lastSeenSeconds}s)` : ''}
                       </span>
                     );
                   } else {
                     return (
                       <span className="px-2.5 py-0.5 rounded text-[9px] font-mono font-black border bg-red-950/40 text-red-400 border-red-800/60 self-start sm:self-auto" title={`Último sinal visto há ${lastSeenSeconds || 0}s`}>
-                        🔴 GPS SEM SINAL {lastSeenSeconds !== null ? `(${lastSeenSeconds}s)` : ''}
+                        🔴 DESCONECTADO {lastSeenSeconds !== null ? `(${lastSeenSeconds}s)` : ''}
                       </span>
                     );
                   }
