@@ -447,8 +447,29 @@ function getSimilarity(s1: string, s2: string): number {
   return 0;
 }
 
+export function sanitizeName(name: string | undefined | null): string {
+  if (!name) return '';
+  let clean = name.trim().toUpperCase();
+  // Remove trailing punctuation (e.g. ARANDA! -> ARANDA)
+  clean = clean.replace(/[!?.\-,;:]+$/, '').trim();
+  // Remove multiple spacing
+  clean = clean.replace(/\s+/g, ' ');
+  return clean;
+}
+
 // Write/Delete functions - Return Synchronously with Optimistic caching, syncing asynchronously in background
 export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entrega {
+  // Autocorrect and sanitize names to uppercase, removing special trailing chars (e.g. "ARANDA!" -> "ARANDA")
+  if (entrega.vendedor !== undefined) {
+    entrega.vendedor = sanitizeName(entrega.vendedor);
+  }
+  if (entrega.motorista !== undefined) {
+    entrega.motorista = sanitizeName(entrega.motorista);
+  }
+  if (entrega.cliente !== undefined) {
+    entrega.cliente = sanitizeName(entrega.cliente);
+  }
+
   const uid = auth.currentUser?.uid || 'system_operator';
 
   // Search existing for possible merged duplicates (100% match requirement)
@@ -948,14 +969,17 @@ export function getUniqueVendedores(): string[] {
       const parts = e.vendedor.split(/[\/\-\\]/);
       let p = (parts[0] || '').trim().toUpperCase();
       if (p === 'MÔNICA') p = 'MONICA';
-      return p;
+      return sanitizeName(p);
     })
     .filter(Boolean);
   return Array.from(new Set(list));
 }
 
 export function getUniqueClientes(): { nome: string; tel: string }[] {
-  const list = cachedEntregas.map(e => ({ nome: e.cliente, tel: e.tel_cliente }));
+  const list = cachedEntregas.map(e => ({ 
+    nome: sanitizeName(e.cliente), 
+    tel: e.tel_cliente 
+  }));
   const seen = new Set<string>();
   const res: { nome: string; tel: string }[] = [];
   for (const item of list) {
@@ -968,7 +992,10 @@ export function getUniqueClientes(): { nome: string; tel: string }[] {
 }
 
 export function getUniqueMotoristas(): { nome: string; tel: string }[] {
-  const list = cachedEntregas.map(e => ({ nome: e.motorista, tel: e.tel_motorista }));
+  const list = cachedEntregas.map(e => ({ 
+    nome: sanitizeName(e.motorista), 
+    tel: e.tel_motorista 
+  }));
   const seen = new Set<string>();
   const res: { nome: string; tel: string }[] = [];
   for (const item of list) {

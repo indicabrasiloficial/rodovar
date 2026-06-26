@@ -47,7 +47,9 @@ import {
   Bot,
   Database,
   Globe,
-  CheckSquare
+  CheckSquare,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -62,6 +64,7 @@ export default function App() {
 
   const [entregas, setEntregas] = useState<Entrega[]>([]);
   const [selectedView, setSelectedView] = useState<ViewMode>('rastrear');
+  const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [selectedEntregaId, setSelectedEntregaId] = useState<string | undefined>(undefined);
   const [editingEntregaId, setEditingEntregaId] = useState<string | undefined>(undefined);
 
@@ -513,257 +516,285 @@ export default function App() {
       {/* Top Header Rail bar structure (High Density Theme) */}
       <header className="border-b border-zinc-800 bg-[#0a0a0a] sticky top-0 z-[1010] backdrop-blur-md">
         {/* Mobile and Tablet Header Container (lg:hidden) */}
-        <div className="lg:hidden max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4 h-auto md:h-16">
+        <div className="lg:hidden max-w-7xl mx-auto px-4 py-3 flex flex-col gap-3">
           
-          {/* Logo and Branding exactly from design specifications */}
-          <div className="flex items-center gap-3.5 cursor-pointer select-none" onClick={() => setSelectedView('list')}>
-            <img 
-              src="https://rodovar.com.br/wp-content/uploads/2026/02/logo.png" 
-              alt="Rodovar" 
-              className="h-8 lg:h-10 w-auto transition-transform hover:scale-105 object-contain" 
-              referrerPolicy="no-referrer"
-            />
-            <div className="hidden sm:block">
-              <h1 className="text-base lg:text-lg font-black tracking-tighter text-[#FFD600] flex items-center gap-2 m-0 leading-none">
-                RODOVAR MONITORA
-              </h1>
+          {/* Row 1: Logo and Quick User Actions */}
+          <div className="flex items-center justify-between w-full pb-2 border-b border-zinc-900">
+            {/* Logo and Branding exactly from design specifications */}
+            <div className="flex items-center gap-2 cursor-pointer select-none shrink-0" onClick={() => setSelectedView('list')}>
+              <img 
+                src="https://rodovar.com.br/wp-content/uploads/2026/02/logo.png" 
+                alt="Rodovar" 
+                className="h-8 w-auto object-contain shrink-0" 
+                referrerPolicy="no-referrer"
+              />
+              <div className="hidden sm:block shrink-0">
+                <h1 className="text-sm font-black tracking-tight text-[#FFD600] m-0 leading-none">
+                  RODOVAR MONITORA
+                </h1>
+              </div>
+            </div>
+
+            {/* Compact Right Side Actions */}
+            <div className="flex items-center gap-2">
+              {/* Mute Speech Button */}
+              <button
+                onClick={toggleMuteSpeech}
+                className={`p-1.5 px-2.5 border rounded transition-all cursor-pointer h-8 flex items-center gap-1 text-[9px] uppercase font-mono font-bold ${
+                  isSpeechMuted 
+                    ? 'bg-red-950/20 text-red-400 border-red-900/60' 
+                    : 'bg-emerald-950/15 text-emerald-400 border-emerald-900/60'
+                }`}
+                title={isSpeechMuted ? "Fala desativada" : "Fala ativa"}
+                id="mute-speech-toggle-btn"
+              >
+                {isSpeechMuted ? <VolumeX className="w-3.5 h-3.5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+                <span className="hidden sm:inline">{isSpeechMuted ? "MUDO" : "FALA"}</span>
+              </button>
+
+              {/* User badge */}
+              <div className="flex items-center gap-1.5 bg-zinc-900/40 p-1 pr-2 rounded-lg border border-zinc-850">
+                <div className="w-6 h-6 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800 font-bold text-[9px] text-[#FFD600]" title={user.displayName}>
+                  {user.displayName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                </div>
+                <span className="text-[10px] font-bold text-zinc-300 hidden sm:inline">{user.displayName.split(' ')[0]}</span>
+                
+                {/* Password Change Button */}
+                <button
+                  onClick={() => setIsChangePasswordOpen(true)}
+                  className="p-1 text-zinc-400 hover:text-[#FFD600] transition-colors cursor-pointer ml-1"
+                  title="Alterar Senha"
+                >
+                  <Lock className="w-3 h-3 text-[#FFD600]" />
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="p-1 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
+                  title="Sair do Sistema"
+                >
+                  <LogOut className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Navigation with High Density spacing and optimized compact sizing */}
-          <nav className="flex items-center flex-wrap justify-center gap-2 md:gap-1.5">
-            
-            {/* Nav List - Highly Prominent Premium Highlighted Operational Button */}
+          {/* Row 2: Core Primary Navigation (Segmented Grid Control) */}
+          <div className="grid grid-cols-4 gap-1 w-full bg-zinc-950/80 p-1.5 rounded-xl border border-zinc-900">
+            {/* Cargas */}
             <button
               onClick={() => setSelectedView('list')}
-              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+              className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                 selectedView === 'list' || selectedView === 'details'
-                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
-                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+                ? 'bg-[#FFD600] text-black shadow-md font-extrabold' 
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
               }`}
               id="nav-list"
             >
-              <Truck className="w-4 h-4 shrink-0 text-inherit" />
-              <span>Cargas</span>
+              <Truck className="w-4 h-4 shrink-0" />
+              <span className="text-[9px]">Cargas</span>
             </button>
 
-            {/* Nav Rastreio - Public tracking button as requested in Alteração 3 */}
+            {/* Colaborador */}
             <button
               onClick={() => setSelectedView('rastrear')}
-              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+              className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                 selectedView === 'rastrear'
-                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
-                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+                ? 'bg-[#FFD600] text-black shadow-md font-extrabold' 
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
               }`}
               id="nav-rastrear"
             >
-              <Globe className="w-4 h-4 shrink-0 text-inherit" />
-              <span>Colaborador</span>
+              <Globe className="w-4 h-4 shrink-0" />
+              <span className="text-[9px]">Equipe</span>
             </button>
 
-            {/* Nav Dashboard - Highly Prominent Premium Highlighted Operational Button */}
+            {/* Painel */}
             <button
               onClick={() => setSelectedView('dashboard')}
-              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+              className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                 selectedView === 'dashboard'
-                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
-                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+                ? 'bg-[#FFD600] text-black shadow-md font-extrabold' 
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
               }`}
               id="nav-dashboard"
             >
-              <LayoutDashboard className="w-4 h-4 shrink-0 text-inherit" />
-              <span>Painel</span>
+              <LayoutDashboard className="w-4 h-4 shrink-0" />
+              <span className="text-[9px]">Painel</span>
             </button>
 
-            {/* Agenda Navigation Button (replaces Painel Operador) */}
+            {/* Agenda */}
             <button
               onClick={() => {
                 setSelectedView('agenda');
                 window.history.pushState({ path: '/agenda' }, '', '/agenda');
               }}
-              className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-xs sm:text-xs md:text-sm font-black font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 border hover:scale-105 shadow-lg ${
+              className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                 selectedView === 'agenda'
-                ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] shadow-[0_0_15px_rgba(255,214,0,0.35)]' 
-                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-[#FFD600] hover:border-[#FFD600]'
+                ? 'bg-[#FFD600] text-black shadow-md font-extrabold' 
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
               }`}
               id="nav-agenda"
             >
-              <BookOpen className="w-4 h-4 shrink-0 text-inherit animate-pulse" />
-              <span>Agenda</span>
+              <BookOpen className="w-4 h-4 shrink-0" />
+              <span className="text-[9px]">Agenda</span>
             </button>
+          </div>
 
-            {/* Nav Stats */}
+          {/* Row 3: Collapsible Secondary Tools Accordion */}
+          <div className="w-full">
             <button
-              onClick={() => setSelectedView('statistics')}
-              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
-                selectedView === 'statistics' 
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              onClick={() => setIsToolsExpanded(!isToolsExpanded)}
+              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-[10px] uppercase font-mono font-bold transition-all ${
+                isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration'].includes(selectedView)
+                  ? 'bg-zinc-900 border-zinc-850 text-[#FFD600]'
+                  : 'bg-zinc-950/50 border-zinc-900 text-zinc-400 hover:text-white'
               }`}
-              id="nav-stats"
             >
-              <BarChart3 className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">Desempenho</span>
-              <span className="inline sm:hidden">Desemp.</span>
+              <span className="flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-[#FFD600]" />
+                {['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration'].includes(selectedView)
+                  ? `Ferramenta: ${selectedView.toUpperCase()}`
+                  : 'Mais Ferramentas & Suporte'}
+              </span>
+              {isToolsExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
 
-            {/* Nav WhatsApp */}
-            <button
-              onClick={() => setSelectedView('whatsapp')}
-              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
-                selectedView === 'whatsapp' 
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
-                : 'text-[#0a0a0a]-400 text-zinc-400 hover:text-white hover:bg-zinc-900/60'
-              }`}
-              id="nav-whatsapp"
-            >
-              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">AgenteZAP</span>
-              <span className="inline sm:hidden">Zap</span>
-            </button>
+            <AnimatePresence>
+              {(isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration'].includes(selectedView)) && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden mt-1.5 bg-zinc-950/90 border border-zinc-900 rounded-xl p-2.5"
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {/* Desempenho */}
+                    <button
+                      onClick={() => setSelectedView('statistics')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        selectedView === 'statistics' 
+                        ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                      }`}
+                      id="nav-stats"
+                    >
+                      <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Desempenho</span>
+                    </button>
 
-            {/* Nav Manager */}
-            <button
-              onClick={() => setSelectedView('manager')}
-              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
-                selectedView === 'manager' 
-                ? 'bg-red-650 text-white font-extrabold shadow-[0_0_12px_rgba(239,68,68,0.2)]' 
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
-              }`}
-              id="nav-manager"
-            >
-              <Shield className="w-3.5 h-3.5 text-red-500 shrink-0" />
-              <span className="hidden sm:inline">Gerente Genivaldo</span>
-              <span className="inline sm:hidden">Suporte</span>
-            </button>
+                    {/* AgenteZAP */}
+                    <button
+                      onClick={() => setSelectedView('whatsapp')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        selectedView === 'whatsapp' 
+                        ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                      }`}
+                      id="nav-whatsapp"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                      <span>AgenteZAP</span>
+                    </button>
 
-            {/* Nav Blacklist */}
-            <button
-              onClick={() => setSelectedView('blacklist')}
-              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
-                selectedView === 'blacklist' 
-                ? 'bg-red-650 text-white font-extrabold shadow-[0_0_12px_rgba(239,68,68,0.2)]' 
-                : 'text-zinc-400 hover:text-white hover:bg-[#181010]/60'
-              }`}
-              id="nav-blacklist"
-            >
-              <UserX className="w-3.5 h-3.5 text-red-500 shrink-0" />
-              <span className="hidden sm:inline">Lista Negra</span>
-              <span className="inline sm:hidden">Negra</span>
-            </button>
+                    {/* Gerente Genivaldo */}
+                    <button
+                      onClick={() => setSelectedView('manager')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        selectedView === 'manager' 
+                        ? 'bg-red-950/30 text-red-400 border-red-900/40 font-black' 
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                      }`}
+                      id="nav-manager"
+                    >
+                      <Shield className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                      <span>Gerente</span>
+                    </button>
 
-            {/* Nav Manual */}
-            <button
-              onClick={() => setSelectedView('manual')}
-              className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
-                selectedView === 'manual' 
-                ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
-              }`}
-              id="nav-manual"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
-              <span className="hidden sm:inline">Manual Agente</span>
-              <span className="inline sm:hidden">Manual</span>
-            </button>
+                    {/* Lista Negra */}
+                    <button
+                      onClick={() => setSelectedView('blacklist')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        selectedView === 'blacklist' 
+                        ? 'bg-red-950/30 text-red-400 border-red-900/40 font-black' 
+                        : 'text-zinc-400 hover:text-white hover:bg-[#181010]/60 border-transparent'
+                      }`}
+                      id="nav-blacklist"
+                    >
+                      <UserX className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                      <span>Lista Negra</span>
+                    </button>
 
-            {/* Nav Backup */}
-            {user && (user.username === 'master' || user.role === 'Master') && (
-              <button
-                onClick={() => setSelectedView('backup')}
-                className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
-                  selectedView === 'backup' 
-                  ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
-                }`}
-                id="nav-backup"
-              >
-                <Database className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
-                <span className="hidden sm:inline">Backup Central</span>
-                <span className="inline sm:hidden">Backup</span>
-              </button>
-            )}
+                    {/* Manual Agente */}
+                    <button
+                      onClick={() => setSelectedView('manual')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        selectedView === 'manual' 
+                        ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                      }`}
+                      id="nav-manual"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                      <span>Manual Agente</span>
+                    </button>
 
-            {/* Nav Registration */}
-            {user && (user.username === 'master' || user.role === 'Master') && (
-              <button
-                onClick={() => setSelectedView('registration')}
-                className={`px-2 py-1.5 md:px-2 md:py-1 rounded-lg text-[10px] md:text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1 ${
-                  selectedView === 'registration' 
-                  ? 'bg-[#FFD600] text-[#0a0a0a] font-extrabold shadow-[0_0_12px_rgba(255,214,0,0.2)]' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
-                }`}
-                id="nav-registration"
-              >
-                <Users className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
-                <span className="hidden sm:inline">Cadastro</span>
-                <span className="inline sm:hidden">Cad.</span>
-              </button>
-            )}
+                    {/* Backup Central (Admin-only) */}
+                    {user && (user.username === 'master' || user.role === 'Master') && (
+                      <button
+                        onClick={() => setSelectedView('backup')}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          selectedView === 'backup' 
+                          ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                        }`}
+                        id="nav-backup"
+                      >
+                        <Database className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                        <span>Backup Central</span>
+                      </button>
+                    )}
 
-             {/* Floating Quick Action removed to prioritize only importing */}
+                    {/* Cadastro (Admin-only) */}
+                    {user && (user.username === 'master' || user.role === 'Master') && (
+                      <button
+                        onClick={() => setSelectedView('registration')}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          selectedView === 'registration' 
+                          ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                        }`}
+                        id="nav-registration"
+                      >
+                        <Users className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                        <span>Cadastro Colab.</span>
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-          </nav>
-
-          {/* High Density Right Side Info Items */}
-          <div className="flex items-center gap-3.5">
-            {/* Tracking Frequency Mode Selector */}
-            <TrackingModeSelector />
-
-            {/* Mute Speech Button */}
-            <button
-              onClick={toggleMuteSpeech}
-              className={`p-1.5 px-3 border rounded transition-all cursor-pointer h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold ${
-                isSpeechMuted 
-                  ? 'bg-red-950/20 text-red-400 border-red-900/60 hover:text-red-305' 
-                  : 'bg-emerald-950/15 text-emerald-400 border-emerald-900/60 hover:text-emerald-305'
-              }`}
-              title={isSpeechMuted ? "Fala desativada temporariamente. Clique para reativar." : "Fala ativa. Clique para desativar temporariamente."}
-              id="mute-speech-toggle-btn"
-            >
-              {isSpeechMuted ? <VolumeX className="w-3.5 h-3.5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
-              <span className="hidden md:inline">{isSpeechMuted ? "FALA DESATIVADA" : "FALA ATIVA"}</span>
-            </button>
-
-            {/* Cadastrar Carga Button */}
-            <button
-              onClick={handleAddNewDelivery}
-              className="flex items-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-full px-4 py-1.5 gap-1.5 transition-all text-[10px] font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.15)] hover:scale-[1.02] active:scale-95"
-              id="global-cadastrar-btn"
-            >
-              <Truck className="w-3.5 h-3.5 text-black shrink-0" />
-              <span>Cadastrar Carga</span>
-            </button>
-
-            {/* User badge customized */}
-            <div className="flex items-center gap-2.5 border-l border-zinc-800 pl-4">
-              <div className="text-right hidden sm:block">
-                <p className="text-xs font-bold leading-none uppercase text-zinc-200 m-0">{user.displayName}</p>
-                <p className="text-[9px] text-zinc-500 font-mono leading-none mt-1 mb-0">{user.role}</p>
-              </div>
-              <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800 font-bold text-xs text-[#FFD600]" title={user.displayName}>
-                {user.displayName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
-              </div>
-              
-              {/* Password Change Button */}
-              <button
-                onClick={() => setIsChangePasswordOpen(true)}
-                className="p-1 px-2.5 border border-zinc-800 hover:border-[#FFD600] text-zinc-400 hover:text-[#FFD600] bg-zinc-900/40 rounded transition-colors cursor-pointer ml-1 h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold"
-                title="Alterar Senha"
-              >
-                <Lock className="w-3 h-3 text-[#FFD600]" />
-                <span className="hidden md:inline">Senha</span>
-              </button>
-
-              <button
-                onClick={handleLogout}
-                className="p-1 px-2 border border-zinc-800 hover:border-red-900 text-zinc-400 hover:text-red-400 bg-zinc-900/40 rounded transition-colors cursor-pointer h-8 flex items-center"
-                title="Sair do Sistema"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
+          {/* Row 4: Tracking frequency (Sinc. Nuvem) & Cadastrar Carga Button */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full items-stretch border-t border-zinc-900 pt-3">
+            {/* Left Col: Tracking frequency selector */}
+            <div className="w-full flex justify-center">
+              <TrackingModeSelector />
             </div>
 
+            {/* Right Col: Cadastrar Carga Button */}
+            <div className="flex items-center justify-center">
+              <button
+                onClick={handleAddNewDelivery}
+                className="w-full h-11 flex items-center justify-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-xl gap-2 transition-all text-xs font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.2)] active:scale-95"
+                id="global-cadastrar-btn"
+              >
+                <Truck className="w-4 h-4 text-black shrink-0 animate-bounce" />
+                <span>Cadastrar Carga</span>
+              </button>
+            </div>
           </div>
 
         </div>

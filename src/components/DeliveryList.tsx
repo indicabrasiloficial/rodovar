@@ -1936,14 +1936,15 @@ Tenha uma ótima e segura viagem!`;
                           </button>
                         )}
 
-                        {/* WhatsApp Motorista - Enviar Link GPS */}
+                        {/* WhatsApp Motorista */}
                         <button
                           onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
                           className="p-1 px-2 rounded bg-emerald-950/40 hover:bg-emerald-600 hover:text-black border border-emerald-800 text-emerald-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
                           id={`list-action-wa-motorista-mobile-${e.id}`}
-                          title="Enviar Link de Rastreamento GPS ao Motorista"
+                          title="Falar com o Motorista no WhatsApp"
                         >
-                          <span>🛰️ Link GPS</span>
+                          <Phone className="w-2.5 h-2.5" />
+                          <span>Motorista</span>
                         </button>
 
                         {/* WhatsApp Cliente */}
@@ -2176,14 +2177,15 @@ Tenha uma ótima e segura viagem!`;
                               </button>
                             )}
 
-                            {/* WhatsApp Motorista - Enviar Link GPS */}
+                            {/* WhatsApp Motorista */}
                             <button
                               onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
                               className="p-1 px-1.5 rounded bg-emerald-950/40 hover:bg-emerald-600 hover:text-black border border-emerald-800 text-emerald-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                              title="Enviar Link de Rastreamento GPS ao Motorista"
+                              title="Falar com o Motorista no WhatsApp"
                               id={`list-action-wa-motorista-${e.id}`}
                             >
-                              <span>🛰️ Link GPS</span>
+                              <Phone className="w-2.5 h-2.5" />
+                              <span>Motorista</span>
                             </button>
 
                             {/* WhatsApp Cliente */}
