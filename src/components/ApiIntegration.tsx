@@ -44,6 +44,7 @@ interface ApiSettings {
   ufsFiltro: string; // e.g. "SP, RJ, MG"
   ocultarFinanceiro: boolean; // Frete Empresa, Frete Motorista
   ocultarContatos: boolean;  // Telefones
+  modoCORSCompativel?: boolean; // Compatibilidade de CORS para Vercel
 }
 
 export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProps) {
@@ -70,6 +71,7 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
     ufsFiltro: '',
     ocultarFinanceiro: true,
     ocultarContatos: false,
+    modoCORSCompativel: false,
   });
 
   // Playground simulation states
@@ -97,7 +99,8 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
               parado: data.statusFiltro?.parado ?? true,
               descarregando: data.statusFiltro?.descarregando ?? true,
               entregue: data.statusFiltro?.entregue ?? false,
-            }
+            },
+            modoCORSCompativel: data.modoCORSCompativel ?? false
           });
         } else {
           // Check if local cache has some values
@@ -316,35 +319,42 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
             if (useFallback) {
               log('Ambiente sem servidor proxy ativo (ex: Vercel). Realizando envio direto pelo navegador...', 'info');
               
-              const directHeaders: Record<string, string> = {
-                'Content-Type': 'application/json'
-              };
-              if (settings.apiToken) {
-                directHeaders['Authorization'] = `Bearer ${settings.apiToken}`;
-              }
-              if (settings.webhookSecret) {
-                try {
-                  const encoder = new TextEncoder();
-                  const keyData = encoder.encode(settings.webhookSecret);
-                  const messageData = encoder.encode(JSON.stringify(payloadObj));
-                  const cryptoKey = await window.crypto.subtle.importKey(
-                    'raw',
-                    keyData,
-                    { name: 'HMAC', hash: 'SHA-256' },
-                    false,
-                    ['sign']
-                  );
-                  const signatureBuffer = await window.crypto.subtle.sign(
-                    'HMAC',
-                    cryptoKey,
-                    messageData
-                  );
-                  const signatureArray = Array.from(new Uint8Array(signatureBuffer));
-                  const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
-                  directHeaders['X-Rodovar-Signature'] = signatureHex;
-                } catch (cryptoErr) {
-                  console.warn('Erro ao gerar assinatura HMAC no navegador:', cryptoErr);
-                  directHeaders['X-Rodovar-Signature'] = 'browser-fallback-signature';
+              const directHeaders: Record<string, string> = {};
+              
+              if (settings.modoCORSCompativel) {
+                log('⚡ [MODO COMPATIBILIDADE CORS ATIVO] Otimizando requisição para contornar bloqueio do navegador...', 'success');
+                log('-> Definido Content-Type como "text/plain" para evitar requisição de pré-vôo OPTIONS (CORS Preflight).', 'info');
+                log('-> Omitidos cabeçalhos customizados (Authorization / X-Rodovar-Signature) temporariamente para garantir entrega direta.', 'info');
+                directHeaders['Content-Type'] = 'text/plain';
+              } else {
+                directHeaders['Content-Type'] = 'application/json';
+                if (settings.apiToken) {
+                  directHeaders['Authorization'] = `Bearer ${settings.apiToken}`;
+                }
+                if (settings.webhookSecret) {
+                  try {
+                    const encoder = new TextEncoder();
+                    const keyData = encoder.encode(settings.webhookSecret);
+                    const messageData = encoder.encode(JSON.stringify(payloadObj));
+                    const cryptoKey = await window.crypto.subtle.importKey(
+                      'raw',
+                      keyData,
+                      { name: 'HMAC', hash: 'SHA-256' },
+                      false,
+                      ['sign']
+                    );
+                    const signatureBuffer = await window.crypto.subtle.sign(
+                      'HMAC',
+                      cryptoKey,
+                      messageData
+                    );
+                    const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+                    const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                    directHeaders['X-Rodovar-Signature'] = signatureHex;
+                  } catch (cryptoErr) {
+                    console.warn('Erro ao gerar assinatura HMAC no navegador:', cryptoErr);
+                    directHeaders['X-Rodovar-Signature'] = 'browser-fallback-signature';
+                  }
                 }
               }
 
@@ -704,6 +714,27 @@ echo json_encode(["status" => "ok", "message" => "Carga integrada"]);
                       placeholder="Ex: https://api.sistema-cliente.com.br/webhooks/rodovar-receiver"
                     />
                     <span className="text-[9px] text-zinc-500 font-mono leading-relaxed block">Endereço HTTP do SISTEMA-CLIENTE que receberá requisições POST com o payload a cada atualização de viagem.</span>
+                  </div>
+
+                  {/* CORS Compatibility Toggle */}
+                  <div className="md:col-span-2 bg-[#FFD600]/5 border border-[#FFD600]/20 rounded-xl p-4 space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={settings.modoCORSCompativel || false}
+                        onChange={(e) => setSettings({ ...settings, modoCORSCompativel: e.target.checked })}
+                        className="rounded bg-[#0a0a0a] border-zinc-800 text-[#FFD600] focus:ring-0 cursor-pointer w-4 h-4"
+                      />
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-mono uppercase font-extrabold text-[#FFD600] flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5 animate-pulse" />
+                          Ativar Modo de Compatibilidade CORS (Vercel / Testes Rápidos)
+                        </span>
+                        <p className="text-[10px] text-zinc-400 font-sans leading-relaxed">
+                          Recomendado para servidores de teste como <strong>webhook.site</strong> e hospedagem sem proxy (Vercel estático). Bypassa o bloqueio <em>CORS Preflight</em> do navegador enviando dados como <code>text/plain</code> e omitindo cabeçalhos customizados temporariamente.
+                        </p>
+                      </div>
+                    </label>
                   </div>
 
                   {/* API Bearer Token */}
