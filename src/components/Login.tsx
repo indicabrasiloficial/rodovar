@@ -28,8 +28,6 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
     // Load custom registered employees
     const DEFAULT_EMPLOYEES_LOCAL = [
       { name: 'Jairo Bahia', username: 'jairobahia', role: 'Operador', passwordHash: 'Danone01' },
-      { name: 'Mateus', username: 'mateus', role: 'Operador', passwordHash: '102030' },
-      { name: 'Priscila', username: 'priscila', role: 'Operador', passwordHash: '203040' },
       { name: 'Genivaldo', username: 'genivaldo', role: 'Gerente', passwordHash: 'rodovar2026' },
       { name: 'Alexandre', username: 'alexandre', role: 'Diretor Comercial', passwordHash: 'rodovar2026' },
       { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
@@ -45,14 +43,6 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
         // Ensure Ricardo exists in loaded custom employees as well
         if (!currentEmployees.some((emp: any) => emp.username === 'ricardo')) {
           currentEmployees.push({ name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações', passwordHash: 'rodovar2026' });
-        }
-        // Ensure Mateus exists in loaded custom employees as well
-        if (!currentEmployees.some((emp: any) => emp.username === 'mateus')) {
-          currentEmployees.push({ name: 'Mateus', username: 'mateus', role: 'Operador', passwordHash: '102030' });
-        }
-        // Ensure Priscila exists in loaded custom employees as well
-        if (!currentEmployees.some((emp: any) => emp.username === 'priscila')) {
-          currentEmployees.push({ name: 'Priscila', username: 'priscila', role: 'Operador', passwordHash: '203040' });
         }
       } catch {
         currentEmployees = DEFAULT_EMPLOYEES_LOCAL;

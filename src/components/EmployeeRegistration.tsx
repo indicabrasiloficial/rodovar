@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserPlus, UserX, Shield, Key, Eye, EyeOff, Save, CheckCircle, Users } from 'lucide-react';
+import { sendGroupChatMessage, deletePresence, kickUser } from '../db/storage';
 
 export interface Employee {
   id: string;
@@ -13,8 +14,6 @@ export interface Employee {
 
 const DEFAULT_PASSWORDS: Record<string, string> = {
   'jairobahia': 'Danone01',
-  'mateus': '102030',
-  'priscila': '203040',
   'genivaldo': 'rodovar2026',
   'alexandre': 'rodovar2026',
   'vitor': 'rodovar2026',
@@ -30,22 +29,6 @@ const DEFAULT_EMPLOYEES: Employee[] = [
     username: 'jairobahia',
     role: 'Operador',
     passwordHash: 'Danone01',
-    created_at: '2026-01-01'
-  },
-  {
-    id: 'emp-mateus',
-    name: 'Mateus',
-    username: 'mateus',
-    role: 'Operador',
-    passwordHash: '102030',
-    created_at: '2026-01-01'
-  },
-  {
-    id: 'emp-priscila',
-    name: 'Priscila',
-    username: 'priscila',
-    role: 'Operador',
-    passwordHash: '203040',
     created_at: '2026-01-01'
   },
   {
@@ -115,33 +98,8 @@ export function getRegisteredEmployees(): Employee[] {
     localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
   }
 
-  // Guarantee Mateus is present (Operador)
-  const hasMateus = list.some(emp => emp.username === 'mateus');
-  if (!hasMateus) {
-    list.push({
-      id: 'emp-mateus',
-      name: 'Mateus',
-      username: 'mateus',
-      role: 'Operador',
-      passwordHash: '102030',
-      created_at: '2026-01-01'
-    });
-    localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
-  }
-
-  // Guarantee Priscila is present (Operador)
-  const hasPriscila = list.some(emp => emp.username === 'priscila');
-  if (!hasPriscila) {
-    list.push({
-      id: 'emp-priscila',
-      name: 'Priscila',
-      username: 'priscila',
-      role: 'Operador',
-      passwordHash: '203040',
-      created_at: '2026-01-01'
-    });
-    localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
-  }
+  // Filter out Priscila and Mateus from custom lists if they were already saved in local storage to meet user request fully
+  list = list.filter(emp => emp.username !== 'mateus' && emp.username !== 'priscila');
 
   // Guarantee master user is always filtered out and never listed
   return list.filter(emp => emp.username !== 'master');
@@ -254,6 +212,16 @@ export default function EmployeeRegistration() {
     setEmployees(updated);
     saveRegisteredEmployees(updated);
 
+    // Automatically send notification to the operational group chat
+    sendGroupChatMessage({
+      category: 'operacional',
+      text: `👤 *NOVO COLABORADOR CREDENCIADO*\n• *Nome:* ${cleanName}\n• *Usuário:* ${baseUsername}\n• *Função / Perfil:* ${role}\n• *Cadastrado por:* ${currentUser?.displayName || currentUser?.name || 'Sistema'}`,
+      userId: currentUser?.username || 'sistema',
+      userName: currentUser?.displayName || currentUser?.name || 'Sistema',
+      userRole: currentUser?.role || 'Sistema',
+      timestamp: new Date().toISOString()
+    }).catch(err => console.error("Error sending register notification to chat:", err));
+
     setName('');
     setPassword('');
     setSuccessMsg(`Colaborador ${cleanName} cadastrado com sucesso! Usuário de acesso: "${baseUsername}" | Senha geradora: "${cleanPassword}" (Anote-a, pois ela não será exibida na listagem permanente por segurança)`);
@@ -282,6 +250,20 @@ export default function EmployeeRegistration() {
     setEmployees(updated);
     saveRegisteredEmployees(updated);
     setSuccessMsg(`Registro de ${empName} removido com sucesso.`);
+
+    // Remove presence and kick deleted user immediately
+    deletePresence(empUsername).catch(() => {});
+    kickUser(empUsername).catch(() => {});
+
+    // Automatically send notification to the operational group chat
+    sendGroupChatMessage({
+      category: 'operacional',
+      text: `🚫 *COLABORADOR DESCREDENCIADO*\n• *Nome:* ${empName}\n• *Usuário:* ${empUsername}\n• *Removido por:* ${currentUser?.displayName || currentUser?.name || 'Sistema'}`,
+      userId: currentUser?.username || 'sistema',
+      userName: currentUser?.displayName || currentUser?.name || 'Sistema',
+      userRole: currentUser?.role || 'Sistema',
+      timestamp: new Date().toISOString()
+    }).catch(err => console.error("Error sending deletion notification to chat:", err));
 
     if (window.falarRodovar) {
       window.falarRodovar(`Colaborador ${empName} descredenciado.`);

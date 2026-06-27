@@ -11,7 +11,8 @@ import {
   clearEditLock,
   getBlacklist,
   subscribeToBlacklistRealtime,
-  getEntregas
+  getEntregas,
+  sendGroupChatMessage
 } from '../db/storage';
 import { geocodeCity } from '../db/geocoder';
 import { 
@@ -357,6 +358,18 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
 
     const saved = saveEntrega(payload);
     setIsGeocoding(false);
+
+    if (!isEditMode) {
+      sendGroupChatMessage({
+        id: 'carga-msg-' + saved.id,
+        category: 'operacional',
+        text: `📢 *NOVA CARGA CADASTRADA*\n• *Cliente:* ${saved.cliente || 'Sem cliente'}\n• *Destino:* ${saved.destino || 'Sem destino'}\n• *Motorista:* ${saved.motorista || 'A definir'}\n• *Vendedor:* ${saved.vendedor || 'A definir'}\n• *Valor do Frete:* R$ ${saved.frete_empresa ? Number(saved.frete_empresa).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}`,
+        userId: activeUser.username,
+        userName: activeUser.displayName,
+        userRole: activeUser.role,
+        timestamp: new Date().toISOString()
+      }).catch(err => console.error("Error sending chat msg:", err));
+    }
 
     if (window.falarRodovar) {
       if (isEditMode) {

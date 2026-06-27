@@ -302,8 +302,6 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
   const getEmployeesBySegment = () => {
     const defaultList = [
       { name: 'Jairo Bahia', username: 'jairobahia', role: 'Operador' },
-      { name: 'Priscila', username: 'priscila', role: 'Operador' },
-      { name: 'Mateus', username: 'mateus', role: 'Operador' },
       { name: 'Genivaldo', username: 'genivaldo', role: 'Gerente' },
       { name: 'Alexandre', username: 'alexandre', role: 'Diretor Comercial' },
       { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações' },

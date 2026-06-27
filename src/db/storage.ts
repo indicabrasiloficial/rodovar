@@ -840,6 +840,9 @@ export function deleteEntrega(id: string): boolean {
       deleteDoc(doc(db, MESSAGES_COLLECTION, m.id)).catch(() => {});
     });
 
+    // Cascade delete related group chat message
+    deleteGroupChatMessage('carga-msg-' + id).catch(() => {});
+
     return true;
   }
   return false;
@@ -874,6 +877,11 @@ export function deleteEntregasBulk(ids: string[]): boolean {
       });
       msgBatch.commit().catch(() => {});
     }
+
+    // Cascade delete related group chat messages
+    ids.forEach(id => {
+      deleteGroupChatMessage('carga-msg-' + id).catch(() => {});
+    });
 
     return true;
   }
@@ -1398,6 +1406,14 @@ export async function updatePresence(username: string, displayName: string, role
     lastActive: new Date().toISOString()
   };
   await setDoc(doc(db, PRESENCE_COLLECTION, cleanId), payload).catch((error) => {
+    handleFirestoreError(error, OperationType.WRITE, `${PRESENCE_COLLECTION}/${cleanId}`);
+  });
+}
+
+export async function deletePresence(username: string): Promise<void> {
+  if (!username) return;
+  const cleanId = username.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  await deleteDoc(doc(db, PRESENCE_COLLECTION, cleanId)).catch((error) => {
     handleFirestoreError(error, OperationType.WRITE, `${PRESENCE_COLLECTION}/${cleanId}`);
   });
 }

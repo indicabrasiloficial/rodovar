@@ -43,8 +43,6 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
     // Load passwords list
     const defaults: Record<string, string> = {
       'jairobahia': 'Danone01',
-      'mateus': '102030',
-      'priscila': '203040',
       'genivaldo': 'rodovar2026',
       'alexandre': 'rodovar2026',
       'vitor': 'rodovar2026',
