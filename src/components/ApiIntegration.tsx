@@ -285,21 +285,85 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
           log('Calculando assinatura de cabeçalho X-Rodovar-Signature e Bearer Token...', 'info');
           
           try {
-            const res = await fetch('/api/webhook/dispatch', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                url: settings.apiUrl,
-                payload: payloadObj,
-                secret: settings.webhookSecret,
-                apiToken: settings.apiToken
-              })
-            });
+            let resData: any = null;
+            let useFallback = false;
 
-            const resData = await res.json();
-            
+            try {
+              const res = await fetch('/api/webhook/dispatch', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  url: settings.apiUrl,
+                  payload: payloadObj,
+                  secret: settings.webhookSecret,
+                  apiToken: settings.apiToken
+                })
+              });
+
+              const contentType = res.headers.get('content-type') || '';
+              if (res.status === 404 || !contentType.includes('application/json')) {
+                useFallback = true;
+              } else {
+                resData = await res.json();
+              }
+            } catch (e) {
+              console.warn('Erro ao chamar proxy do servidor, tentando fallback direto:', e);
+              useFallback = true;
+            }
+
+            if (useFallback) {
+              log('Ambiente sem servidor proxy ativo (ex: Vercel). Realizando envio direto pelo navegador...', 'info');
+              
+              const directHeaders: Record<string, string> = {
+                'Content-Type': 'application/json'
+              };
+              if (settings.apiToken) {
+                directHeaders['Authorization'] = `Bearer ${settings.apiToken}`;
+              }
+              if (settings.webhookSecret) {
+                try {
+                  const encoder = new TextEncoder();
+                  const keyData = encoder.encode(settings.webhookSecret);
+                  const messageData = encoder.encode(JSON.stringify(payloadObj));
+                  const cryptoKey = await window.crypto.subtle.importKey(
+                    'raw',
+                    keyData,
+                    { name: 'HMAC', hash: 'SHA-256' },
+                    false,
+                    ['sign']
+                  );
+                  const signatureBuffer = await window.crypto.subtle.sign(
+                    'HMAC',
+                    cryptoKey,
+                    messageData
+                  );
+                  const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+                  const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                  directHeaders['X-Rodovar-Signature'] = signatureHex;
+                } catch (cryptoErr) {
+                  console.warn('Erro ao gerar assinatura HMAC no navegador:', cryptoErr);
+                  directHeaders['X-Rodovar-Signature'] = 'browser-fallback-signature';
+                }
+              }
+
+              const directRes = await fetch(settings.apiUrl, {
+                method: 'POST',
+                headers: directHeaders,
+                body: JSON.stringify(payloadObj),
+                mode: 'cors'
+              });
+
+              const directText = await directRes.text();
+              resData = {
+                success: directRes.ok,
+                status: directRes.status,
+                statusText: directRes.statusText,
+                data: directText
+              };
+            }
+
             if (resData.success || (resData.status >= 200 && resData.status < 300)) {
               log(`Conexão com ${settings.apiUrl} realizada com sucesso!`, 'success');
               log(`Resposta do SISTEMA-CLIENTE: [HTTP ${resData.status} ${resData.statusText || 'OK'}]`, 'success');

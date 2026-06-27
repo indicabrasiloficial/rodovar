@@ -1562,27 +1562,95 @@ export async function triggerWebhook(carga: Entrega) {
 
     console.log(`[Webhook Auto] Disparando webhook automático para ${settings.apiUrl}`);
 
-    fetch('/api/webhook/dispatch', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        url: settings.apiUrl,
-        payload: payload,
-        secret: settings.webhookSecret,
-        apiToken: settings.apiToken
-      })
-    }).then(res => res.json())
-      .then(resData => {
-        if (resData.success) {
-          console.log(`[Webhook Auto] Webhook entregue com sucesso: HTTP ${resData.status}`);
+    const executeDispatch = async () => {
+      let resData: any = null;
+      let useFallback = false;
+
+      try {
+        const res = await fetch('/api/webhook/dispatch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            url: settings.apiUrl,
+            payload: payload,
+            secret: settings.webhookSecret,
+            apiToken: settings.apiToken
+          })
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (res.status === 404 || !contentType.includes('application/json')) {
+          useFallback = true;
         } else {
-          console.warn(`[Webhook Auto] Falha na entrega: HTTP ${resData.status}. Erro: ${resData.error || resData.data}`);
+          resData = await res.json();
         }
-      }).catch(err => {
-        console.error('[Webhook Auto] Erro de rede ao despachar:', err);
-      });
+      } catch (e) {
+        console.warn('[Webhook Auto] Erro ao chamar proxy do servidor, tentando fallback direto:', e);
+        useFallback = true;
+      }
+
+      if (useFallback) {
+        console.log('[Webhook Auto] Ambiente sem servidor proxy ativo (ex: Vercel). Realizando envio direto pelo navegador...');
+        const directHeaders: Record<string, string> = {
+          'Content-Type': 'application/json'
+        };
+        if (settings.apiToken) {
+          directHeaders['Authorization'] = `Bearer ${settings.apiToken}`;
+        }
+        if (settings.webhookSecret) {
+          try {
+            const encoder = new TextEncoder();
+            const keyData = encoder.encode(settings.webhookSecret);
+            const messageData = encoder.encode(JSON.stringify(payload));
+            const cryptoKey = await window.crypto.subtle.importKey(
+              'raw',
+              keyData,
+              { name: 'HMAC', hash: 'SHA-256' },
+              false,
+              ['sign']
+            );
+            const signatureBuffer = await window.crypto.subtle.sign(
+              'HMAC',
+              cryptoKey,
+              messageData
+            );
+            const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+            const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            directHeaders['X-Rodovar-Signature'] = signatureHex;
+          } catch (cryptoErr) {
+            console.warn('[Webhook Auto] Erro ao gerar assinatura HMAC no navegador:', cryptoErr);
+            directHeaders['X-Rodovar-Signature'] = 'browser-fallback-signature';
+          }
+        }
+
+        const directRes = await fetch(settings.apiUrl, {
+          method: 'POST',
+          headers: directHeaders,
+          body: JSON.stringify(payload),
+          mode: 'cors'
+        });
+
+        const directText = await directRes.text();
+        resData = {
+          success: directRes.ok,
+          status: directRes.status,
+          statusText: directRes.statusText,
+          data: directText
+        };
+      }
+
+      if (resData.success || (resData.status >= 200 && resData.status < 300)) {
+        console.log(`[Webhook Auto] Webhook entregue com sucesso: HTTP ${resData.status}`);
+      } else {
+        console.warn(`[Webhook Auto] Falha na entrega: HTTP ${resData.status}. Erro: ${resData.error || resData.data}`);
+      }
+    };
+
+    executeDispatch().catch(err => {
+      console.error('[Webhook Auto] Erro de rede ao despachar:', err);
+    });
 
   } catch (err) {
     console.error('[Webhook Auto] Erro no fluxo automático:', err);
