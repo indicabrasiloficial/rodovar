@@ -4,6 +4,7 @@ import { Entrega } from '../types';
 import { generateTrackerLink } from '../utils/generateTrackerLink';
 import { useAllDriversTracking } from '../hooks/useAllDriversTracking';
 import { createTruckIcon, getDriverPopupContent } from './MapDriverMarker';
+import { extractCoordsFromLink } from '../db/storage';
 
 interface DeliveryMapProps {
   entregas: Entrega[];
@@ -44,6 +45,29 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       }
     }
     return 'Jairo';
+  };
+
+  const getBestCoords = (entrega: Entrega, liveData?: any) => {
+    // 1. If actively live tracking is running, prioritize it
+    if (liveData) {
+      return { lat: Number(liveData.lat), lng: Number(liveData.lng), source: 'gps' };
+    }
+    
+    // 2. If WhatsApp location link is pasted and is valid, use it
+    if (entrega.link_localizacao) {
+      const waCoords = extractCoordsFromLink(entrega.link_localizacao);
+      if (waCoords) {
+        return { lat: waCoords.lat, lng: waCoords.lng, source: 'whatsapp' };
+      }
+    }
+    
+    // 3. Fallback to localizacaoAtual (from driver app tracking directly in Firestore)
+    if (entrega.localizacaoAtual && entrega.localizacaoAtual.lat && entrega.localizacaoAtual.lng) {
+      return { lat: Number(entrega.localizacaoAtual.lat), lng: Number(entrega.localizacaoAtual.lng), source: 'gps' };
+    }
+    
+    // 4. Default to geocoded origin / destination coordinates
+    return { lat: Number(entrega.lat), lng: Number(entrega.lng), source: 'none' };
   };
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -87,16 +111,16 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
       if (singleView && mapDeliveries.length === 1) {
         const item = mapDeliveries[0];
-        const latVal = (item.localizacaoAtual && item.localizacaoAtual.lat) ? Number(item.localizacaoAtual.lat) : Number(item.lat);
-        const lngVal = (item.localizacaoAtual && item.localizacaoAtual.lng) ? Number(item.localizacaoAtual.lng) : Number(item.lng);
-        initialCenter = [latVal, lngVal];
+        const liveData = liveTrackingData.find(track => track.cargoId.toLowerCase() === item.id.toLowerCase());
+        const best = getBestCoords(item, liveData);
+        initialCenter = [best.lat, best.lng];
         initialZoom = 8;
       } else if (selectedId) {
         const selected = mapDeliveries.find(e => e.id === selectedId);
         if (selected) {
-          const latVal = (selected.localizacaoAtual && selected.localizacaoAtual.lat) ? Number(selected.localizacaoAtual.lat) : Number(selected.lat);
-          const lngVal = (selected.localizacaoAtual && selected.localizacaoAtual.lng) ? Number(selected.localizacaoAtual.lng) : Number(selected.lng);
-          initialCenter = [latVal, lngVal];
+          const liveData = liveTrackingData.find(track => track.cargoId.toLowerCase() === selected.id.toLowerCase());
+          const best = getBestCoords(selected, liveData);
+          initialCenter = [best.lat, best.lng];
           initialZoom = 6;
         }
       }
@@ -133,16 +157,13 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
 
       // Find if this specific delivery has an active live tracking session
       const liveData = liveTrackingData.find(track => track.cargoId.toLowerCase() === entrega.id.toLowerCase());
-      const isLiveGps = !!liveData;
+      const best = getBestCoords(entrega, liveData);
+      lat = best.lat;
+      lng = best.lng;
 
-      if (isLiveGps && liveData) {
-        lat = Number(liveData.lat);
-        lng = Number(liveData.lng);
+      if (liveData) {
         gpsAccuracy = Number(liveData.accuracy || 0);
         lastGpsTimestamp = liveData.timestamp || '';
-      } else if (entrega.localizacaoAtual && entrega.localizacaoAtual.lat && entrega.localizacaoAtual.lng) {
-        lat = Number(entrega.localizacaoAtual.lat);
-        lng = Number(entrega.localizacaoAtual.lng);
       }
 
       if (!lat || !lng) return;
@@ -166,7 +187,7 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       let popupContent = '';
 
       // Build specific Premium Icon and popup details based on GPS Status
-      if (isLiveGps && liveData) {
+      if (liveData) {
         customIcon = createTruckIcon(liveData.liveStatus);
         popupContent = getDriverPopupContent(
           liveData.driver,
@@ -322,18 +343,16 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
     if (singleView && mapDeliveries.length === 1) {
       const item = mapDeliveries[0];
       const liveData = liveTrackingData.find(track => track.cargoId.toLowerCase() === item.id.toLowerCase());
-      const latVal = liveData ? liveData.lat : (item.localizacaoAtual && item.localizacaoAtual.lat) ? Number(item.localizacaoAtual.lat) : Number(item.lat);
-      const lngVal = liveData ? liveData.lng : (item.localizacaoAtual && item.localizacaoAtual.lng) ? Number(item.localizacaoAtual.lng) : Number(item.lng);
+      const best = getBestCoords(item, liveData);
       const currentZoom = map.getZoom() || 8;
-      map.setView([latVal, lngVal], currentZoom);
+      map.setView([best.lat, best.lng], currentZoom);
     } else if (selectedId) {
       const selected = mapDeliveries.find(e => e.id === selectedId);
       if (selected) {
         const liveData = liveTrackingData.find(track => track.cargoId.toLowerCase() === selected.id.toLowerCase());
-        const latVal = liveData ? liveData.lat : (selected.localizacaoAtual && selected.localizacaoAtual.lat) ? Number(selected.localizacaoAtual.lat) : Number(selected.lat);
-        const lngVal = liveData ? liveData.lng : (selected.localizacaoAtual && selected.localizacaoAtual.lng) ? Number(selected.localizacaoAtual.lng) : Number(selected.lng);
+        const best = getBestCoords(selected, liveData);
         const currentZoom = map.getZoom() || 6;
-        map.setView([latVal, lngVal], currentZoom);
+        map.setView([best.lat, best.lng], currentZoom);
       }
     } else if (activeMarkersList.length > 1) {
       const group = L.featureGroup(activeMarkersList);

@@ -37,6 +37,7 @@ import {
   List,
   MessageSquare,
   Clipboard,
+  Newspaper,
   LogOut,
   Lock,
   Shield,

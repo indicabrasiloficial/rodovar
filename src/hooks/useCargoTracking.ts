@@ -82,9 +82,12 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       // Parse WhatsApp link coordinates if present
       const waCoords = entrega.link_localizacao ? extractCoordsFromLink(entrega.link_localizacao) : null;
 
-      if (waCoords && !rtdbConnected) {
-        // If there is a WhatsApp link and the live tracker is disconnected (not actively live),
-        // we prioritize the WhatsApp link coordinates!
+      // Check if there is an active, fresh live GPS transmission right now
+      const isActivelyLiveNow = rtdbConnected === true && (rtdbLat && rtdbLng) && (Date.now() - rtdbTs < 120000);
+
+      if (waCoords && !isActivelyLiveNow) {
+        // If there is a WhatsApp link and we do NOT have an active, fresh live transmission,
+        // we always prioritize the WhatsApp link coordinates!
         selectedLat = waCoords.lat;
         selectedLng = waCoords.lng;
         selectedTs = 0;

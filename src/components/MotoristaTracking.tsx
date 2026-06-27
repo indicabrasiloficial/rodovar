@@ -350,6 +350,39 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
     }
   };
 
+  const getLabelForStatus = (st: string): string => {
+    const labels: Record<string, string> = {
+      coletando: 'Coletando 📦',
+      em_transito: 'Trânsito 🚚',
+      parado: 'Parado 🛑',
+      descarregando: 'Descarregando 🏢',
+      entregue: 'Entregue ✅'
+    };
+    return labels[st] || st;
+  };
+
+  const handleRestartJourney = async () => {
+    if (!delivery || !delivery.id) return;
+    try {
+      // 1. Direct real-time upload to Firestore to change status to 'em_transito'
+      const docRef = doc(db, 'entregas', delivery.id);
+      await updateDoc(docRef, {
+        status: 'em_transito',
+        updated_at: new Date().toISOString()
+      });
+      
+      // 2. Activate tracking instantly
+      startTracking();
+      
+      if (window.falarRodovar) {
+        window.falarRodovar("Viagem iniciada com sucesso! Rastreamento de localização ativado e atualizando no mapa.");
+      }
+    } catch (err: any) {
+      console.error('Error restarting journey:', err);
+      setGpsError('Falha ao reiniciar viagem no servidor central: ' + (err.message || 'Sem permissão'));
+    }
+  };
+
   const formatTime = (isoStr: string | null) => {
     if (!isoStr) return '---';
     try {
@@ -410,6 +443,20 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
 
         {!loading && delivery && (
           <div className="space-y-5 animate-fade-in" id="driver-core-view">
+            
+            {/* Status Banner */}
+            <div className="bg-zinc-950 p-4.5 rounded-2xl border border-zinc-900 shadow-xl flex items-center justify-between gap-3" id="driver-status-banner">
+              <span className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 font-bold">Status Atual da Viagem:</span>
+              <span className={`px-3 py-1 rounded-full text-xs font-mono font-black uppercase ${
+                delivery.status === 'coletando' ? 'bg-blue-950/55 text-blue-400 border border-blue-900/40' :
+                delivery.status === 'em_transito' ? 'bg-yellow-950/55 text-[#FFD600] border border-yellow-900/40' :
+                delivery.status === 'parado' ? 'bg-red-950/55 text-red-400 border border-red-900/40' :
+                delivery.status === 'descarregando' ? 'bg-purple-950/55 text-purple-400 border border-purple-900/40' :
+                'bg-emerald-950/55 text-emerald-400 border border-emerald-900/40'
+              }`}>
+                {getLabelForStatus(delivery.status)}
+              </span>
+            </div>
             
             {/* Delivery Core Identity */}
             <div className="bg-zinc-950 p-5 rounded-2xl border border-zinc-900 shadow-xl space-y-4">
@@ -517,7 +564,22 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
               )}
 
               {/* Action Big Button */}
-              {isSharing ? (
+              {delivery?.status === 'coletando' || delivery?.status === 'parado' ? (
+                <div className="space-y-2" id="driver-restart-btn-container">
+                  <button
+                    type="button"
+                    onClick={handleRestartJourney}
+                    className="w-full py-4.5 bg-[#FFD600] hover:bg-[#ffe23b] active:scale-[0.98] text-black font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_4px_25px_rgba(255,214,0,0.25)] flex items-center justify-center gap-2 cursor-pointer border border-[#FFD600]/20 animate-pulse"
+                    id="driver-btn-recomecar"
+                  >
+                    <Play className="w-5 h-5 text-black fill-black" />
+                    <span>RECOMEÇAR VIAGEM</span>
+                  </button>
+                  <p className="text-[10px] text-zinc-500 font-mono text-center bg-zinc-950/80 p-2.5 border border-zinc-900 rounded-xl leading-relaxed select-none">
+                    Clique acima para iniciar/retomar a viagem. O sistema passará o status para Trânsito 🚚 e atualizará seu GPS em tempo real no mapa.
+                  </p>
+                </div>
+              ) : isSharing ? (
                 <div className="space-y-2" id="driver-stop-sharing-btn-container">
                   <button
                     type="button"
