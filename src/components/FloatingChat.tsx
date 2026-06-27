@@ -582,7 +582,7 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
                         return (
                           <div 
                             key={msg.id} 
-                            className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`}
+                            className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1 group relative`}
                           >
                             {/* Metadata above balloon */}
                             <div className="flex items-center gap-1.5 text-[9px] text-zinc-500 font-mono">
@@ -661,12 +661,11 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
                               {isMe && (
                                 <button
                                   onClick={() => handleDeleteMessage(msg.id)}
-                                  className="absolute -top-2.5 -left-2.5 bg-zinc-950 border border-zinc-850 hover:border-red-500 text-zinc-550 hover:text-red-500 p-1 rounded-full shadow transition-all scale-0 group-hover:scale-100 hover:scale-110 cursor-pointer"
+                                  className="absolute -top-2 -left-2 bg-zinc-950 border border-zinc-800 hover:border-red-500 text-zinc-400 hover:text-red-500 p-1 rounded-full shadow transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:scale-110 cursor-pointer z-20"
                                   title="Excluir mensagem para todos"
-                                  style={{ transform: 'none' }} // make it visible on hover cleanly
                                   id={`delete-chat-msg-${msg.id}`}
                                 >
-                                  <Trash2 className="w-2.5 h-2.5" />
+                                  <Trash2 className="w-3.5 h-3.5 text-red-500 md:text-zinc-400 md:group-hover:text-red-500" />
                                 </button>
                               )}
                             </div>
