@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Lock, EyeOff, ShieldCheck } from 'lucide-react';
+import { Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 interface ChangePasswordModalProps {
   username: string;
@@ -12,6 +12,9 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -32,9 +35,16 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
       return;
     }
 
+    if (newPassword.length < 4) {
+      setError('A nova senha deve ter no mínimo 4 caracteres.');
+      return;
+    }
+
     // Load passwords list
     const defaults: Record<string, string> = {
       'jairobahia': 'Danone01',
+      'mateus': '102030',
+      'priscila': '203040',
       'genivaldo': 'rodovar2026',
       'alexandre': 'rodovar2026',
       'vitor': 'rodovar2026',
@@ -60,9 +70,22 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
       return;
     }
 
-    // Save updated password
+    // Save updated password in passwords list
     currentPasswords[cleanUser as keyof typeof currentPasswords] = newPassword;
     localStorage.setItem('rodovar_user_passwords_v2', JSON.stringify(currentPasswords));
+
+    // Also sync and update inside rodovar_registered_employees_v2!
+    const storedEmployees = localStorage.getItem('rodovar_registered_employees_v2');
+    if (storedEmployees) {
+      try {
+        const parsedEmployees = JSON.parse(storedEmployees);
+        const empIndex = parsedEmployees.findIndex((e: any) => e.username === cleanUser);
+        if (empIndex !== -1) {
+          parsedEmployees[empIndex].passwordHash = newPassword;
+          localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(parsedEmployees));
+        }
+      } catch {}
+    }
 
     setSuccessMsg('Senha alterada com sucesso total!');
     setCurrentPassword('');
@@ -92,24 +115,32 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
 
         <form onSubmit={handleUpdate} className="p-6 space-y-4">
           
-          {/* Current Password - input password only, no show/hide toggle */}
+          {/* Current Password */}
           <div className="space-y-1.5">
             <label className="text-[10px] uppercase font-mono tracking-widest text-[#FFD600] font-bold">
               Senha Atual
             </label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-600">
-                <EyeOff className="w-4 h-4 text-zinc-600" />
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-650">
+                <Lock className="w-4 h-4 text-zinc-650" />
               </span>
               <input
-                type="password"
+                type={showCurrentPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Insira a senha atual"
-                className="w-full bg-[#18181b] border border-zinc-850 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-700 rounded-xl pl-10 pr-4 py-2.5 focus:outline-none transition-colors"
+                className="w-full bg-[#18181b] border border-zinc-850 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-700 rounded-xl pl-10 pr-12 py-2.5 focus:outline-none transition-colors"
                 id="change-current-password"
                 autoComplete="current-password"
               />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-[#FFD600] transition-colors"
+                id="change-current-password-toggle"
+              >
+                {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -119,18 +150,26 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
               Nova Senha
             </label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-600">
-                <EyeOff className="w-4 h-4 text-zinc-600" />
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-650">
+                <Lock className="w-4 h-4 text-zinc-650" />
               </span>
               <input
-                type="password"
+                type={showNewPassword ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Insira a nova senha"
-                className="w-full bg-[#18181b] border border-zinc-850 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-700 rounded-xl pl-10 pr-4 py-2.5 focus:outline-none transition-colors"
+                className="w-full bg-[#18181b] border border-zinc-850 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-700 rounded-xl pl-10 pr-12 py-2.5 focus:outline-none transition-colors"
                 id="change-new-password"
                 autoComplete="new-password"
               />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-[#FFD600] transition-colors"
+                id="change-new-password-toggle"
+              >
+                {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -140,18 +179,26 @@ export default function ChangePasswordModal({ username, onClose, onSuccess }: Ch
               Confirmar Nova Senha
             </label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-600">
-                <EyeOff className="w-4 h-4 text-zinc-600" />
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-650">
+                <Lock className="w-4 h-4 text-zinc-650" />
               </span>
               <input
-                type="password"
+                type={showConfirmPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Cofirme a nova senha"
-                className="w-full bg-[#18181b] border border-zinc-850 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-700 rounded-xl pl-10 pr-4 py-2.5 focus:outline-none transition-colors"
+                placeholder="Confirme a nova senha"
+                className="w-full bg-[#18181b] border border-zinc-850 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-700 rounded-xl pl-10 pr-12 py-2.5 focus:outline-none transition-colors"
                 id="change-confirm-password"
                 autoComplete="new-password"
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-[#FFD600] transition-colors"
+                id="change-confirm-password-toggle"
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

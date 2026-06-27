@@ -6,7 +6,7 @@ export interface Employee {
   id: string;
   name: string;
   username: string;
-  role: 'Operador' | 'Diretor Comercial' | 'Gerente' | 'Financeiro' | 'Diretor de Operações';
+  role: 'Operador' | 'Diretor Comercial' | 'Gerente' | 'Financeiro' | 'Diretor de Operações' | 'Visitante';
   passwordHash: string; // Stored securely/directly as text for simplicity
   created_at: string;
 }
@@ -161,7 +161,7 @@ export function saveRegisteredEmployees(employees: Employee[]) {
 export default function EmployeeRegistration() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'Operador' | 'Diretor Comercial' | 'Gerente' | 'Financeiro' | 'Diretor de Operações'>('Operador');
+  const [role, setRole] = useState<'Operador' | 'Diretor Comercial' | 'Gerente' | 'Financeiro' | 'Diretor de Operações' | 'Visitante'>('Operador');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
@@ -349,6 +349,7 @@ export default function EmployeeRegistration() {
                 <option value="Diretor Comercial" className="bg-zinc-950 text-white">Diretor Comercial (Negociações & Vendas)</option>
                 <option value="Financeiro" className="bg-zinc-950 text-white">Financeiro (Fretes, Repasses & Margens)</option>
                 <option value="Diretor de Operações" className="bg-zinc-950 text-white">Diretor de Operações (Eficiência & Logística)</option>
+                <option value="Visitante" className="bg-zinc-950 text-white">Visitante (Apenas visualização & Feedback)</option>
               </select>
             </div>
 

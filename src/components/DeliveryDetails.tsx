@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { Entrega, DeliveryStatus } from '../types';
-import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats, syncSingleEntregaCache } from '../db/storage';
+import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats, syncSingleEntregaCache, sendGroupChatMessage } from '../db/storage';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../db/firebase';
 import { getDeliveryKm } from '../utils/distance';
@@ -35,7 +36,8 @@ import {
   Paperclip,
   Share2,
   Plus,
-  Truck
+  Truck,
+  CheckSquare
 } from 'lucide-react';
 import LiveMap from './LiveMap';
 import { useCargoTracking } from '../hooks/useCargoTracking';
@@ -149,6 +151,71 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [clickedScripts, setClickedScripts] = useState<string[]>([]);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  const [visitorResponse, setVisitorResponse] = useState<'sim' | 'nao' | null>(() => {
+    try {
+      const saved = localStorage.getItem(`rodovar_survey_${entregaId}`);
+      return (saved === 'sim' || saved === 'nao') ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+  const [correctMessage, setCorrectMessage] = useState('');
+
+  const handleVote = (vote: 'sim' | 'nao') => {
+    setVisitorResponse(vote);
+    try {
+      localStorage.setItem(`rodovar_survey_${entregaId}`, vote);
+    } catch {}
+    
+    if (vote === 'sim') {
+      if (window.falarRodovar) {
+        window.falarRodovar('Obrigado pelo seu feedback positivo!');
+      }
+    }
+  };
+
+  const handleSendVisitorMessage = async () => {
+    if (!correctMessage.trim()) {
+      alert('Por favor, descreva a informação correta antes de enviar.');
+      return;
+    }
+
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    let uName = 'Visitante';
+    let dName = 'Visitante';
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        uName = parsed.username || 'visitante';
+        dName = parsed.displayName || 'Visitante';
+      } catch {}
+    }
+
+    if (!entrega) return;
+    const payloadText = `[FEEDBACK DE VISITANTE - Carga do cliente ${entrega.cliente || 'Sem Cliente'}] O visitante ${dName} informou que os dados estão INCORRETOS. Informação correta: "${correctMessage}"`;
+    
+    try {
+      await sendGroupChatMessage({
+        category: 'operacional', // goes directly to operational chat
+        text: payloadText,
+        userId: uName,
+        userName: dName,
+        userRole: 'Visitante',
+        timestamp: new Date().toISOString()
+      });
+      
+      alert('Feedback enviado com sucesso para a central de operadores!');
+      setCorrectMessage('');
+      setVisitorResponse('sim'); // complete state
+      try {
+        localStorage.setItem(`rodovar_survey_${entregaId}`, 'sim');
+      } catch {}
+    } catch (e) {
+      console.error(e);
+      alert('Falha ao enviar mensagem de feedback. Tente novamente.');
+    }
+  };
 
   const copyTrackingToClipboard = () => {
     if (!entrega?.trackingCode) return;
@@ -553,14 +620,16 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
           Voltar para Monitoramento
         </button>
 
-        <button
-          onClick={() => onEdit(entrega.id)}
-          className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] text-gray-300 hover:text-white text-xs font-mono font-bold uppercase rounded-lg transition-all cursor-pointer"
-          id="details-edit-btn"
-        >
-          <Edit3 className="w-4 h-4 text-[#FFD600]" />
-          Editar Dados da Carga
-        </button>
+        {getActiveUserRole() !== 'Visitante' && (
+          <button
+            onClick={() => onEdit(entrega.id)}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] text-gray-300 hover:text-white text-xs font-mono font-bold uppercase rounded-lg transition-all cursor-pointer"
+            id="details-edit-btn"
+          >
+            <Edit3 className="w-4 h-4 text-[#FFD600]" />
+            Editar Dados da Carga
+          </button>
+        )}
       </div>
 
       {/* Bloco de Rastreamento Público (Alteração 2) */}
@@ -615,6 +684,98 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
           </a>
         </div>
       </div>
+
+      {/* VISITOR SURVEY BOX (ALTERAÇÃO VISITANTE) */}
+      {getActiveUserRole() === 'Visitante' && (
+        <div 
+          className="bg-zinc-950/90 border-2 border-[#FFD600] rounded-xl p-6 shadow-[0_0_25px_rgba(255,214,0,0.1)] relative overflow-hidden space-y-4"
+          id="visitor-feedback-container"
+        >
+          <div className="flex items-center gap-3">
+            <div className="bg-[#FFD600]/10 p-2.5 rounded-xl border border-[#FFD600]/30 text-[#FFD600]">
+              <CheckSquare className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xs uppercase font-mono tracking-widest text-[#FFD600] font-black">
+                Validação de Cadastro de Carga
+              </h3>
+              <p className="text-xs text-zinc-300">
+                Como visitante habilitado, por favor confirme se todas as informações do cadastro acima estão corretas.
+              </p>
+            </div>
+          </div>
+
+          {visitorResponse === 'sim' ? (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-emerald-950/40 border border-emerald-500/30 p-4 rounded-xl text-center"
+            >
+              <p className="text-sm font-black text-emerald-400 font-mono uppercase tracking-wider">
+                👍 Obrigado pelo seu feedback positivo!
+              </p>
+              <button 
+                onClick={() => setVisitorResponse(null)}
+                className="mt-2 text-[10px] text-zinc-500 hover:text-white uppercase font-mono tracking-wider cursor-pointer bg-transparent border-0 outline-none"
+              >
+                Mudar resposta
+              </button>
+            </motion.div>
+          ) : visitorResponse === 'nao' ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-3 bg-[#121212] border border-zinc-800 p-4 rounded-xl"
+            >
+              <label className="block text-[10px] uppercase font-mono tracking-widest text-red-400 font-bold">
+                Descreva as informações corretas:
+              </label>
+              <textarea 
+                value={correctMessage}
+                onChange={(e) => setCorrectMessage(e.target.value)}
+                placeholder="Ex: O endereço de destino correto é Rua B, Nº 120 ou o telefone correto do motorista é..."
+                className="w-full bg-zinc-950 border border-zinc-850 focus:border-[#FFD600] text-xs text-zinc-200 placeholder-zinc-650 rounded-lg p-3 focus:outline-none transition-colors min-h-[80px]"
+              />
+              <div className="flex justify-end gap-2.5">
+                <button 
+                  type="button" 
+                  onClick={() => setVisitorResponse(null)}
+                  className="px-3.5 py-2 border border-zinc-800 hover:bg-zinc-900 text-gray-400 rounded-lg text-[10px] uppercase font-mono tracking-widest transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleSendVisitorMessage}
+                  className="px-4 py-2 bg-[#FFD600] hover:bg-[#ffe23b] text-black font-extrabold rounded-lg text-[10px] uppercase font-mono tracking-widest transition-all cursor-pointer shadow-md"
+                >
+                  Enviar para o Operador
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-center gap-3.5 pt-1.5" id="survey-buttons-wrap">
+              <span className="text-xs text-zinc-400 font-bold uppercase font-sans">
+                Os dados desta carga estão corretos?
+              </span>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <button 
+                  onClick={() => handleVote('sim')}
+                  className="flex-1 sm:flex-none px-6 py-2.5 bg-emerald-600/25 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-400 hover:text-white text-xs font-black font-mono uppercase rounded-xl transition-all cursor-pointer flex justify-center items-center gap-1.5 shadow"
+                >
+                  SIM
+                </button>
+                <button 
+                  onClick={() => handleVote('nao')}
+                  className="flex-1 sm:flex-none px-6 py-2.5 bg-red-600/25 hover:bg-red-600 border border-red-500/40 text-red-400 hover:text-white text-xs font-black font-mono uppercase rounded-xl transition-all cursor-pointer flex justify-center items-center gap-1.5 shadow"
+                >
+                  NÃO
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ALERTA AUTOMÁTICO CRÍTICO: FALTA LOCALIZAÇÃO NA COLETA */}
       {entrega.status === 'coletando' && (!entrega.link_localizacao || !entrega.link_localizacao.trim().startsWith('http')) && (
@@ -686,7 +847,8 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                 <select
                   value={entrega.status}
                   onChange={(e) => handleUpdateStatus(e.target.value as DeliveryStatus)}
-                  className={`px-3 py-1.5 text-xs font-bold font-sans rounded-lg border-2 focus:ring-1 focus:ring-[#FFD600] focus:outline-none cursor-pointer transition-all hover:scale-[1.02] active:scale-95 duration-150 ${statusColors[entrega.status]}`}
+                  disabled={getActiveUserRole() === 'Visitante'}
+                  className={`px-3 py-1.5 text-xs font-bold font-sans rounded-lg border-2 focus:ring-1 focus:ring-[#FFD600] focus:outline-none cursor-pointer transition-all hover:scale-[1.02] active:scale-95 duration-150 ${getActiveUserRole() === 'Visitante' ? 'opacity-80 cursor-not-allowed border-zinc-700 bg-zinc-900 text-gray-400' : statusColors[entrega.status]}`}
                   id="details-status-selector"
                 >
                   <option value="coletando" className="bg-zinc-950 text-white">Coletando 📦</option>

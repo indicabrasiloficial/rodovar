@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Lock, User } from 'lucide-react';
+import { Lock, User, Eye, EyeOff } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: (userData: { username: string; displayName: string; role: string }) => void;
@@ -10,6 +10,7 @@ interface LoginProps {
 export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -80,7 +81,19 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
     
     const matchedEmployee = currentEmployees.find(emp => emp.username === queryUser);
 
-    if (matchedEmployee && matchedEmployee.passwordHash === cleanPass) {
+    // Get current password from rodovar_user_passwords_v2 if it exists, otherwise fallback to the employee object
+    let expectedPassword = matchedEmployee?.passwordHash;
+    const storedUserPasswords = localStorage.getItem('rodovar_user_passwords_v2');
+    if (storedUserPasswords) {
+      try {
+        const parsedPasswords = JSON.parse(storedUserPasswords);
+        if (parsedPasswords[queryUser]) {
+          expectedPassword = parsedPasswords[queryUser];
+        }
+      } catch {}
+    }
+
+    if (matchedEmployee && expectedPassword === cleanPass) {
       const sessionData = {
         username: matchedEmployee.username,
         displayName: matchedEmployee.name,
@@ -135,7 +148,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Insira seu usuário"
-                className="w-full bg-[#18181b] border border-zinc-800 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-600 rounded-xl pl-10 pr-4 py-3 focus:outline-none transition-colors"
+                className="w-full bg-[#18181b] border border-zinc-800 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-660 rounded-xl pl-10 pr-4 py-3 focus:outline-none transition-colors"
                 id="login-username"
               />
             </div>
@@ -150,14 +163,22 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
                 <Lock className="w-4 h-4" />
               </span>
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Insira sua senha"
-                className="w-full bg-[#18181b] border border-zinc-800 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-600 rounded-xl pl-10 pr-4 py-3 focus:outline-none transition-colors"
+                className="w-full bg-[#18181b] border border-zinc-800 focus:border-[#FFD600] text-sm text-zinc-200 placeholder-zinc-660 rounded-xl pl-10 pr-12 py-3 focus:outline-none transition-colors"
                 id="login-password"
                 autoComplete="current-password"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-[#FFD600] transition-colors"
+                id="login-password-toggle"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

@@ -974,6 +974,19 @@ export default function DeliveryList({
     }
     return 'Jairo Bahia';
   };
+
+  const getActiveUserRole = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        if (parsed && parsed.role) {
+          return parsed.role;
+        }
+      } catch {}
+    }
+    return '';
+  };
   
   const [origemFilter, setOrigemFilter] = useState('');
   const [destinoFilter, setDestinoFilter] = useState('');
@@ -1462,7 +1475,7 @@ Tenha uma ótima e segura viagem!`;
         </div>
         
         <div className="flex items-center gap-2.5">
-          {onAddDelivery && (
+          {onAddDelivery && getActiveUserRole() !== 'Visitante' && (
             <button
               onClick={onAddDelivery}
               className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#FFD600] hover:bg-[#ffe23b] text-black uppercase text-xs font-mono font-black tracking-wider rounded-lg transition-all cursor-pointer"

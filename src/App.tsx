@@ -23,6 +23,7 @@ import OperatorPanel from './components/OperatorPanel';
 import Agenda from './components/Agenda';
 import TrackingModeSelector from './components/TrackingModeSelector';
 import ApiIntegration from './components/ApiIntegration';
+import FloatingChat from './components/FloatingChat';
 
 import { 
   Truck, 
@@ -814,16 +815,18 @@ export default function App() {
             </div>
 
             {/* Right Col: Cadastrar Carga Button */}
-            <div className="flex items-center justify-center">
-              <button
-                onClick={handleAddNewDelivery}
-                className="w-full h-11 flex items-center justify-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-xl gap-2 transition-all text-xs font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.2)] active:scale-95"
-                id="global-cadastrar-btn"
-              >
-                <Truck className="w-4 h-4 text-black shrink-0 animate-bounce" />
-                <span>Cadastrar Carga</span>
-              </button>
-            </div>
+            {user?.role !== 'Visitante' && (
+              <div className="flex items-center justify-center">
+                <button
+                  onClick={handleAddNewDelivery}
+                  className="w-full h-11 flex items-center justify-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-xl gap-2 transition-all text-xs font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.2)] active:scale-95"
+                  id="global-cadastrar-btn"
+                >
+                  <Truck className="w-4 h-4 text-black shrink-0 animate-bounce" />
+                  <span>Cadastrar Carga</span>
+                </button>
+              </div>
+            )}
           </div>
 
         </div>
@@ -883,14 +886,16 @@ export default function App() {
               </button>
 
               {/* Cadastrar Carga Button */}
-              <button
-                onClick={handleAddNewDelivery}
-                className="flex items-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-full px-4 py-1.5 gap-1.5 transition-all text-[10px] font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.15)] hover:scale-[1.02] active:scale-95"
-                id="desktop-global-cadastrar-btn"
-              >
-                <Truck className="w-3.5 h-3.5 text-black shrink-0" />
-                <span>Cadastrar Carga</span>
-              </button>
+              {user?.role !== 'Visitante' && (
+                <button
+                  onClick={handleAddNewDelivery}
+                  className="flex items-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-full px-4 py-1.5 gap-1.5 transition-all text-[10px] font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.15)] hover:scale-[1.02] active:scale-95"
+                  id="desktop-global-cadastrar-btn"
+                >
+                  <Truck className="w-3.5 h-3.5 text-black shrink-0" />
+                  <span>Cadastrar Carga</span>
+                </button>
+              )}
 
               {/* User badge customized */}
               <div className="flex items-center gap-2.5 border-l border-zinc-800 pl-4">
@@ -1360,6 +1365,11 @@ export default function App() {
           onClose={() => setIsChangePasswordOpen(false)}
           onSuccess={() => setIsChangePasswordOpen(false)}
         />
+      )}
+
+      {/* Persistent Floating Chat (Alteração Chat) */}
+      {user && (
+        <FloatingChat currentUser={user} />
       )}
     </div>
   );
