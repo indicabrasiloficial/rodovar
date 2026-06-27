@@ -279,17 +279,42 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
         const payloadObj = getFilteredPayload(carga);
         log(JSON.stringify(payloadObj, null, 2), 'payload');
 
-        setTimeout(() => {
+        setTimeout(async () => {
           // Step 5: Post simulation request
-          log(`Disparando requisição HTTP POST para ${settings.apiUrl}...`, 'info');
-          log('Calculando assinatura de cabeçalho X-Rodovar-Signature baseado na Webhook Secret...', 'info');
+          log(`Disparando requisição real HTTP POST via Servidor Proxy para: ${settings.apiUrl}...`, 'info');
+          log('Calculando assinatura de cabeçalho X-Rodovar-Signature e Bearer Token...', 'info');
           
-          setTimeout(() => {
-            log('Conexão realizada com sucesso!', 'success');
-            log(`Resposta do SISTEMA-CLIENTE: [HTTP 200 OK]`, 'success');
-            log(`Payload processado e integrado com sucesso no ambiente externo.`, 'success');
+          try {
+            const res = await fetch('/api/webhook/dispatch', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                url: settings.apiUrl,
+                payload: payloadObj,
+                secret: settings.webhookSecret,
+                apiToken: settings.apiToken
+              })
+            });
+
+            const resData = await res.json();
+            
+            if (resData.success || (resData.status >= 200 && resData.status < 300)) {
+              log(`Conexão com ${settings.apiUrl} realizada com sucesso!`, 'success');
+              log(`Resposta do SISTEMA-CLIENTE: [HTTP ${resData.status} ${resData.statusText || 'OK'}]`, 'success');
+              log(`Dados retornados do seu Webhook: ${resData.data || '(Sem conteúdo de retorno - Padrão)'}`, 'success');
+              log(`Payload entregue com sucesso! Veja no seu terminal ou painel do Webhook.site`, 'success');
+            } else {
+              log(`Atenção: Servidor de destino retornou erro HTTP [Status ${resData.status || 500}].`, 'warning');
+              log(`Mensagem de erro: ${resData.error || resData.data || 'Erro desconhecido'}`, 'warning');
+              log(`Verifique se a URL do Webhook está ativa e aceita requisições POST.`, 'warning');
+            }
+          } catch (err: any) {
+            log(`Erro de rede ou conexão ao despachar: ${err.message || err}`, 'warning');
+          } finally {
             setSimulating(false);
-          }, 1000);
+          }
         }, 1200);
       }, 1000);
     };

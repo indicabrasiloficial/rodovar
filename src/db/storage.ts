@@ -811,6 +811,9 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     handleFirestoreError(error, OperationType.WRITE, `${ENTREGAS_COLLECTION}/${cleanId}`);
   });
 
+  // Trigger automatic real-time webhook update
+  triggerWebhook(payload);
+
   return payload;
 }
 
@@ -1414,6 +1417,7 @@ export function subscribeToPresence(callback: (presenceList: any[]) => void): ()
 
 export async function updateEntregaField(id: string, updates: Record<string, any>): Promise<void> {
   const index = cachedEntregas.findIndex(e => e.id === id);
+  let freshObjForWebhook: Entrega | null = null;
   if (index !== -1) {
     const freshObject = { ...cachedEntregas[index] };
     
@@ -1437,6 +1441,7 @@ export async function updateEntregaField(id: string, updates: Record<string, any
     });
 
     cachedEntregas[index] = freshObject;
+    freshObjForWebhook = freshObject;
     lastEntregasFetchTime = Date.now();
     try {
       localStorage.setItem('rodovar_cached_entregas_fallback', JSON.stringify(cachedEntregas));
@@ -1459,6 +1464,11 @@ export async function updateEntregaField(id: string, updates: Record<string, any
   await updateDoc(doc(db, ENTREGAS_COLLECTION, id), updates).catch((error) => {
     handleFirestoreError(error, OperationType.UPDATE, `${ENTREGAS_COLLECTION}/${id}`);
   });
+
+  // Trigger automatic real-time webhook update
+  if (freshObjForWebhook) {
+    triggerWebhook(freshObjForWebhook);
+  }
 }
 
 export function syncSingleEntregaCache(id: string, freshData: any): void {
@@ -1482,4 +1492,99 @@ export function syncSingleEntregaCache(id: string, freshData: any): void {
   } catch {}
 
   window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'UPDATE', payload: updated } }));
+}
+
+// Automatic Webhook Triggering on cargo changes (creates/updates)
+export async function triggerWebhook(carga: Entrega) {
+  try {
+    const docRef = doc(db, 'api_integration_settings', 'config');
+    const docSnap = await getDoc(docRef);
+    let settings: any = null;
+    if (docSnap.exists()) {
+      settings = docSnap.data();
+    } else {
+      const local = localStorage.getItem('rodovar_api_settings');
+      if (local) {
+        settings = JSON.parse(local);
+      }
+    }
+
+    if (!settings || !settings.ativo || !settings.apiUrl) {
+      return;
+    }
+
+    // Check status filter
+    const statusVal = carga.status || 'coletando';
+    const statusOk = settings.statusFiltro?.[statusVal];
+    if (statusOk === false) {
+      console.log(`[Webhook Auto] Carga ${carga.id} ignorada devido ao filtro de status: ${statusVal}`);
+      return;
+    }
+
+    // Check UFs filter
+    if (settings.ufsFiltro && settings.ufsFiltro.trim() !== '') {
+      const permittedUfs = settings.ufsFiltro.split(',').map((u: string) => u.trim().toUpperCase());
+      const destUf = carga.destino?.split('-').pop()?.trim().toUpperCase() || '';
+      if (destUf && !permittedUfs.includes(destUf)) {
+        console.log(`[Webhook Auto] Carga ${carga.id} ignorada devido ao filtro de UFs: ${destUf}`);
+        return;
+      }
+    }
+
+    // Build payload
+    const payload: Record<string, any> = {
+      id_carga: carga.id,
+      codigo_rastreamento: carga.trackingCode || 'RDV' + carga.id.substring(0, 6).toUpperCase(),
+      motorista_nome: carga.motorista,
+      veiculo_origem: carga.origem,
+      veiculo_destino: carga.destino,
+      status_viagem: statusVal,
+      coleta_data: carga.data_coleta,
+      prazo_estimado: carga.prazo,
+      atualizado_em: carga.updated_at || new Date().toISOString(),
+      posicao: { lat: carga.lat || 0, lng: carga.lng || 0 }
+    };
+
+    if (carga.link_localizacao) {
+      payload.whatsapp_pin_link = carga.link_localizacao;
+    }
+
+    if (!settings.ocultarContatos) {
+      payload.telefone_motorista = carga.tel_motorista;
+      payload.telefone_cliente = carga.tel_cliente;
+      payload.cliente_nome = carga.cliente;
+    }
+
+    if (!settings.ocultarFinanceiro) {
+      payload.frete_empresa_brl = carga.frete_empresa;
+      payload.frete_motorista_brl = carga.frete_motorista;
+    }
+
+    console.log(`[Webhook Auto] Disparando webhook automático para ${settings.apiUrl}`);
+
+    fetch('/api/webhook/dispatch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: settings.apiUrl,
+        payload: payload,
+        secret: settings.webhookSecret,
+        apiToken: settings.apiToken
+      })
+    }).then(res => res.json())
+      .then(resData => {
+        if (resData.success) {
+          console.log(`[Webhook Auto] Webhook entregue com sucesso: HTTP ${resData.status}`);
+        } else {
+          console.warn(`[Webhook Auto] Falha na entrega: HTTP ${resData.status}. Erro: ${resData.error || resData.data}`);
+        }
+      }).catch(err => {
+        console.error('[Webhook Auto] Erro de rede ao despachar:', err);
+      });
+
+  } catch (err) {
+    console.error('[Webhook Auto] Erro no fluxo automático:', err);
+  }
 }

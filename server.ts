@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import fs from "fs";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
@@ -119,6 +120,58 @@ REGRAS CRÍTICAS DE ESCOPO:
     return res.status(500).json({
       success: false,
       error: err.message || "Erro interno ao processar a requisição de IA"
+    });
+  }
+});
+
+// Endpoint to proxy Webhook requests, bypassing CORS and enabling actual webhook tests
+app.post("/api/webhook/dispatch", async (req, res) => {
+  try {
+    const { url, payload, headers = {}, secret, apiToken } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: "URL do webhook não fornecida." });
+    }
+
+    // Build outbound headers
+    const finalHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...headers
+    };
+
+    if (apiToken) {
+      finalHeaders["Authorization"] = `Bearer ${apiToken}`;
+    }
+
+    if (secret) {
+      const signature = crypto
+        .createHmac("sha256", secret)
+        .update(JSON.stringify(payload))
+        .digest("hex");
+      finalHeaders["X-Rodovar-Signature"] = signature;
+    }
+
+    console.log(`[Webhook Proxy] Enviando POST para: ${url}`);
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: finalHeaders,
+      body: JSON.stringify(payload)
+    });
+
+    const responseText = await response.text();
+    console.log(`[Webhook Proxy] Resposta recebida: HTTP ${response.status}`);
+
+    return res.json({
+      success: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      data: responseText
+    });
+  } catch (err: any) {
+    console.error("Erro ao despachar webhook pelo proxy:", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Falha de conexão com o destino externo do Webhook."
     });
   }
 });
