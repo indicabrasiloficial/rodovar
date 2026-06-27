@@ -926,11 +926,11 @@ export default function App() {
           {/* Divider line separating rows for sleek structural organization */}
           <div className="border-t border-zinc-900 my-0.5" />
 
-          {/* Bottom Row: Navigation Redesigned in 3 Spatially Partitioned Modules to Prevent Overlap info */}
-          <nav className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 py-2 border-t border-zinc-900/85 mt-2">
+          {/* Bottom Row: Navigation Redesigned in Spatially Partitioned Modules with auto-wrap to Prevent Overlap */}
+          <nav className="flex flex-wrap items-center justify-start xl:justify-between gap-3 py-2 border-t border-zinc-900/85 mt-2 w-full">
             
             {/* Section 1: Core Operations */}
-            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60">
+            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60 shrink-0">
               <span className="text-[10px] font-bold font-mono tracking-widest text-zinc-500 px-2 uppercase">Geral</span>
               <div className="flex items-center gap-1">
                 {/* Nav List */}
@@ -984,7 +984,7 @@ export default function App() {
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
                     selectedView === 'agenda'
                     ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
-                    : 'bg-zinc-900/20 border-transparent text-zinc-300 hover:text-[#FFD600]'
+                    : 'bg-zinc-900/20 border-transparent text-zinc-350 hover:text-[#FFD600]'
                   }`}
                   id="desktop-nav-agenda"
                 >
@@ -995,7 +995,7 @@ export default function App() {
             </div>
 
             {/* Section 2: Support & Tools */}
-            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60">
+            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60 shrink-0">
               <span className="text-[10px] font-bold font-mono tracking-widest text-zinc-500 px-2 uppercase">Suporte</span>
               <div className="flex items-center gap-1">
                 {/* Nav Stats */}
@@ -1026,20 +1026,6 @@ export default function App() {
                   <span>AgenteZAP</span>
                 </button>
 
-                {/* Nav Agenda Compact Button */}
-                <button
-                  onClick={() => setSelectedView('agenda')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
-                    selectedView === 'agenda' 
-                    ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
-                    : 'text-zinc-300 border-transparent hover:text-[#FFD600] hover:bg-zinc-900/40'
-                  }`}
-                  id="desktop-nav-agenda-compact"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
-                  <span>Agenda Rodovar</span>
-                </button>
-
                 {/* Nav Manager */}
                 <button
                   onClick={() => setSelectedView('manager')}
@@ -1057,7 +1043,7 @@ export default function App() {
             </div>
 
             {/* Section 3: Safety & Auditing */}
-            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60">
+            <div className="flex items-center gap-1.5 bg-zinc-950/50 p-1 rounded-xl border border-zinc-900/60 shrink-0">
               <span className="text-[10px] font-bold font-mono tracking-widest text-zinc-500 px-2 uppercase">Segurança</span>
               <div className="flex items-center gap-1">
                 {/* Nav Blacklist */}
@@ -1087,46 +1073,48 @@ export default function App() {
                   <BookOpen className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
                   <span>Manual Agente</span>
                 </button>
+              </div>
+            </div>
 
-                {/* Nav Backup */}
-                {user && (user.username === 'master' || user.role === 'Master') && (
+            {/* Section 4: Master Panel (Saves massive space, high-end design, visible only to Master) */}
+            {user && (user.username === 'master' || user.role === 'Master') && (
+              <div className="flex items-center gap-1.5 bg-[#FFD600]/5 p-1 rounded-xl border border-[#FFD600]/25 shrink-0">
+                <span className="text-[10px] font-black font-mono tracking-widest text-[#FFD600] px-2.5 uppercase">Master</span>
+                <div className="flex items-center gap-1">
+                  {/* Nav Backup */}
                   <button
                     onClick={() => setSelectedView('backup')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                       selectedView === 'backup' 
-                      ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-black' 
                       : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
                     }`}
                     id="desktop-nav-backup"
                   >
-                    <Database className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                    <Database className="w-3.5 h-3.5 shrink-0" />
                     <span>Backup Central</span>
                   </button>
-                )}
 
-                {/* Nav Registration */}
-                {user && (user.username === 'master' || user.role === 'Master') && (
+                  {/* Nav Registration */}
                   <button
                     onClick={() => setSelectedView('registration')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                       selectedView === 'registration' 
-                      ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-black' 
                       : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
                     }`}
                     id="desktop-nav-registration"
                   >
-                    <Users className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                    <Users className="w-3.5 h-3.5 shrink-0" />
                     <span>Cadastro</span>
                   </button>
-                )}
 
-                {/* Nav API Integration */}
-                {user && (user.username === 'master' || user.role === 'Master') && (
+                  {/* Nav API Integration */}
                   <button
                     onClick={() => setSelectedView('api_integration')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                       selectedView === 'api_integration' 
-                      ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/45 font-bold' 
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-black' 
                       : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
                     }`}
                     id="desktop-nav-api-integration"
@@ -1134,9 +1122,9 @@ export default function App() {
                     <Webhook className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
                     <span>Integração API</span>
                   </button>
-                )}
+                </div>
               </div>
-            </div>
+            )}
           </nav>
         </div>
       </header>
