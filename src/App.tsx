@@ -25,6 +25,7 @@ import TrackingModeSelector from './components/TrackingModeSelector';
 import ApiIntegration from './components/ApiIntegration';
 import ActivityLogs from './components/ActivityLogs';
 import FloatingChat from './components/FloatingChat';
+import TelegramIntegration from './components/TelegramIntegration';
 
 import { 
   Truck, 
@@ -59,7 +60,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs' | 'telegram_integration';
 
 
 export default function App() {
@@ -423,6 +424,15 @@ export default function App() {
           <ApiIntegration 
             onClose={() => setSelectedView('dashboard')}
             entregas={entregas}
+          />
+        );
+      case 'telegram_integration':
+        if (!user || (user.username !== 'master' && user.role !== 'Master')) {
+          return <div className="text-center p-12 text-red-500 font-mono font-bold uppercase tracking-wider">Acesso Negado: Apenas o perfil Master tem acesso à integração do Telegram.</div>;
+        }
+        return (
+          <TelegramIntegration 
+            onClose={() => setSelectedView('dashboard')}
           />
         );
       case 'logs':
@@ -811,6 +821,22 @@ export default function App() {
                       </button>
                     )}
 
+                    {/* Integração Telegram (Admin-only) */}
+                    {user && (user.username === 'master' || user.role === 'Master') && (
+                      <button
+                        onClick={() => setSelectedView('telegram_integration')}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          selectedView === 'telegram_integration' 
+                          ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                        }`}
+                        id="nav-telegram-integration"
+                      >
+                        <Bot className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                        <span>Integração Telegram</span>
+                      </button>
+                    )}
+
                     {/* Auditoria Logs (Admin-only) */}
                     {user && (user.username === 'master' || user.role === 'Master') && (
                       <button
@@ -1151,6 +1177,20 @@ export default function App() {
                   >
                     <Webhook className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
                     <span>Integração API</span>
+                  </button>
+
+                  {/* Nav Telegram Integration */}
+                  <button
+                    onClick={() => setSelectedView('telegram_integration')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      selectedView === 'telegram_integration' 
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-black' 
+                      : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                    }`}
+                    id="desktop-nav-telegram-integration"
+                  >
+                    <Bot className="w-3.5 h-3.5 shrink-0" />
+                    <span>Telegram (Agente IA)</span>
                   </button>
 
                   {/* Nav Logs Auditoria */}

@@ -166,6 +166,25 @@ export interface FailedLogin {
   lockedUntil: number;
 }
 
+export interface TelegramSettings {
+  botToken: string;
+  chatIds: string[];
+  allowedActions: {
+    consultarCarga: boolean;
+    consultarLocalizacao: boolean;
+    gerarRelatorio: boolean;
+    cadastrarCarga: boolean;
+    cadastrarColaborador: boolean;
+  };
+  exigirConfirmacao: {
+    consultarCarga: boolean;
+    consultarLocalizacao: boolean;
+    gerarRelatorio: boolean;
+    cadastrarCarga: boolean;
+    cadastrarColaborador: boolean;
+  };
+}
+
 declare global {
   interface Window {
     falarRodovar?: (texto: string, onEndCallback?: () => void) => void;

@@ -8,7 +8,8 @@ import {
   User, 
   AlertTriangle, 
   RefreshCw,
-  Filter
+  Filter,
+  Bot
 } from 'lucide-react';
 import { subscribeToSystemLogs, clearSystemLogs, SystemLog } from '../db/storage';
 
@@ -71,6 +72,8 @@ export default function ActivityLogs({ currentUser }: ActivityLogsProps) {
         return 'bg-cyan-900/40 text-cyan-300 border-cyan-500/30';
       case 'Limpeza de Logs':
         return 'bg-orange-900/40 text-orange-300 border-orange-500/30';
+      case 'Comando Telegram':
+        return 'bg-[#FFD600]/15 text-[#FFD600] border-[#FFD600]/30';
       default:
         return 'bg-zinc-800 text-zinc-300 border-zinc-700';
     }
@@ -104,6 +107,7 @@ export default function ActivityLogs({ currentUser }: ActivityLogsProps) {
     if (filterAction === 'cargas') return matchesSearch && log.action.includes('Carga');
     if (filterAction === 'colaboradores') return matchesSearch && log.action.includes('Colaborador');
     if (filterAction === 'backups') return matchesSearch && log.action.includes('Backup');
+    if (filterAction === 'telegram') return matchesSearch && (log.action === 'Comando Telegram' || log.userRole === 'Telegram');
     
     return matchesSearch;
   });
@@ -173,6 +177,7 @@ export default function ActivityLogs({ currentUser }: ActivityLogsProps) {
             <option value="cargas">Cadastro e Alteração de Cargas</option>
             <option value="colaboradores">Gestão de Colaboradores</option>
             <option value="backups">Exportação e Importação de Backups</option>
+            <option value="telegram">Comandos do Telegram</option>
           </select>
         </div>
       </div>
@@ -216,7 +221,11 @@ export default function ActivityLogs({ currentUser }: ActivityLogsProps) {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 border border-zinc-700/50 text-xs font-medium">
-                          {log.userDisplayName.charAt(0).toUpperCase()}
+                          {log.userRole === 'Telegram' ? (
+                            <Bot className="w-3.5 h-3.5 text-[#FFD600]" />
+                          ) : (
+                            log.userDisplayName.charAt(0).toUpperCase()
+                          )}
                         </div>
                         <div>
                           <p className="text-sm font-medium text-zinc-200">{log.userDisplayName}</p>

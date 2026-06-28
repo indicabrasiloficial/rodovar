@@ -1,4 +1,4 @@
-import { Entrega, BlacklistMotorista, BlacklistCliente, GroupChatMessage, Invitation, Colaborador, FailedLogin } from '../types';
+import { Entrega, BlacklistMotorista, BlacklistCliente, GroupChatMessage, Invitation, Colaborador, FailedLogin, TelegramSettings } from '../types';
 import { db, auth, database, OperationType, handleFirestoreError } from './firebase';
 import { ref, set } from 'firebase/database';
 import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
@@ -1972,4 +1972,98 @@ export async function resetFailedLoginAttempts(usernameOrEmail: string): Promise
   } catch (error) {
     console.warn('Failed resetting login attempts:', error);
   }
+}
+
+const TELEGRAM_SETTINGS_COLLECTION = 'telegram_integration_settings';
+
+export async function getTelegramConfig(): Promise<TelegramSettings> {
+  const defaultSettings: TelegramSettings = {
+    botToken: '',
+    chatIds: [],
+    allowedActions: {
+      consultarCarga: true,
+      consultarLocalizacao: true,
+      gerarRelatorio: true,
+      cadastrarCarga: false,
+      cadastrarColaborador: false,
+    },
+    exigirConfirmacao: {
+      consultarCarga: false,
+      consultarLocalizacao: false,
+      gerarRelatorio: false,
+      cadastrarCarga: true,
+      cadastrarColaborador: true,
+    }
+  };
+
+  try {
+    const docRef = doc(db, TELEGRAM_SETTINGS_COLLECTION, 'config');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data() as Partial<TelegramSettings>;
+      return {
+        botToken: data.botToken ?? '',
+        chatIds: data.chatIds ?? [],
+        allowedActions: {
+          consultarCarga: data.allowedActions?.consultarCarga ?? true,
+          consultarLocalizacao: data.allowedActions?.consultarLocalizacao ?? true,
+          gerarRelatorio: data.allowedActions?.gerarRelatorio ?? true,
+          cadastrarCarga: data.allowedActions?.cadastrarCarga ?? false,
+          cadastrarColaborador: data.allowedActions?.cadastrarColaborador ?? false,
+        },
+        exigirConfirmacao: {
+          consultarCarga: data.exigirConfirmacao?.consultarCarga ?? false,
+          consultarLocalizacao: data.exigirConfirmacao?.consultarLocalizacao ?? false,
+          gerarRelatorio: data.exigirConfirmacao?.gerarRelatorio ?? false,
+          cadastrarCarga: data.exigirConfirmacao?.cadastrarCarga ?? true,
+          cadastrarColaborador: data.exigirConfirmacao?.cadastrarColaborador ?? true,
+        }
+      };
+    }
+  } catch (error) {
+    console.error('Error fetching Telegram settings:', error);
+  }
+
+  const local = localStorage.getItem('rodovar_telegram_settings');
+  if (local) {
+    try {
+      return JSON.parse(local);
+    } catch {
+      // Ignored
+    }
+  }
+
+  return defaultSettings;
+}
+
+export async function saveTelegramConfig(settings: TelegramSettings): Promise<void> {
+  try {
+    localStorage.setItem('rodovar_telegram_settings', JSON.stringify(settings));
+    const docRef = doc(db, TELEGRAM_SETTINGS_COLLECTION, 'config');
+    await setDoc(docRef, settings);
+  } catch (error) {
+    console.error('Error saving Telegram settings:', error);
+    throw error;
+  }
+}
+
+export async function registerTelegramCommandLog(
+  chatId: string,
+  command: string,
+  action: string,
+  result: string
+): Promise<void> {
+  const cleanId = 'log-tg-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now();
+  const payload: SystemLog = {
+    id: cleanId,
+    timestamp: new Date().toISOString(),
+    username: `tg_${chatId}`,
+    userDisplayName: `Telegram Bot`,
+    userRole: 'Telegram',
+    action: 'Comando Telegram',
+    details: `Chat ID: ${chatId} | Comando: "${command}" | Ação: ${action} | Resultado: ${result}`
+  };
+  await setDoc(doc(db, SYSTEM_LOGS_COLLECTION, cleanId), payload).catch((error) => {
+    console.error("Error registering Telegram system log:", error);
+  });
 }
