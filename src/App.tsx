@@ -23,6 +23,7 @@ import OperatorPanel from './components/OperatorPanel';
 import Agenda from './components/Agenda';
 import TrackingModeSelector from './components/TrackingModeSelector';
 import ApiIntegration from './components/ApiIntegration';
+import ActivityLogs from './components/ActivityLogs';
 import FloatingChat from './components/FloatingChat';
 
 import { 
@@ -53,11 +54,12 @@ import {
   Globe,
   CheckSquare,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs';
 
 
 export default function App() {
@@ -422,6 +424,13 @@ export default function App() {
             onClose={() => setSelectedView('dashboard')}
             entregas={entregas}
           />
+        );
+      case 'logs':
+        if (!user || (user.username !== 'master' && user.role !== 'Master')) {
+          return <div className="text-center p-12 text-red-500 font-mono font-bold uppercase tracking-wider">Acesso Negado: Apenas o perfil Master tem acesso à Auditoria de Atividades.</div>;
+        }
+        return (
+          <ActivityLogs currentUser={user} />
         );
       case 'agenda':
         return (
@@ -801,6 +810,22 @@ export default function App() {
                         <span>Integração API</span>
                       </button>
                     )}
+
+                    {/* Auditoria Logs (Admin-only) */}
+                    {user && (user.username === 'master' || user.role === 'Master') && (
+                      <button
+                        onClick={() => setSelectedView('logs')}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          selectedView === 'logs' 
+                          ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                        }`}
+                        id="nav-logs"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                        <span>Logs Auditoria</span>
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -1126,6 +1151,20 @@ export default function App() {
                   >
                     <Webhook className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
                     <span>Integração API</span>
+                  </button>
+
+                  {/* Nav Logs Auditoria */}
+                  <button
+                    onClick={() => setSelectedView('logs')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      selectedView === 'logs' 
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-black' 
+                      : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                    }`}
+                    id="desktop-nav-logs"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                    <span>Auditoria</span>
                   </button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Database, Download, Upload, AlertTriangle, CheckCircle2, RefreshCw, Calendar, FileText, ArrowLeft, ShieldAlert } from 'lucide-react';
-import { getEntregas, saveEntrega, getBlacklist, saveToBlacklist, getBlacklistClientes, saveToBlacklistClientes, getScheduledMessages, saveScheduledMessage } from '../db/storage';
+import { getEntregas, saveEntrega, getBlacklist, saveToBlacklist, getBlacklistClientes, saveToBlacklistClientes, getScheduledMessages, saveScheduledMessage, registerSystemLog } from '../db/storage';
 
 interface BackupRegistryProps {
   onClose: () => void;
@@ -44,7 +44,11 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
         entregas: getEntregas(),
         blacklist_motoristas: getBlacklist(),
         blacklist_clientes: getBlacklistClientes(),
-        scheduled_messages: getScheduledMessages()
+        scheduled_messages: getScheduledMessages(),
+        registered_employees: JSON.parse(localStorage.getItem('rodovar_registered_employees_v2') || '[]'),
+        user_passwords: JSON.parse(localStorage.getItem('rodovar_user_passwords_v2') || '{}'),
+        api_settings: JSON.parse(localStorage.getItem('rodovar_api_settings') || '{}'),
+        agenda_contacts: JSON.parse(localStorage.getItem('rodovar_manual_agenda_contacts') || '[]')
       };
 
       const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
@@ -64,6 +68,8 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
       const nowStr = new Date().toISOString();
       localStorage.setItem('rodovar_last_backup_time', nowStr);
       setLastBackup(nowStr);
+
+      registerSystemLog('Backup Exportado', `Exportou um arquivo de backup geral contendo cargas, blacklist, mensagens, colaboradores e contatos da agenda.`);
 
       if (window.falarRodovar) {
         window.falarRodovar("Segurança reforçada! Backup geral exportado com sucesso.");
@@ -158,9 +164,33 @@ export default function BackupRegistry({ onClose }: BackupRegistryProps) {
         });
       }
 
+      let employeesRestored = false;
+      // 5. Restore Registered Employees
+      if (Array.isArray(data.registered_employees)) {
+        localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(data.registered_employees));
+        employeesRestored = true;
+      }
+
+      // 6. Restore User Passwords
+      if (data.user_passwords && typeof data.user_passwords === 'object') {
+        localStorage.setItem('rodovar_user_passwords_v2', JSON.stringify(data.user_passwords));
+      }
+
+      // 7. Restore API Settings
+      if (data.api_settings && typeof data.api_settings === 'object') {
+        localStorage.setItem('rodovar_api_settings', JSON.stringify(data.api_settings));
+      }
+
+      // 8. Restore Agenda Contacts
+      if (Array.isArray(data.agenda_contacts)) {
+        localStorage.setItem('rodovar_manual_agenda_contacts', JSON.stringify(data.agenda_contacts));
+      }
+
+      registerSystemLog('Backup Restaurado', `Restaurou backup geral contendo ${restoredCount} cargas, ${restoredMsgsCount} mensagens agendadas e credenciais de colaboradores.`);
+
       setImportStatus({
         success: true,
-        message: `Restauração concluída! ${restoredCount} cargas, ${restoredMsgsCount} mensagens agendadas e dados operacionais de blacklist consolidados simultaneamente.`
+        message: `Restauração concluída! ${restoredCount} cargas, ${restoredMsgsCount} mensagens agendadas, dados de blacklist e colaboradores (${employeesRestored ? 'reestruturados' : 'mantidos'}) consolidados simultaneamente.`
       });
 
       if (window.falarRodovar) {

@@ -19,13 +19,15 @@ import {
   Check, 
   Folder, 
   ChevronRight,
-  Smile
+  Smile,
+  Eye
 } from 'lucide-react';
 import { 
   sendGroupChatMessage, 
   subscribeToGroupChatRealtime, 
   deleteGroupChatMessage,
-  subscribeToPresence
+  subscribeToPresence,
+  markMessageAsSeen
 } from '../db/storage';
 import { getRegisteredEmployees } from './EmployeeRegistration';
 import { GroupChatMessage } from '../types';
@@ -114,14 +116,32 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
     const unsubscribe = subscribeToGroupChatRealtime(activeRoom.id as any, (msgs) => {
       setMessages(msgs);
       
-      // Update last read time for this room
+      // Update last read time for this room and mark incoming messages as seen
       if (isOpen) {
         lastViewedRoomTimeRef.current[activeRoom.id] = Date.now();
+        msgs.forEach(m => {
+          const sanitizedUser = currentUser.username.replace(/\./g, '_');
+          if (m.userId !== currentUser.username && (!m.seenBy || !m.seenBy[sanitizedUser])) {
+            markMessageAsSeen(m.id, currentUser.username, currentUser.displayName || currentUser.username);
+          }
+        });
       }
     });
 
     return () => unsubscribe();
-  }, [activeRoom.id, isOpen]);
+  }, [activeRoom.id, isOpen, currentUser.username, currentUser.displayName]);
+
+  // Robust secondary watcher to trigger markMessageAsSeen on opening chat/changing tab
+  useEffect(() => {
+    if (isOpen && messages.length > 0) {
+      const sanitizedUser = currentUser.username.replace(/\./g, '_');
+      messages.forEach(m => {
+        if (m.userId !== currentUser.username && (!m.seenBy || !m.seenBy[sanitizedUser])) {
+          markMessageAsSeen(m.id, currentUser.username, currentUser.displayName || currentUser.username);
+        }
+      });
+    }
+  }, [isOpen, messages, currentUser.username, currentUser.displayName]);
 
   // Global unread messages calculator (simplistic approach via localStorage & memory)
   useEffect(() => {
@@ -667,6 +687,16 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
                                 </button>
                               )}
                             </div>
+
+                            {/* Read receipts listing (visible beneath the balloon) */}
+                            {msg.seenBy && Object.keys(msg.seenBy).length > 0 && (
+                              <div className="flex items-center gap-1.5 text-[8.5px] text-zinc-500 font-mono mt-0.5 px-1.5 select-none animate-fade-in">
+                                <Eye size={10} className="text-zinc-600 shrink-0" />
+                                <span className="tracking-tight">
+                                  Visto por: {Object.values(msg.seenBy).map((v: any) => v.userName).join(', ')}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         );
                       })

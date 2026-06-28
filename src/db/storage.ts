@@ -811,6 +811,13 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     handleFirestoreError(error, OperationType.WRITE, `${ENTREGAS_COLLECTION}/${cleanId}`);
   });
 
+  // Log system activity if changes were detected
+  if (logs.length > 0) {
+    const actionType = !existingDelivery ? 'Cadastro de Carga' : 'Alteração de Carga';
+    const detailText = logs.join('; ');
+    registerSystemLog(actionType, `Carga ${payload.origem} -> ${payload.destino} (${payload.motorista || 'Sem motorista'}): ${detailText}`);
+  }
+
   // Trigger automatic real-time webhook update
   triggerWebhook(payload);
 
@@ -820,6 +827,7 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
 export function deleteEntrega(id: string): boolean {
   const index = cachedEntregas.findIndex(e => e.id === id);
   if (index !== -1) {
+    const deletedCarga = cachedEntregas[index];
     // Optimistic local update
     cachedEntregas.splice(index, 1);
     lastEntregasFetchTime = Date.now();
@@ -828,6 +836,9 @@ export function deleteEntrega(id: string): boolean {
       localStorage.setItem('rodovar_entregas_cache_timestamp', String(lastEntregasFetchTime));
     } catch {}
     window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'DELETE', payload: { id } } }));
+
+    // Register system log
+    registerSystemLog('Exclusão de Carga', `Excluiu a carga ${deletedCarga.origem} -> ${deletedCarga.destino} (${deletedCarga.motorista || 'Sem motorista'})`);
 
     // Firestore update (Background)
     deleteDoc(doc(db, ENTREGAS_COLLECTION, id)).catch((error) => {
@@ -1428,6 +1439,98 @@ export function subscribeToPresence(callback: (presenceList: any[]) => void): ()
     callback(list);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, PRESENCE_COLLECTION);
+  });
+}
+
+// CENTRALIZED SYSTEM LOGS AND CHAT VIEW RECEIPTS
+const SYSTEM_LOGS_COLLECTION = 'system_logs';
+
+export interface SystemLog {
+  id: string;
+  timestamp: string;
+  username: string;
+  userDisplayName: string;
+  userRole: string;
+  action: string;
+  details: string;
+}
+
+export async function registerSystemLog(action: string, details: string): Promise<void> {
+  let activeUser = { username: 'sistema', displayName: 'Sistema', role: 'Operador Rodovar' };
+  const userStored = localStorage.getItem('rodovar_active_login_v2');
+  if (userStored) {
+    try {
+      activeUser = JSON.parse(userStored);
+    } catch {
+      // Ignored
+    }
+  }
+
+  const cleanId = 'log-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now();
+  const payload: SystemLog = {
+    id: cleanId,
+    timestamp: new Date().toISOString(),
+    username: activeUser.username,
+    userDisplayName: activeUser.displayName,
+    userRole: activeUser.role,
+    action,
+    details
+  };
+
+  await setDoc(doc(db, SYSTEM_LOGS_COLLECTION, cleanId), payload).catch((error) => {
+    console.error("Error registering system log:", error);
+  });
+}
+
+export function subscribeToSystemLogs(callback: (logs: SystemLog[]) => void): () => void {
+  const logsQuery = collection(db, SYSTEM_LOGS_COLLECTION);
+  return onSnapshot(logsQuery, (snapshot) => {
+    const list: SystemLog[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as SystemLog);
+    });
+    // Sort descending by timestamp so latest logs are shown first
+    list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    callback(list.slice(0, 150)); // Limit to last 150 entries for performance
+  }, (error) => {
+    console.error("Error subscribing to system logs:", error);
+  });
+}
+
+export async function clearSystemLogs(): Promise<void> {
+  const logsQuery = collection(db, SYSTEM_LOGS_COLLECTION);
+  const snapshot = await getDocs(logsQuery).catch((err) => {
+    console.error("Error fetching logs for clearing:", err);
+    return null;
+  });
+  if (!snapshot) return;
+
+  const batch = writeBatch(db);
+  snapshot.forEach(docSnap => {
+    batch.delete(docSnap.ref);
+  });
+  await batch.commit().catch((error) => {
+    console.error("Error executing batch delete for system logs:", error);
+  });
+
+  // Write a clean final meta log indicating when and who purged
+  await registerSystemLog('Limpeza de Logs', 'Todos os registros de atividades anteriores foram limpos da nuvem pelo Administrador Master.');
+}
+
+export async function markMessageAsSeen(
+  messageId: string, 
+  username: string, 
+  userDisplayName: string
+): Promise<void> {
+  if (!messageId || !username) return;
+  const docRef = doc(db, CHAT_COLLECTION, messageId);
+  await updateDoc(docRef, {
+    [`seenBy.${username.replace(/\./g, '_')}`]: {
+      userName: userDisplayName,
+      timestamp: new Date().toISOString()
+    }
+  }).catch((error) => {
+    console.warn("Could not update seen status:", error);
   });
 }
 

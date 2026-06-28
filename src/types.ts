@@ -134,6 +134,7 @@ export interface GroupChatMessage {
   isVoiceNote?: boolean;
   isAiTriggered?: boolean;
   aiAgentResponse?: string;
+  seenBy?: Record<string, { userName: string; timestamp: string }>;
 }
 
 declare global {

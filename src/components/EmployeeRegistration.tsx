@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserPlus, UserX, Shield, Key, Eye, EyeOff, Save, CheckCircle, Users } from 'lucide-react';
-import { sendGroupChatMessage, deletePresence, kickUser } from '../db/storage';
+import { sendGroupChatMessage, deletePresence, kickUser, registerSystemLog } from '../db/storage';
 
 export interface Employee {
   id: string;
@@ -212,6 +212,9 @@ export default function EmployeeRegistration() {
     setEmployees(updated);
     saveRegisteredEmployees(updated);
 
+    // Register system log
+    registerSystemLog('Cadastro de Colaborador', `Cadastrou o colaborador ${cleanName} (usuário: ${baseUsername}) como ${role}`);
+
     // Automatically send notification to the operational group chat
     sendGroupChatMessage({
       category: 'operacional',
@@ -250,6 +253,9 @@ export default function EmployeeRegistration() {
     setEmployees(updated);
     saveRegisteredEmployees(updated);
     setSuccessMsg(`Registro de ${empName} removido com sucesso.`);
+
+    // Register system log
+    registerSystemLog('Exclusão de Colaborador', `Removeu o colaborador ${empName} (usuário: ${empUsername}) do sistema`);
 
     // Remove presence and kick deleted user immediately
     deletePresence(empUsername).catch(() => {});

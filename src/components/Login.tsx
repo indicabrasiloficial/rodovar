@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Lock, User, Eye, EyeOff } from 'lucide-react';
+import { registerSystemLog } from '../db/storage';
 
 interface LoginProps {
   onLoginSuccess: (userData: { username: string; displayName: string; role: string }) => void;
@@ -61,6 +62,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
           role: 'Master'
         };
         localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
+        registerSystemLog('Login', `Administrador Master realizou login no sistema.`);
         onLoginSuccess(sessionData);
         return;
       } else {
@@ -91,6 +93,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
       };
       
       localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
+      registerSystemLog('Login', `Colaborador ${sessionData.displayName} (${sessionData.role}) realizou login no sistema.`);
       onLoginSuccess(sessionData);
     } else {
       setError('Usuário ou senha incorretos.');
