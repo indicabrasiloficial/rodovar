@@ -137,6 +137,35 @@ export interface GroupChatMessage {
   seenBy?: Record<string, { userName: string; timestamp: string }>;
 }
 
+export interface Invitation {
+  id: string; // the token
+  email: string;
+  role: 'admin' | 'operador' | 'leitura';
+  createdAt: string;
+  expiresAt: string;
+  used: boolean;
+}
+
+export interface Colaborador {
+  id: string;
+  uid: string;
+  name: string;
+  username: string;
+  email: string;
+  role: 'admin' | 'operador' | 'leitura';
+  detailedRole: string;
+  status: 'pendente' | 'aprovado';
+  forcePasswordChange: boolean;
+  created_at: string;
+}
+
+export interface FailedLogin {
+  username: string;
+  attempts: number;
+  lastAttempt: string;
+  lockedUntil: number;
+}
+
 declare global {
   interface Window {
     falarRodovar?: (texto: string, onEndCallback?: () => void) => void;

@@ -1,4 +1,4 @@
-import { Entrega, BlacklistMotorista, BlacklistCliente, GroupChatMessage } from '../types';
+import { Entrega, BlacklistMotorista, BlacklistCliente, GroupChatMessage, Invitation, Colaborador, FailedLogin } from '../types';
 import { db, auth, database, OperationType, handleFirestoreError } from './firebase';
 import { ref, set } from 'firebase/database';
 import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
@@ -1773,5 +1773,203 @@ export async function triggerWebhook(carga: Entrega) {
 
   } catch (err) {
     console.error('[Webhook Auto] Erro no fluxo automático:', err);
+  }
+}
+
+// ==========================================
+// SECURITY & COLLABORATOR INTEGRATION FLOWS
+// ==========================================
+
+const INVITES_COLLECTION = 'invites';
+const COLABORADORES_COLLECTION = 'colaboradores';
+const FAILED_LOGINS_COLLECTION = 'failed_logins';
+
+export async function createInvitation(email: string, role: 'admin' | 'operador' | 'leitura'): Promise<Invitation> {
+  const token = 'tok-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48h validity
+
+  const invite: Invitation = {
+    id: token,
+    email: email.trim().toLowerCase(),
+    role,
+    createdAt: now.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    used: false
+  };
+
+  try {
+    await setDoc(doc(db, INVITES_COLLECTION, token), invite);
+    return invite;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${INVITES_COLLECTION}/${token}`);
+  }
+}
+
+export async function getInvitations(): Promise<Invitation[]> {
+  try {
+    const snap = await getDocs(collection(db, INVITES_COLLECTION));
+    return snap.docs.map(d => d.data() as Invitation);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, INVITES_COLLECTION);
+  }
+}
+
+export async function validateInvitation(token: string, email: string): Promise<{ valid: boolean; role?: 'admin' | 'operador' | 'leitura'; error?: string }> {
+  try {
+    const dRef = doc(db, INVITES_COLLECTION, token);
+    const dSnap = await getDoc(dRef);
+    if (!dSnap.exists()) {
+      return { valid: false, error: 'Token de convite não encontrado.' };
+    }
+    const invite = dSnap.data() as Invitation;
+    if (invite.used) {
+      return { valid: false, error: 'Este convite já foi utilizado.' };
+    }
+    if (invite.email.toLowerCase() !== email.trim().toLowerCase()) {
+      return { valid: false, error: 'Este e-mail não coincide com o e-mail do convite.' };
+    }
+    if (new Date(invite.expiresAt).getTime() < Date.now()) {
+      return { valid: false, error: 'Este convite expirou (validade de 48h excedida).' };
+    }
+    return { valid: true, role: invite.role };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `${INVITES_COLLECTION}/${token}`);
+  }
+}
+
+export async function useInvitationToken(token: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, INVITES_COLLECTION, token), { used: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${INVITES_COLLECTION}/${token}`);
+  }
+}
+
+export async function registerCollaboratorProfile(profile: Colaborador): Promise<void> {
+  try {
+    await setDoc(doc(db, COLABORADORES_COLLECTION, profile.uid), profile);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${COLABORADORES_COLLECTION}/${profile.uid}`);
+  }
+}
+
+export async function getCollaboratorProfileByEmail(email: string): Promise<Colaborador | null> {
+  try {
+    const q = query(collection(db, COLABORADORES_COLLECTION), where('email', '==', email.trim().toLowerCase()));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    return snap.docs[0].data() as Colaborador;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, COLABORADORES_COLLECTION);
+  }
+}
+
+export async function getCollaboratorProfileByUsername(username: string): Promise<Colaborador | null> {
+  try {
+    const q = query(collection(db, COLABORADORES_COLLECTION), where('username', '==', username.trim().toLowerCase()));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    return snap.docs[0].data() as Colaborador;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, COLABORADORES_COLLECTION);
+  }
+}
+
+export async function getCollaboratorsFromFirestore(): Promise<Colaborador[]> {
+  try {
+    const snap = await getDocs(collection(db, COLABORADORES_COLLECTION));
+    return snap.docs.map(d => d.data() as Colaborador);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, COLABORADORES_COLLECTION);
+  }
+}
+
+export async function approveCollaboratorProfile(uid: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, COLABORADORES_COLLECTION, uid), { status: 'aprovado' });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${COLABORADORES_COLLECTION}/${uid}`);
+  }
+}
+
+export async function rejectCollaboratorProfile(uid: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, COLABORADORES_COLLECTION, uid));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${COLABORADORES_COLLECTION}/${uid}`);
+  }
+}
+
+export async function updateCollaboratorPasswordChangeFlag(uid: string, forcePasswordChange: boolean): Promise<void> {
+  try {
+    await updateDoc(doc(db, COLABORADORES_COLLECTION, uid), { forcePasswordChange });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${COLABORADORES_COLLECTION}/${uid}`);
+  }
+}
+
+export async function checkFailedLoginAttempts(usernameOrEmail: string): Promise<FailedLogin> {
+  const cleanKey = usernameOrEmail.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  try {
+    const dSnap = await getDoc(doc(db, FAILED_LOGINS_COLLECTION, cleanKey));
+    if (dSnap.exists()) {
+      return dSnap.data() as FailedLogin;
+    }
+    return {
+      username: usernameOrEmail,
+      attempts: 0,
+      lastAttempt: new Date().toISOString(),
+      lockedUntil: 0
+    };
+  } catch (error) {
+    // If table read fails (e.g. unauthenticated rules check), return empty fallback to allow login retry
+    return {
+      username: usernameOrEmail,
+      attempts: 0,
+      lastAttempt: new Date().toISOString(),
+      lockedUntil: 0
+    };
+  }
+}
+
+export async function registerFailedLoginAttempt(usernameOrEmail: string): Promise<FailedLogin> {
+  const cleanKey = usernameOrEmail.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  try {
+    const current = await checkFailedLoginAttempts(usernameOrEmail);
+    const updatedAttempts = current.attempts + 1;
+    const lockedUntil = updatedAttempts >= 5 ? Date.now() + 15 * 60 * 1000 : 0; // 15 mins lock
+
+    const data: FailedLogin = {
+      username: usernameOrEmail,
+      attempts: updatedAttempts,
+      lastAttempt: new Date().toISOString(),
+      lockedUntil
+    };
+
+    await setDoc(doc(db, FAILED_LOGINS_COLLECTION, cleanKey), data);
+    return data;
+  } catch (error) {
+    // Return mock data fallback
+    return {
+      username: usernameOrEmail,
+      attempts: 1,
+      lastAttempt: new Date().toISOString(),
+      lockedUntil: 0
+    };
+  }
+}
+
+export async function resetFailedLoginAttempts(usernameOrEmail: string): Promise<void> {
+  const cleanKey = usernameOrEmail.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  try {
+    await setDoc(doc(db, FAILED_LOGINS_COLLECTION, cleanKey), {
+      username: usernameOrEmail,
+      attempts: 0,
+      lastAttempt: new Date().toISOString(),
+      lockedUntil: 0
+    });
+  } catch (error) {
+    console.warn('Failed resetting login attempts:', error);
   }
 }
