@@ -32,6 +32,11 @@ const getStatusColor = (status: string) => {
 };
 
 export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, singleView = false }: DeliveryMapProps) {
+  const onSelectRef = useRef(onSelectDelivery);
+  useEffect(() => {
+    onSelectRef.current = onSelectDelivery;
+  }, [onSelectDelivery]);
+
   const getActiveUserName = (): string => {
     const active = localStorage.getItem('rodovar_active_login_v2');
     if (active) {
@@ -135,6 +140,23 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
       }).addTo(map);
 
       mapInstanceRef.current = map;
+
+      // Event delegation for popup buttons to prevent stale closures or lost click handlers
+      map.on('popupopen', (e) => {
+        const popupEl = e.popup.getElement();
+        if (popupEl) {
+          const btn = popupEl.querySelector('button[id^="btn-map-select-"]');
+          if (btn) {
+            const deliveryId = btn.id.replace('btn-map-select-', '');
+            (btn as HTMLButtonElement).onclick = () => {
+              if (onSelectRef.current) {
+                onSelectRef.current(deliveryId);
+              }
+              map.closePopup();
+            };
+          }
+        }
+      });
 
       // Fix render layout issues
       setTimeout(() => {
@@ -306,17 +328,6 @@ export default function DeliveryMap({ entregas, selectedId, onSelectDelivery, si
         newMarker.bindPopup(popupContent, {
           closeButton: false,
           className: 'dark-map-popup'
-        });
-
-        // Setup custom event handler on popup opens
-        newMarker.on('popupopen', () => {
-          const btn = document.getElementById(`btn-map-select-${entrega.id}`);
-          if (btn && onSelectDelivery) {
-            btn.onclick = () => {
-              onSelectDelivery(entrega.id);
-              map.closePopup();
-            };
-          }
         });
 
         markersMapRef.current.set(markerKey, newMarker);

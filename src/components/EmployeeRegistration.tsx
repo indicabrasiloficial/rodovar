@@ -144,6 +144,7 @@ export default function EmployeeRegistration() {
   const [invites, setInvites] = useState<Invitation[]>([]);
   const [pendingColabs, setPendingColabs] = useState<Colaborador[]>([]);
   const [fireColabs, setFireColabs] = useState<Colaborador[]>([]);
+  const [lastGeneratedInvite, setLastGeneratedInvite] = useState<Invitation | null>(null);
   
   // Invitation creation fields
   const [inviteEmail, setInviteEmail] = useState('');
@@ -205,6 +206,7 @@ export default function EmployeeRegistration() {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    setLastGeneratedInvite(null);
     setIsLoading(true);
 
     const email = inviteEmail.trim().toLowerCase();
@@ -218,6 +220,7 @@ export default function EmployeeRegistration() {
       const invite = await createInvitation(email, inviteRole);
       if (invite) {
         setSuccessMsg(`Convite gerado com sucesso total para ${email}!`);
+        setLastGeneratedInvite(invite);
         setInviteEmail('');
         await loadSecurityData();
         registerSystemLog('Geração de Convite', `Gerou token de convite para ${email} com permissão ${inviteRole}.`);
@@ -466,9 +469,49 @@ export default function EmployeeRegistration() {
       )}
 
       {successMsg && (
-        <div className="p-4 bg-emerald-950/20 border border-emerald-900/50 rounded-xl text-xs text-emerald-400 font-sans flex items-center justify-center gap-2">
-          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="font-semibold">{successMsg}</span>
+        <div className="space-y-3">
+          <div className="p-4 bg-emerald-950/20 border border-emerald-900/50 rounded-xl text-xs text-emerald-400 font-sans flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-semibold">{successMsg}</span>
+          </div>
+
+          {lastGeneratedInvite && (
+            <div className="p-5 bg-zinc-900/90 border border-emerald-500/30 rounded-xl space-y-4 animate-fade-in">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-[#FFD600]/10 border border-[#FFD600]/20 rounded-lg text-[#FFD600] shrink-0 mt-0.5">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#FFD600]">Informativo de Envio</h4>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                    Para máxima segurança e evitar taxas de servidor ou bloqueios de SPAM por parte dos provedores, o sistema <strong>não dispara e-mails automáticos</strong>. 
+                    <br />
+                    Para que o colaborador possa se cadastrar, você deve <strong>copiar o link seguro de ativação abaixo</strong> e enviá-lo diretamente para ele (por WhatsApp, E-mail ou Telegram).
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-zinc-950 border border-zinc-850 rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-3 font-mono text-[10px]">
+                <div className="text-zinc-400 select-all truncate max-w-full text-center sm:text-left">
+                  {window.location.origin + window.location.pathname}?invite={lastGeneratedInvite.id}&email={encodeURIComponent(lastGeneratedInvite.email)}
+                </div>
+                <button
+                  onClick={() => handleCopyInviteLink(lastGeneratedInvite.id, lastGeneratedInvite.email)}
+                  className="w-full sm:w-auto shrink-0 px-4 py-2 bg-[#FFD600] text-black hover:bg-white rounded font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer text-[10px]"
+                >
+                  {copiedInviteId === lastGeneratedInvite.id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" /> Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" /> Copiar Link Seguro
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
