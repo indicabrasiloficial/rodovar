@@ -143,20 +143,23 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
     }
   }, [isOpen, messages, currentUser.username, currentUser.displayName]);
 
-  // Global unread messages calculator (simplistic approach via localStorage & memory)
+  // Global unread messages calculator based on seenBy status in Firestore to survive page reloads and avoid false alerts
   useEffect(() => {
     if (!isOpen) {
+      const sanitizedUser = currentUser.username.replace(/\./g, '_');
       // Setup listener for general operational messages when closed
       const unsubscribe = subscribeToGroupChatRealtime('operacional', (msgs) => {
-        const lastViewed = lastViewedRoomTimeRef.current['operacional'] || 0;
-        const unread = msgs.filter(m => new Date(m.timestamp).getTime() > lastViewed && m.userId !== currentUser.username);
+        const unread = msgs.filter(m => 
+          m.userId !== currentUser.username && 
+          (!m.seenBy || !m.seenBy[sanitizedUser])
+        );
         setUnreadCount(unread.length);
       });
       return () => unsubscribe();
     } else {
       setUnreadCount(0);
     }
-  }, [isOpen, activeRoom.id, currentUser.username]);
+  }, [isOpen, currentUser.username]);
 
   // Scroll to bottom on new messages
   useEffect(() => {

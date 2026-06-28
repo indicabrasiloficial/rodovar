@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { database } from '../db/firebase';
-import { ref, onValue, set, update, off } from 'firebase/database';
+import { dbAdapter } from '../db/databaseAdapter';
 
 export interface TrackerLocation {
   lat: number;
@@ -37,10 +36,7 @@ export function useDriverTracker(cargoId: string | undefined) {
       return;
     }
 
-    const trackerRef = ref(database, `tracking/${cargoId}`);
-    
-    const unsubscribe = onValue(trackerRef, (snapshot) => {
-      const data = snapshot.val();
+    const unsubscribe = dbAdapter.inscreverTrackingCargo(cargoId, (data) => {
       if (data) {
         let position = null;
         if (data.location) {
@@ -87,13 +83,10 @@ export function useDriverTracker(cargoId: string | undefined) {
           error: null,
         }));
       }
-    }, (err) => {
-      console.error("useDriverTracker error:", err);
-      setTrackerState(prev => ({ ...prev, error: err.message }));
     });
 
     return () => {
-      off(trackerRef);
+      unsubscribe();
     };
   }, [cargoId]);
 
@@ -101,8 +94,7 @@ export function useDriverTracker(cargoId: string | undefined) {
   const markAsDelivered = async () => {
     if (!cargoId) return;
     try {
-      const trackerRef = ref(database, `tracking/${cargoId}`);
-      await update(trackerRef, {
+      await dbAdapter.atualizarTrackingCargo(cargoId, {
         status: 'delivered',
         finishedAt: new Date().toISOString()
       });
@@ -116,8 +108,7 @@ export function useDriverTracker(cargoId: string | undefined) {
   const stopTracking = async () => {
     if (!cargoId) return;
     try {
-      const trackerRef = ref(database, `tracking/${cargoId}`);
-      await update(trackerRef, {
+      await dbAdapter.atualizarTrackingCargo(cargoId, {
         status: 'finished',
         finishedAt: new Date().toISOString()
       });

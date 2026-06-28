@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ref, onValue, set, off } from 'firebase/database';
-import { database } from '../db/firebase';
+import { dbAdapter } from '../db/databaseAdapter';
 
 interface ModeOption {
   key: 'economy' | 'express' | 'normal';
@@ -42,32 +41,24 @@ export default function TrackingModeSelector() {
   const [activeMode, setActiveMode] = useState<'economy' | 'express' | 'normal'>('express');
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Sync mode with Firebase Realtime DB
+  // Sync mode with Database Adapter
   useEffect(() => {
-    const modeRef = ref(database, 'config/tracking/mode');
-
-    const unsubscribe = onValue(modeRef, (snap) => {
-      if (snap.exists()) {
-        const value = snap.val();
-        if (value === 'economy' || value === 'express' || value === 'normal') {
-          setActiveMode(value);
-        }
-      }
+    const unsubscribe = dbAdapter.inscreverTrackingMode((mode) => {
+      setActiveMode(mode);
     });
 
     return () => {
-      off(modeRef, 'value', unsubscribe);
+      unsubscribe();
     };
   }, []);
 
   const handleSelectMode = async (mode: 'economy' | 'express' | 'normal') => {
     setIsUpdating(true);
     try {
-      const modeRef = ref(database, 'config/tracking/mode');
-      await set(modeRef, mode);
+      await dbAdapter.setTrackingMode(mode);
       setActiveMode(mode);
     } catch (err) {
-      console.error("Erro ao atualizar o modo de rastreamento no Firebase:", err);
+      console.error("Erro ao atualizar o modo de rastreamento:", err);
     } finally {
       setIsUpdating(false);
     }

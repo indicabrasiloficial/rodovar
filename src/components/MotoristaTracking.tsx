@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../db/firebase';
+import { dbAdapter } from '../db/databaseAdapter';
 import { Entrega } from '../types';
 import { 
   Truck, 
@@ -135,32 +134,17 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
     setLoading(true);
     setError(null);
 
-    const q = query(
-      collection(db, 'entregas'),
-      where('trackingCode', '==', trackingCode)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
+    const unsubscribe = dbAdapter.inscreverCargaPorCodigoRastreio(
+      trackingCode,
+      (cargaResult) => {
         setLoading(false);
-        if (!snapshot.empty) {
-          const docSnap = snapshot.docs[0];
-          const data = docSnap.data();
-          setDelivery({
-            id: docSnap.id,
-            ...data
-          } as Entrega);
+        if (cargaResult) {
+          setDelivery(cargaResult);
           setError(null);
         } else {
           setDelivery(null);
           setError(`Viagem com código ${trackingCode} não localizada na base de dados.`);
         }
-      },
-      (err) => {
-        console.error('Error listening to driver delivery doc:', err);
-        setError('Erro de conexão ao carregar os dados da viagem.');
-        setLoading(false);
       }
     );
 
@@ -229,9 +213,8 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
       const activeDelivery = latestDeliveryRef.current;
       if (activeDelivery && activeDelivery.id) {
         try {
-          // Direct real-time upload to Firestore
-          const docRef = doc(db, 'entregas', activeDelivery.id);
-          await updateDoc(docRef, {
+          // Direct real-time upload via Database Adapter
+          await dbAdapter.salvarCarga(activeDelivery.id, {
             localizacaoAtual: { lat, lng },
             ultimaAtualizacao: nowStr
           });
@@ -364,9 +347,8 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   const handleRestartJourney = async () => {
     if (!delivery || !delivery.id) return;
     try {
-      // 1. Direct real-time upload to Firestore to change status to 'em_transito'
-      const docRef = doc(db, 'entregas', delivery.id);
-      await updateDoc(docRef, {
+      // 1. Direct real-time upload via Database Adapter to change status to 'em_transito'
+      await dbAdapter.salvarCarga(delivery.id, {
         status: 'em_transito',
         updated_at: new Date().toISOString()
       });

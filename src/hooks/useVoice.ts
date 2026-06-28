@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Entrega } from '../types';
 import { getEntregas } from '../db/storage';
 import { falarRodovar } from '../utils/speech';
-import { db } from '../db/firebase';
-import { collection, query as firestoreQuery, where, limit, getDocs } from 'firebase/firestore';
+import { dbAdapter } from '../db/databaseAdapter';
 
 
 export interface VoiceState {
@@ -516,33 +515,13 @@ export function useVoice(
           if (searchWords.length > 0) {
             const firstTerm = searchWords[0].toLowerCase();
             
-            // Search motorista prefix match in Firestore
-            const qm = firestoreQuery(
-              collection(db, 'entregas'),
-              where('search_motorista', '>=', firstTerm),
-              where('search_motorista', '<=', firstTerm + '\uf8ff'),
-              limit(1)
-            );
-            const snapM = await getDocs(qm);
-            
-            if (!snapM.empty) {
-              const parseFirestoreDocToEntrega = (await import('./usePaginatedEntregas')).parseFirestoreDocToEntrega;
-              bestMatch = parseFirestoreDocToEntrega(snapM.docs[0]);
-              matchType = 'motorista';
-            } else {
-              // Search destino prefix match in Firestore
-              const qd = firestoreQuery(
-                collection(db, 'entregas'),
-                where('search_destino', '>=', firstTerm),
-                where('search_destino', '<=', firstTerm + '\uf8ff'),
-                limit(1)
-              );
-              const snapD = await getDocs(qd);
-              if (!snapD.empty) {
-                const parseFirestoreDocToEntrega = (await import('./usePaginatedEntregas')).parseFirestoreDocToEntrega;
-                bestMatch = parseFirestoreDocToEntrega(snapD.docs[0]);
-                matchType = 'destino';
-              }
+            // Search prefix match using Database Adapter
+            const matchedCarga = await dbAdapter.buscarCargaPorVoz(firstTerm);
+            if (matchedCarga) {
+              bestMatch = matchedCarga;
+              // Detect if search words are closer to driver or destination
+              const hasMotoristaMatch = (matchedCarga.motorista || '').toLowerCase().includes(firstTerm);
+              matchType = hasMotoristaMatch ? 'motorista' : 'destino';
             }
           }
         } catch (err) {

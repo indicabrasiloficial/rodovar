@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ref, onValue, off } from 'firebase/database';
-import { database } from '../db/firebase';
+import { dbAdapter } from '../db/databaseAdapter';
 
 export interface DriverTrackingData {
   cargoId: string;
@@ -20,10 +19,7 @@ export function useAllDriversTracking() {
   const [trackingData, setTrackingData] = useState<DriverTrackingData[]>([]);
 
   useEffect(() => {
-    const trackingRef = ref(database, 'tracking');
-
-    const unsubscribe = onValue(trackingRef, (snapshot) => {
-      const data = snapshot.val();
+    const unsubscribe = dbAdapter.inscreverTrackingGeral((data) => {
       if (!data) {
         setTrackingData([]);
         return;
@@ -92,8 +88,6 @@ export function useAllDriversTracking() {
       });
 
       setTrackingData(activeDrivers);
-    }, (error) => {
-      console.error("Error reading driver tracking list from Realtime DB:", error);
     });
 
     // Run interval every 15 seconds to recalculate "live" / "offline" status
@@ -131,7 +125,7 @@ export function useAllDriversTracking() {
     }, 15000);
 
     return () => {
-      off(trackingRef, 'value', unsubscribe);
+      unsubscribe();
       clearInterval(intervalId);
     };
   }, []);

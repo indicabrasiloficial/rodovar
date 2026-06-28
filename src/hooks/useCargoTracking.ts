@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ref, onValue, off } from 'firebase/database';
-import { database } from '../db/firebase';
+import { dbAdapter } from '../db/databaseAdapter';
 import { Entrega } from '../types';
 import { extractCoordsFromLink } from '../db/storage';
 
@@ -32,9 +31,8 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     }
 
     const cargoId = entrega.id; // Mantém o case original para compatibilidade absoluta com os IDs do Firestore que são case-sensitive
-    const trackingRef = ref(database, `tracking/${cargoId}`);
 
-    const handleSync = (rtdbSnap: any) => {
+    const handleSync = (rtdbVal: any) => {
       const now = Date.now();
       
       let rtdbLat = 0;
@@ -43,21 +41,20 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       let rtdbConnected = false;
       let rtdbLastSeen = 0;
 
-      if (rtdbSnap && rtdbSnap.exists()) {
-        const val = rtdbSnap.val();
-        rtdbConnected = val.connected === true;
-        rtdbLastSeen = Number(val.lastSeen ?? 0);
+      if (rtdbVal) {
+        rtdbConnected = rtdbVal.connected === true;
+        rtdbLastSeen = Number(rtdbVal.lastSeen ?? 0);
         
-        if (val && val.location) {
-          rtdbLat = Number(val.location.lat ?? 0);
-          rtdbLng = Number(val.location.lng ?? 0);
-          rtdbTs = Number(val.location.timestamp ?? val.updatedAt ?? 0);
-        } else if (val) {
+        if (rtdbVal.location) {
+          rtdbLat = Number(rtdbVal.location.lat ?? 0);
+          rtdbLng = Number(rtdbVal.location.lng ?? 0);
+          rtdbTs = Number(rtdbVal.location.timestamp ?? rtdbVal.updatedAt ?? 0);
+        } else {
           // Fallback support for legacy flat fields
-          const current = val.current || val;
+          const current = rtdbVal.current || rtdbVal;
           rtdbLat = Number(current.lat ?? 0);
           rtdbLng = Number(current.lng ?? 0);
-          rtdbTs = Number(current.ts ?? val.ts ?? 0);
+          rtdbTs = Number(current.ts ?? rtdbVal.ts ?? 0);
         }
       }
 
@@ -179,15 +176,8 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
       applyFallbacks();
     }
 
-    const unsubscribe = onValue(trackingRef, (snap) => {
-      const found = handleSync(snap);
-      if (!found) {
-        applyFallbacks();
-      }
-    }, (error) => {
-      console.warn("Realtime DB tracking listener failed/denied, falling back to Firestore: ", error);
-      // Run fallback sync with Firestore directly when Realtime DB fails
-      const found = handleSync(null);
+    const unsubscribe = dbAdapter.inscreverTrackingCargo(cargoId, (val) => {
+      const found = handleSync(val);
       if (!found) {
         applyFallbacks();
       }
@@ -217,7 +207,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     }, 5000);
 
     return () => {
-      off(trackingRef, 'value', unsubscribe);
+      unsubscribe();
       clearInterval(interval);
     };
   }, [

@@ -2,23 +2,14 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getDatabase } from 'firebase/database';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { ENV } from '../config/env';
 
-const config = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfig.measurementId,
-};
-
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || '(default)';
+const config = ENV.FIREBASE;
 
 const app = initializeApp(config);
-export const db = getFirestore(app, databaseId); /* CRITICAL: The app will break without this line */
-export const database = getDatabase(app, import.meta.env.VITE_FIREBASE_DATABASE_URL || (firebaseConfig as any).databaseURL || `https://${config.projectId}-default-rtdb.firebaseio.com`);
+export const db = getFirestore(app, config.databaseId); /* CRITICAL: The app will break without this line */
+export const database = getDatabase(app, config.databaseURL);
+
 
 // Enable offline IndexedDB persistence for robust local fallback when network is unavailable
 if (typeof window !== 'undefined') {

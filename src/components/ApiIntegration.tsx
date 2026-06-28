@@ -19,8 +19,7 @@ import {
   Settings2,
   CheckCircle2
 } from 'lucide-react';
-import { db } from '../db/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { dbAdapter } from '../db/databaseAdapter';
 import { Entrega } from '../types';
 
 interface ApiIntegrationProps {
@@ -86,10 +85,8 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const docRef = doc(db, 'api_integration_settings', 'config');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data() as ApiSettings;
+        const data = await dbAdapter.getApiSettings() as ApiSettings;
+        if (data) {
           setSettings({
             ...data,
             // Guard safety fallbacks
@@ -110,7 +107,7 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
           }
         }
       } catch (err) {
-        console.error('Erro ao buscar configurações de API do Firebase:', err);
+        console.error('Erro ao buscar configurações de API:', err);
       }
     };
     fetchSettings();
@@ -122,9 +119,8 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
       // Save locally
       localStorage.setItem('rodovar_api_settings', JSON.stringify(newSettings));
       
-      // Save to Firestore
-      const docRef = doc(db, 'api_integration_settings', 'config');
-      await setDoc(docRef, newSettings);
+      // Save to Cloud via dbAdapter
+      await dbAdapter.saveApiSettings(newSettings);
       
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
@@ -133,7 +129,7 @@ export default function ApiIntegration({ onClose, entregas }: ApiIntegrationProp
         window.falarRodovar("Configurações de integração atualizadas e salvas na nuvem com sucesso.");
       }
     } catch (err) {
-      console.error('Erro ao persistir configurações de API no Firestore:', err);
+      console.error('Erro ao persistir configurações de API:', err);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 4000);
     }

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../db/firebase';
+import { dbAdapter } from '../db/databaseAdapter';
 import { Entrega } from '../types';
 import { TrackingCard } from './TrackingCard';
 import { Search, ArrowLeft, ShieldAlert, AlertCircle, Loader2 } from 'lucide-react';
@@ -40,32 +39,17 @@ export const Rastrear: React.FC<RastrearProps> = ({ onClose, userLogged, onAcces
     setLoading(true);
     setError(null);
 
-    const q = query(
-      collection(db, 'entregas'),
-      where('trackingCode', '==', searchCode)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
+    const unsubscribe = dbAdapter.inscreverCargaPorCodigoRastreio(
+      searchCode,
+      (cargaResult) => {
         setLoading(false);
-        if (!snapshot.empty) {
-          const docSnap = snapshot.docs[0];
-          const data = docSnap.data();
-          setCarga({
-            id: docSnap.id,
-            ...data
-          } as Entrega);
+        if (cargaResult) {
+          setCarga(cargaResult);
           setError(null);
         } else {
           setCarga(null);
           setError('Código de rastreio não encontrado. Verifique os dígitos e tente novamente.');
         }
-      },
-      (err) => {
-        console.error('Error listening to public tracking code:', err);
-        setError('Erro de conexão ao carregar os dados de rastreamento.');
-        setLoading(false);
       }
     );
 

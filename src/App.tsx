@@ -26,6 +26,7 @@ import ApiIntegration from './components/ApiIntegration';
 import ActivityLogs from './components/ActivityLogs';
 import FloatingChat from './components/FloatingChat';
 import TelegramIntegration from './components/TelegramIntegration';
+import SystemMigration from './components/SystemMigration';
 
 import { 
   Truck, 
@@ -52,6 +53,7 @@ import {
   Bot,
   Webhook,
   Database,
+  Server,
   Globe,
   CheckSquare,
   ChevronDown,
@@ -60,7 +62,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs' | 'telegram_integration';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs' | 'telegram_integration' | 'migration';
 
 
 export default function App() {
@@ -442,6 +444,13 @@ export default function App() {
         return (
           <ActivityLogs currentUser={user} />
         );
+      case 'migration':
+        if (!user || (user.username !== 'master' && user.role !== 'Master')) {
+          return <div className="text-center p-12 text-red-500 font-mono font-bold uppercase tracking-wider">Acesso Negado: Apenas o perfil Master tem acesso à Configuração/Migração do Sistema.</div>;
+        }
+        return (
+          <SystemMigration onClose={() => setSelectedView('dashboard')} />
+        );
       case 'agenda':
         return (
           <Agenda />
@@ -679,14 +688,14 @@ export default function App() {
             <button
               onClick={() => setIsToolsExpanded(!isToolsExpanded)}
               className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-[10px] uppercase font-mono font-bold transition-all ${
-                isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration'].includes(selectedView)
+                isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration'].includes(selectedView)
                   ? 'bg-zinc-900 border-zinc-850 text-[#FFD600]'
                   : 'bg-zinc-950/50 border-zinc-900 text-zinc-400 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-[#FFD600]" />
-                {['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration'].includes(selectedView)
+                {['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration'].includes(selectedView)
                   ? `Ferramenta: ${selectedView.toUpperCase()}`
                   : 'Mais Ferramentas & Suporte'}
               </span>
@@ -694,7 +703,7 @@ export default function App() {
             </button>
 
             <AnimatePresence>
-              {(isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration'].includes(selectedView)) && (
+              {(isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration'].includes(selectedView)) && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
@@ -850,6 +859,22 @@ export default function App() {
                       >
                         <FileText className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
                         <span>Logs Auditoria</span>
+                      </button>
+                    )}
+
+                    {/* Migração (Admin-only) */}
+                    {user && (user.username === 'master' || user.role === 'Master') && (
+                      <button
+                        onClick={() => setSelectedView('migration')}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          selectedView === 'migration' 
+                          ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                        }`}
+                        id="nav-migration"
+                      >
+                        <Server className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
+                        <span>Sist. / Migração</span>
                       </button>
                     )}
                   </div>
@@ -1205,6 +1230,20 @@ export default function App() {
                   >
                     <FileText className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
                     <span>Auditoria</span>
+                  </button>
+
+                  {/* Nav Migração */}
+                  <button
+                    onClick={() => setSelectedView('migration')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      selectedView === 'migration' 
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-black' 
+                      : 'text-zinc-400 border-transparent hover:text-white hover:bg-zinc-900/40'
+                    }`}
+                    id="desktop-nav-migration"
+                  >
+                    <Server className="w-3.5 h-3.5 shrink-0" />
+                    <span>Sist. / Migração</span>
                   </button>
                 </div>
               </div>

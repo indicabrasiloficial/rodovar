@@ -1,17 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { db } from '../db/firebase';
 import { Entrega, DeliveryStatus } from '../types';
 import { updateEntregaField, getEntregas, fetchEntregasFromServer } from '../db/storage';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR } from '../utils/date';
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  doc, 
-  serverTimestamp 
-} from 'firebase/firestore';
 import { 
   CheckSquare, 
   RefreshCw, 
@@ -192,7 +183,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
       // updateDoc with exact paths specified by instructions
       await updateEntregaField(cargaId, {
         [`etapasOperador.${etapaId}`]: novoValor,
-        "etapasOperador.ultimaAtualizacao": serverTimestamp()
+        "etapasOperador.ultimaAtualizacao": new Date().toISOString()
       });
     } catch (err) {
       console.error("Erro de persistência de etapa no Firestore:", err);
@@ -205,7 +196,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
     try {
       await updateEntregaField(cargaId, {
         notasOperador: text,
-        notasAtualizadaEm: serverTimestamp()
+        notasAtualizadaEm: new Date().toISOString()
       });
       
       // Update local state and cache
@@ -293,7 +284,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
         historico: novoHistorico,
         observacoes: novasObservacoes,
         notasOperador: '',
-        notasAtualizadaEm: serverTimestamp()
+        notasAtualizadaEm: new Date().toISOString()
       });
 
       // Synchronize in-memory react state
@@ -694,7 +685,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
       const novaNota = `[PREVISÃO EM TEMPO REAL] Rota ${carga.origem} ➔ ${carga.destino}. Chegada estimada realista: ${formattedETA}.`;
       await updateEntregaField(carga.id, {
         notasOperador: msg,
-        notasAtualizadaEm: serverTimestamp()
+        notasAtualizadaEm: new Date().toISOString()
       });
 
       // Update locally
