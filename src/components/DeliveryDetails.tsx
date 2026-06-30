@@ -497,7 +497,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     solicitarDados: `Boa Tarde,\nMeu nome é Jairo e faço parte da equipe de logística da *Rodovar Transportadora*\n\nPara darmos início ao transporte da sua carga, poderia, por gentileza, informar os dados do destinatário?\n\nFRETE: *${entrega.origem} ➔ ${entrega.destino}*\n\n*• Nome do responsável pelo recebimento*\n*• Telefone para contato*\n*• Localização/endereço de entrega*\n*• Horário disponível para o recebimento da mercadoria*\n\nDesde já, agradeço pela colaboração e fico à disposição.`,
     apresentar: `${getGreetingText()}, ${entrega.motorista ? entrega.motorista.toUpperCase() : 'MOTORISTA'}! Tudo bem? Aqui é o Jairo Bahia da Rodovar. Vim desejar uma excelente viagem até ${entrega.destino ? entrega.destino.toUpperCase() : ''}.`,
     previsao: `${getGreetingText()}, tudo bem? Aqui é o Jairo Bahia da Rodovar. Passando para confirmar que a previsão estimada para a entrega de sua mercadoria em *${entrega.destino}* é o dia *${formatDateBR(entrega.prazo)}*. Qualquer dúvida estou à disposição!`,
-    solicitarLoc: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Por gentileza, nos envie sua localização atualizada/em tempo real quando puder para acompanharmos a viagem. Obrigado!`,
+    solicitarLoc: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Por gentileza, nos envie sua localização LOCAL (não envie em tempo real, envie apenas a localização Local/atual, conforme a imagem explicativa do link abaixo) para acompanharmos a sua viagem. Obrigado!\n\nImagem explicativa de como enviar a localização Local:\nhttps://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png`,
     confirmarEntrega: `${getGreetingText()}, tudo bem? Passando para informar que a entrega de sua carga foi realizada e confirmada com sucesso pelo motorista ${entrega.motorista} na data de hoje. Agradecemos pela parceria! Rodovar Transportadora.`,
     solicitarCanhoto: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Assim que você finalizar o descarrego, por gentileza nos envie uma foto nítida do canhoto assinado para darmos baixa no sistema. Excelente trabalho!`
   };
@@ -593,9 +593,31 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
           </div>
         </div>
 
-        <p className={`text-[10px] line-clamp-2 leading-relaxed transition ${isClicked ? 'text-emerald-300/70' : 'text-gray-400'}`}>
+        <p className={`text-[10px] leading-relaxed transition ${isClicked ? 'text-emerald-300/70' : 'text-gray-400'}`}>
           "{previewText}"
         </p>
+
+        {key === 'solicitarLoc' && (
+          <div className="mt-2 border border-zinc-800 rounded bg-black/40 overflow-hidden" onClick={(ev) => ev.stopPropagation()}>
+            <div className="p-1 bg-zinc-900/50 text-[9px] font-mono text-zinc-500 flex justify-between items-center">
+              <span>Imagem Anexa:</span>
+              <a 
+                href="https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png" 
+                target="_blank" 
+                rel="noreferrer" 
+                className="text-[#FFD600] hover:underline flex items-center gap-0.5"
+              >
+                Abrir imagem ↗
+              </a>
+            </div>
+            <img 
+              src="https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png" 
+              alt="Instrução de localização" 
+              className="w-full h-auto max-h-40 object-contain block opacity-85 hover:opacity-100 transition"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -1425,7 +1447,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                 {renderScriptButton('solicitarDados', '1. Solicitar Dados (Cliente)', entrega.tel_cliente, waTemplates.solicitarDados, 'Entrar em contato com o cliente solicitando dados do destinatário...')}
                 {renderScriptButton('apresentar', '2. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Desejar uma excelente viagem até ${entrega.destino ? entrega.destino.toUpperCase() : ''}...`)}
                 {renderScriptButton('previsao', '3. Previsão de Entrega (Cliente)', entrega.tel_cliente, waTemplates.previsao, `Informar a previsão de entrega (${formatDateBR(entrega.prazo)}) ao cliente...`)}
-                {renderScriptButton('solicitarLoc', '4. Solicitar Localização (Motorista)', entrega.tel_motorista, waTemplates.solicitarLoc, 'Solicitar localização atualizada/tempo real ao motorista...')}
+                {renderScriptButton('solicitarLoc', '4. Solicitar Localização Local (Motorista)', entrega.tel_motorista, waTemplates.solicitarLoc, 'Solicitar localização LOCAL (não em tempo real, com imagem anexa) ao motorista...')}
                 {renderScriptButton('confirmarEntrega', '5. Entrega Confirmada (Cliente)', entrega.tel_cliente, waTemplates.confirmarEntrega, 'Informar ao cliente sobre a entrega realizada com sucesso...')}
               </div>
             </div>
