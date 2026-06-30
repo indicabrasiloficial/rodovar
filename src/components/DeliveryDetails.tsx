@@ -482,7 +482,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   const clickWhatsApp = (phone: string, text: string) => {
     const cleanPhone = phone.replace(/\D/g, '');
     const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank', 'noreferrer,noopener');
+    window.open(url, 'whatsapp');
   };
 
   const getGreetingText = (): string => {
@@ -800,7 +800,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               const clientName = entrega.cliente || 'Parceiro';
               const msg = `Olá ${clientName}! Sou o ${getActiveUserFullName()} da Rodovar. Nosso motorista ${entrega.motorista} já está iniciando a coleta da sua mercadoria com destino a ${entrega.destino}. Por favor, envie-nos o link exato da sua localização de entrega no Google de forma a garantir que o motorista faça a entrega com máxima precisão e rapidez. Muito obrigado!`;
               const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`;
-              window.open(url, '_blank', 'noreferrer,noopener');
+              window.open(url, 'whatsapp');
             }}
             className="w-full md:w-auto px-5 py-3 bg-[#FFD600] hover:bg-[#ffe23b] text-black text-xs font-black uppercase rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 shadow-[0_4px_15px_rgba(255,214,0,0.25)] z-10 shrink-0 font-mono"
             id="notify-coleta-request-btn"
@@ -950,7 +950,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                       });
                       const msg = `Olá, ${entrega.motorista}! Sou o ${getActiveUserFullName()} da Rodovar.\n\nPor favor, acesse o link abaixo e clique em "ATIVAR RASTREAMENTO AO VIVO" para habilitar o rastreamento GPS em tempo real de sua viagem com destino a ${entrega.destino}:\n\nLink do Rastreio: ${trackingLink}\n\nTenha uma ótima e segura viagem!`;
                       const url = `https://wa.me/55${(entrega.tel_motorista || '').replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
-                      window.open(url, '_blank', 'noreferrer,noopener');
+                      window.open(url, 'whatsapp');
                     }}
                     className="w-full py-2.5 px-3 bg-emerald-950/40 hover:bg-emerald-600 text-emerald-400 hover:text-black font-extrabold font-mono text-[11px] tracking-wide rounded-lg border border-emerald-800 hover:border-emerald-550 transition-all duration-250 cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
                   >
@@ -1581,7 +1581,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
                     const clientName = entrega.cliente || 'Parceiro';
                     const msg = `Olá ${clientName}! Sou o ${getActiveUserFullName()} da Rodovar. Nosso motorista ${entrega.motorista} já está iniciando a coleta da sua mercadoria com destino a ${entrega.destino}. Por favor, envie-nos o link exato da sua localização de entrega no Google de forma a garantir que o motorista faça a entrega com máxima precisão e rapidez. Muito obrigado!`;
                     const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`;
-                    window.open(url, '_blank', 'noreferrer,noopener');
+                    window.open(url, 'whatsapp');
                     setShowDetailsLocModal(false);
                   }}
                   className="w-full sm:flex-1 py-3 px-4 bg-[#FFD600] hover:bg-[#ffe23b] text-black transition rounded-xl font-mono text-xs font-black uppercase cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(255,214,0,0.25)]"

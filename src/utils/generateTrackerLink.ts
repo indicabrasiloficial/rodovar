@@ -26,6 +26,6 @@ export function openWhatsAppTrackerLink(params: TrackerLinkParams) {
   const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
   
   if (typeof window !== 'undefined') {
-    window.open(whatsappUrl, '_blank');
+    window.open(whatsappUrl, 'whatsapp');
   }
 }

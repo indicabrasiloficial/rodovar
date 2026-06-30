@@ -154,7 +154,7 @@ export default function ManagerSupport({ entregas, initialEntregaId }: ManagerSu
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${targetPhone}&text=${encodedMessage}`;
 
     // Open WhatsApp in a new window/tab safely bypassing popup blockers
-    window.open(whatsappUrl, '_blank');
+    window.open(whatsappUrl, 'whatsapp');
 
     setFeedbackMsg({
       type: 'success',

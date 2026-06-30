@@ -503,7 +503,7 @@ export default function Dashboard({ entregas, onSelectDelivery, voiceHook, onFil
   const handleTriggerWhatsAppDirect = (phone: string, text: string) => {
     const cleanPhone = phone.replace(/\D/g, '');
     const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    window.open(url, 'whatsapp');
   };
 
   return (

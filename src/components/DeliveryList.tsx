@@ -1371,7 +1371,7 @@ export default function DeliveryList({
   const openWhatsApp = (phone: string, text: string) => {
     const cleanPhone = phone.replace(/\D/g, '');
     const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, 'whatsapp');
   };
 
   const getWhatsappDriverMsg = (entrega: Entrega) => {
@@ -1406,7 +1406,7 @@ Tenha uma ótima e segura viagem!`;
       msg = `Olá ${clientName}! Sou o ${getActiveUserFullName()} da Rodovar. Tudo bem? Poderia nos agilizar o envio do link do Google Maps da sua localização de entrega para a rota com destino a ${e.destino}? Assim já cadastramos no roteirizador do motorista. Agradecemos pela parceria!`;
     }
     const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, 'whatsapp');
   };
 
   const renderLocationReminderBadge = (e: Entrega) => {

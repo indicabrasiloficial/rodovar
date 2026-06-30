@@ -300,7 +300,7 @@ export function useVoice(
 
         const url = `https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`;
         speak(`Prontinho, ${getActiveUserName()}! Abrindo o WhatsApp do motorista...`);
-        window.open(url, '_blank');
+        window.open(url, 'whatsapp');
       }
     }
     setState((prev) => ({ ...prev, showConfirmPrompt: false }));

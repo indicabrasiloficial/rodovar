@@ -39,7 +39,7 @@ export default function ActivityLogs({ currentUser }: ActivityLogsProps) {
 
   const handleClearLogs = async () => {
     if (currentUser?.role !== 'Master') {
-      alert("Apenas o perfil Administrador Master possui permissão para limpar o histórico de atividades.");
+      alert("Apenas o perfil Administrador do Suporte possui permissão para limpar o histórico de atividades.");
       return;
     }
 

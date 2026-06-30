@@ -486,7 +486,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
       const clientName = savedEntregaData.cliente || 'Parceiro';
       const msg = `Olá ${clientName}! Sou ${activeUser.displayName} da Rodovar. Acabamos de cadastrar o frete com destino ao seu endereço em ${savedEntregaData.destino}. O motorista ${savedEntregaData.motorista} está iniciando o processo de coleta hoje. Poderia nos enviar um link da localização exata do Google Maps por aqui para agilizarmos a sua entrega? Obrigado, aguardo!`;
       const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`;
-      window.open(url, '_blank', 'noopener,noreferrer');
+      window.open(url, 'whatsapp');
       
       onSaved(savedEntregaData.id);
     }

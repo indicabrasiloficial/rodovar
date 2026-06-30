@@ -142,7 +142,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
           // Check approval status
           if (profile.status === 'pendente') {
             await auth.signOut();
-            setError('Sua conta está aguardando aprovação do Administrador Master.');
+            setError('Sua conta está aguardando aprovação do Suporte.');
             setLoading(false);
             return;
           }
@@ -322,7 +322,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
       await auth.signOut();
 
       registerSystemLog('Auto Cadastro Colaborador', `Colaborador ${cleanName} (usuário: ${cleanUser}) se auto-cadastrou via convite.`);
-      setRegSuccess(`Cadastro realizado com sucesso total! Sua conta de perfil "${detailedRole}" foi enviada para aprovação pendente do Administrador Master.`);
+      setRegSuccess(`Cadastro realizado com sucesso total! Sua conta de perfil "${detailedRole}" foi enviada para aprovação pendente do Suporte.`);
       
       // Reset form fields
       setRegToken('');
@@ -341,8 +341,8 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
           `⚠️ O e-mail "${cleanEmail}" já está cadastrado no Firebase do sistema.\n\n` +
           `Como este e-mail já possui uma conta ativa, você não pode registrar uma nova conta usando o mesmo endereço.\n\n` +
           `💡 O que fazer?\n` +
-          `1. Caso você esteja apenas testando o fluxo, peça ao Administrador Master para gerar um convite para outro e-mail seu (ex: um e-mail alternativo ou de testes).\n` +
-          `2. Se você precisa reutilizar este e-mail, o Administrador precisará primeiro excluir o cadastro antigo deste e-mail na aba 'Cadastro > Colaboradores Credenciados' clicando na lixeira vermelha.`
+          `1. Caso você esteja apenas testando o fluxo, peça ao Suporte para gerar um convite para outro e-mail seu (ex: um e-mail alternativo ou de testes).\n` +
+          `2. Se você precisa reutilizar este e-mail, o Suporte precisará primeiro excluir o cadastro antigo deste e-mail na aba 'Cadastro > Colaboradores Credenciados' clicando na lixeira vermelha.`
         );
       } else if (errCode === 'auth/weak-password' || errMsg.includes('weak-password')) {
         setError('⚠️ A senha definida é muito fraca. Ela deve conter pelo menos 6 caracteres.');

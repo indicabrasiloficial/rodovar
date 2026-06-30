@@ -255,7 +255,7 @@ export default function WhatsAppScheduler() {
     // Fire Web WhatsApp link
     const cleanPhone = sch.recipientPhone.replace(/\D/g, '');
     const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(sch.messageText)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, 'whatsapp');
 
     // Update state to enviado
     saveScheduledMessage({
@@ -723,7 +723,7 @@ export default function WhatsAppScheduler() {
                     const handleSendClick = () => {
                       const cleanPhone = driver.tel_motorista.replace(/\D/g, '');
                       const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(formattedMsg)}`;
-                      window.open(url, '_blank', 'noopener,noreferrer');
+                      window.open(url, 'whatsapp');
                     };
 
                     return (
