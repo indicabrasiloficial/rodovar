@@ -332,7 +332,25 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
       setRegPassword('');
       setRegConfirmPassword('');
     } catch (err: any) {
-      setError(err.message || 'Erro ao registrar conta no Firebase.');
+      console.error("Erro ao registrar colaborador com convite:", err);
+      const errMsg = err.message || '';
+      const errCode = err.code || '';
+      
+      if (errCode === 'auth/email-already-in-use' || errMsg.includes('email-already-in-use')) {
+        setError(
+          `⚠️ O e-mail "${cleanEmail}" já está cadastrado no Firebase do sistema.\n\n` +
+          `Como este e-mail já possui uma conta ativa, você não pode registrar uma nova conta usando o mesmo endereço.\n\n` +
+          `💡 O que fazer?\n` +
+          `1. Caso você esteja apenas testando o fluxo, peça ao Administrador Master para gerar um convite para outro e-mail seu (ex: um e-mail alternativo ou de testes).\n` +
+          `2. Se você precisa reutilizar este e-mail, o Administrador precisará primeiro excluir o cadastro antigo deste e-mail na aba 'Cadastro > Colaboradores Credenciados' clicando na lixeira vermelha.`
+        );
+      } else if (errCode === 'auth/weak-password' || errMsg.includes('weak-password')) {
+        setError('⚠️ A senha definida é muito fraca. Ela deve conter pelo menos 6 caracteres.');
+      } else if (errCode === 'auth/invalid-email' || errMsg.includes('invalid-email')) {
+        setError('⚠️ O formato do e-mail inserido é inválido.');
+      } else {
+        setError(`⚠️ Falha no Firebase: ${err.message || 'Erro inesperado ao registrar conta.'}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -648,8 +666,8 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
                   </div>
 
                   {error && (
-                    <div className="p-3 bg-red-950/20 border border-red-900/50 rounded-lg text-[11px] text-red-400 font-sans text-center">
-                      ⚠️ {error}
+                    <div className="p-3 bg-red-950/20 border border-red-900/50 rounded-lg text-[11px] text-red-400 font-sans text-left whitespace-pre-line leading-relaxed">
+                      {error}
                     </div>
                   )}
 

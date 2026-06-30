@@ -72,7 +72,21 @@ export default function App() {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const [entregas, setEntregas] = useState<Entrega[]>([]);
-  const [selectedView, setSelectedView] = useState<ViewMode>('rastrear');
+  const [selectedView, setSelectedView] = useState<ViewMode>(() => {
+    const queryParams = new URLSearchParams(window.location.search);
+    let hasInvite = queryParams.get('invite') || queryParams.get('token');
+    if (!hasInvite && window.location.hash) {
+      const hashParts = window.location.hash.split('?');
+      if (hashParts.length > 1) {
+        const hashParams = new URLSearchParams(hashParts[1]);
+        hasInvite = hashParams.get('invite') || hashParams.get('token');
+      }
+    }
+    if (hasInvite) {
+      return 'list'; // Forces showing the Login/register screen first when not logged in
+    }
+    return 'rastrear';
+  });
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [selectedEntregaId, setSelectedEntregaId] = useState<string | undefined>(undefined);
   const [editingEntregaId, setEditingEntregaId] = useState<string | undefined>(undefined);
@@ -125,10 +139,22 @@ export default function App() {
       setUser(null);
     }
     const path = window.location.pathname;
+    const queryParams = new URLSearchParams(window.location.search);
+    let hasInvite = queryParams.get('invite') || queryParams.get('token');
+    if (!hasInvite && window.location.hash) {
+      const hashParts = window.location.hash.split('?');
+      if (hashParts.length > 1) {
+        const hashParams = new URLSearchParams(hashParts[1]);
+        hasInvite = hashParams.get('invite') || hashParams.get('token');
+      }
+    }
+
     if (path.startsWith('/motorista/')) {
       setSelectedView('motorista');
     } else if (path === '/operador/painel') {
       setSelectedView('operador_painel');
+    } else if (hasInvite) {
+      setSelectedView('list');
     }
     setIsAuthLoading(false);
     
