@@ -13,7 +13,10 @@ import {
   getInvitations,
   getCollaboratorsFromFirestore,
   approveCollaboratorProfile,
-  rejectCollaboratorProfile
+  rejectCollaboratorProfile,
+  updateCollaboratorPasswordByMaster,
+  getLegacyEmployeesFromFirestore,
+  saveLegacyEmployeesToFirestore
 } from '../db/storage';
 import { Invitation, Colaborador } from '../types';
 
@@ -156,10 +159,35 @@ export default function EmployeeRegistration() {
   const [isLoading, setIsLoading] = useState(false);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
 
+  // Master password change states
+  const [passwordChangeTarget, setPasswordChangeTarget] = useState<{ type: 'legacy' | 'firebase'; id: string; name: string; username: string } | null>(null);
+  const [newPasswordVal, setNewPasswordVal] = useState('');
+  const [showNewPasswordVal, setShowNewPasswordVal] = useState(false);
+
   // Load employees list and current session on mount
   useEffect(() => {
-    const list = getRegisteredEmployees();
-    setEmployees(list);
+    const initEmployees = async () => {
+      try {
+        const cloudEmployees = await getLegacyEmployeesFromFirestore();
+        if (cloudEmployees && cloudEmployees.length > 0) {
+          setEmployees(cloudEmployees);
+          saveRegisteredEmployees(cloudEmployees);
+        } else {
+          // Fallback to local storage
+          const list = getRegisteredEmployees();
+          setEmployees(list);
+          if (list.length > 0) {
+            await saveLegacyEmployeesToFirestore(list);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load/sync legacy employees on mount:", err);
+        const list = getRegisteredEmployees();
+        setEmployees(list);
+      }
+    };
+
+    initEmployees();
 
     const active = localStorage.getItem('rodovar_active_login_v2');
     if (active) {
@@ -195,7 +223,7 @@ export default function EmployeeRegistration() {
         <Shield className="w-12 h-12 text-red-500 mx-auto animate-pulse" />
         <h3 className="text-sm font-bold text-white uppercase tracking-wider">Acesso Altamente Restrito</h3>
         <p className="text-xs text-zinc-400 leading-relaxed">
-          Apenas o perfil administrativo <strong>MASTER</strong> do sistema possui autorização exclusiva para gerenciar, visualizar ou cadastrar colaboradores na Rodovar.
+          Apenas o perfil administrativo <strong>SUPORTE</strong> do sistema possui autorização exclusiva para gerenciar, visualizar ou cadastrar colaboradores na Rodovar.
         </p>
       </div>
     );
@@ -288,6 +316,7 @@ export default function EmployeeRegistration() {
     const updated = [...employees, newEmployee];
     setEmployees(updated);
     saveRegisteredEmployees(updated);
+    saveLegacyEmployeesToFirestore(updated).catch(() => {});
 
     // Register system log
     registerSystemLog('Cadastro de Colaborador', `Cadastrou o colaborador ${cleanName} (usuário: ${baseUsername}) como ${role}`);
@@ -330,6 +359,7 @@ export default function EmployeeRegistration() {
     const updated = employees.filter(emp => emp.id !== id);
     setEmployees(updated);
     saveRegisteredEmployees(updated);
+    saveLegacyEmployeesToFirestore(updated).catch(() => {});
     setSuccessMsg(`Registro de ${empName} removido com sucesso.`);
 
     // Register system log
@@ -356,6 +386,45 @@ export default function EmployeeRegistration() {
     setTimeout(() => {
       setSuccessMsg(null);
     }, 3000);
+  };
+
+  // Handle Master Password Change
+  const handleApplyPasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordChangeTarget || newPasswordVal.length < 6) return;
+    setIsLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      if (passwordChangeTarget.type === 'legacy') {
+        // Change legacy employee password
+        const updatedEmployees = employees.map(emp => {
+          if (emp.id === passwordChangeTarget.id) {
+            return { ...emp, passwordHash: newPasswordVal };
+          }
+          return emp;
+        });
+        saveRegisteredEmployees(updatedEmployees);
+        setEmployees(updatedEmployees);
+        await saveLegacyEmployeesToFirestore(updatedEmployees);
+        setSuccessMsg(`Senha do colaborador legado ${passwordChangeTarget.name} alterada com sucesso.`);
+        registerSystemLog('Alteração de Senha', `Administrador Master alterou a senha do colaborador legado ${passwordChangeTarget.username}.`);
+      } else {
+        // Change Firebase collaborator password
+        await updateCollaboratorPasswordByMaster(passwordChangeTarget.id, newPasswordVal);
+        setSuccessMsg(`Senha do colaborador Firebase ${passwordChangeTarget.name} alterada com sucesso! No próximo login, ele deverá cadastrar uma nova senha por segurança.`);
+        registerSystemLog('Alteração de Senha', `Administrador Master alterou a senha do colaborador Firebase ${passwordChangeTarget.username}.`);
+      }
+      setPasswordChangeTarget(null);
+      setNewPasswordVal('');
+      setShowNewPasswordVal(false);
+      await loadSecurityData();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao alterar a senha.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Handle Approvals / Rejections (Requirement 2)
@@ -793,25 +862,34 @@ export default function EmployeeRegistration() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Deseja descredenciar e remover o colaborador Firebase ${colab.name}?`)) {
-                        setIsLoading(true);
-                        rejectCollaboratorProfile(colab.uid)
-                          .then(() => {
-                            setSuccessMsg(`Colaborador ${colab.name} descredenciado com sucesso.`);
-                            loadSecurityData();
-                          })
-                          .catch(() => setErrorMsg('Erro ao descredenciar colaborador.'))
-                          .finally(() => setIsLoading(false));
-                      }
-                    }}
-                    disabled={isLoading}
-                    className="p-1.5 hover:p-1.5 bg-red-950/20 hover:bg-red-900/80 border border-red-900/30 hover:border-red-600 rounded text-red-400 hover:text-white transition cursor-pointer"
-                    title={`Descredenciar ${colab.name}`}
-                  >
-                    <UserX className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex gap-1.5 items-center">
+                    <button
+                      onClick={() => setPasswordChangeTarget({ type: 'firebase', id: colab.uid, name: colab.name, username: colab.username })}
+                      className="p-1.5 bg-yellow-950/20 hover:bg-yellow-900/80 border border-yellow-900/30 hover:border-yellow-600 rounded text-[#FFD600] hover:text-white transition cursor-pointer"
+                      title={`Alterar Senha de ${colab.name}`}
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Deseja descredenciar e remover o colaborador Firebase ${colab.name}?`)) {
+                          setIsLoading(true);
+                          rejectCollaboratorProfile(colab.uid)
+                            .then(() => {
+                              setSuccessMsg(`Colaborador ${colab.name} descredenciado com sucesso.`);
+                              loadSecurityData();
+                            })
+                            .catch(() => setErrorMsg('Erro ao descredenciar colaborador.'))
+                            .finally(() => setIsLoading(false));
+                        }
+                      }}
+                      disabled={isLoading}
+                      className="p-1.5 hover:p-1.5 bg-red-950/20 hover:bg-red-900/80 border border-red-900/30 hover:border-red-600 rounded text-red-400 hover:text-white transition cursor-pointer"
+                      title={`Descredenciar ${colab.name}`}
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
 
@@ -842,17 +920,27 @@ export default function EmployeeRegistration() {
                       </div>
                     </div>
 
-                    {emp.username !== 'jairobahia' && emp.username !== 'genivaldo' ? (
+                    <div className="flex gap-1.5 items-center">
                       <button
-                        onClick={() => handleDelete(emp.id, emp.name, emp.username)}
-                        className="p-1.5 hover:p-1.5 bg-red-950/20 hover:bg-red-900/80 border border-red-900/30 hover:border-red-600 rounded text-red-400 hover:text-white transition cursor-pointer"
-                        title={`Descredenciar ${emp.name}`}
+                        onClick={() => setPasswordChangeTarget({ type: 'legacy', id: emp.id, name: emp.name, username: emp.username })}
+                        className="p-1.5 bg-yellow-950/20 hover:bg-yellow-900/80 border border-yellow-900/30 hover:border-yellow-600 rounded text-[#FFD600] hover:text-white transition cursor-pointer"
+                        title={`Alterar Senha de ${emp.name}`}
                       >
-                        <UserX className="w-3.5 h-3.5" />
+                        <Key className="w-3.5 h-3.5" />
                       </button>
-                    ) : (
-                      <span className="text-[9px] font-mono font-bold text-emerald-500 uppercase block tracking-wider bg-emerald-900/10 px-2 py-1 rounded" title="Conta master do sistema">Sistema</span>
-                    )}
+
+                      {emp.username !== 'jairobahia' && emp.username !== 'genivaldo' ? (
+                        <button
+                          onClick={() => handleDelete(emp.id, emp.name, emp.username)}
+                          className="p-1.5 hover:p-1.5 bg-red-950/20 hover:bg-red-900/80 border border-red-900/30 hover:border-red-600 rounded text-red-400 hover:text-white transition cursor-pointer"
+                          title={`Descredenciar ${emp.name}`}
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span className="text-[9px] font-mono font-bold text-emerald-500 uppercase block tracking-wider bg-emerald-900/10 px-2 py-1 rounded" title="Conta master do sistema">Sistema</span>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
@@ -865,6 +953,95 @@ export default function EmployeeRegistration() {
         </div>
 
       </div>
+
+      {/* Password Change Modal */}
+      <AnimatePresence>
+        {passwordChangeTarget && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="bg-[#121212] border border-zinc-800 rounded-2xl p-6 w-full max-w-md space-y-4 shadow-[0_0_50px_rgba(0,0,0,0.8)]"
+            >
+              <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                <div className="flex items-center gap-2">
+                  <Key className="w-4 h-4 text-[#FFD600]" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-gray-200">
+                    Alterar Senha de Acesso
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => {
+                    setPasswordChangeTarget(null);
+                    setNewPasswordVal('');
+                    setShowNewPasswordVal(false);
+                  }}
+                  className="text-zinc-500 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="text-xs text-zinc-400">
+                Alterando a senha do colaborador <strong className="text-white">{passwordChangeTarget.name}</strong> (usuário: <span className="font-mono text-[#FFD600]">{passwordChangeTarget.username}</span>).
+              </div>
+
+              <form onSubmit={handleApplyPasswordChange} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-mono tracking-widest text-[#FFD600] font-bold">
+                    Nova Senha
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type={showNewPasswordVal ? 'text' : 'password'}
+                      value={newPasswordVal}
+                      onChange={(e) => setNewPasswordVal(e.target.value)}
+                      placeholder="Mínimo de 6 caracteres"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-[#FFD600] transition pr-10 font-mono text-white"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPasswordVal(!showNewPasswordVal)}
+                      className="absolute right-3 top-3 text-zinc-500 hover:text-zinc-300"
+                    >
+                      {showNewPasswordVal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPasswordChangeTarget(null);
+                      setNewPasswordVal('');
+                      setShowNewPasswordVal(false);
+                    }}
+                    className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-xs font-bold uppercase font-mono rounded-xl transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading || newPasswordVal.length < 6}
+                    className="flex-1 py-3 bg-[#FFD600] hover:bg-[#ffe23b] text-black text-xs font-black uppercase font-mono rounded-xl transition cursor-pointer disabled:bg-zinc-800 disabled:text-zinc-650 flex items-center justify-center gap-1.5 shadow-[0_4px_15px_rgba(255,214,0,0.15)]"
+                  >
+                    {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Salvar
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1917,6 +1917,51 @@ export async function updateCollaboratorPasswordChangeFlag(uid: string, forcePas
   }
 }
 
+export async function updateCollaboratorPasswordByMaster(uid: string, newPassword: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, COLABORADORES_COLLECTION, uid), { 
+      passwordOverride: newPassword,
+      forcePasswordChange: true 
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${COLABORADORES_COLLECTION}/${uid}`);
+  }
+}
+
+export async function updateCollaboratorPasswordChangeDone(uid: string, newPassword: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, COLABORADORES_COLLECTION, uid), { 
+      passwordOverride: newPassword,
+      forcePasswordChange: false 
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${COLABORADORES_COLLECTION}/${uid}`);
+  }
+}
+
+const CONFIG_COLLECTION = 'config';
+
+export async function getLegacyEmployeesFromFirestore(): Promise<any[] | null> {
+  try {
+    const snap = await getDoc(doc(db, CONFIG_COLLECTION, 'legacy_employees'));
+    if (snap.exists()) {
+      return snap.data().employees || [];
+    }
+    return null;
+  } catch (error) {
+    console.warn("Could not load legacy employees from Firestore:", error);
+    return null;
+  }
+}
+
+export async function saveLegacyEmployeesToFirestore(employees: any[]): Promise<void> {
+  try {
+    await setDoc(doc(db, CONFIG_COLLECTION, 'legacy_employees'), { employees });
+  } catch (error) {
+    console.warn("Could not save legacy employees to Firestore:", error);
+  }
+}
+
 export async function checkFailedLoginAttempts(usernameOrEmail: string): Promise<FailedLogin> {
   const cleanKey = usernameOrEmail.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
   try {

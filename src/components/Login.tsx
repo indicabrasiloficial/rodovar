@@ -11,7 +11,10 @@ import {
   checkFailedLoginAttempts, 
   registerFailedLoginAttempt, 
   resetFailedLoginAttempts, 
-  updateCollaboratorPasswordChangeFlag 
+  updateCollaboratorPasswordChangeFlag,
+  updateCollaboratorPasswordChangeDone,
+  getLegacyEmployeesFromFirestore,
+  saveLegacyEmployeesToFirestore
 } from '../db/storage';
 import { auth } from '../db/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
@@ -134,18 +137,47 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
       }
 
       if (profile) {
+        // Check approval status first
+        if (profile.status === 'pendente') {
+          setError('Sua conta está aguardando aprovação do Suporte.');
+          setLoading(false);
+          return;
+        }
+
+        // Custom Master password override check
+        if (profile.passwordOverride && profile.passwordOverride === cleanPass) {
+          await resetFailedLoginAttempts(cleanUser);
+
+          if (profile.forcePasswordChange) {
+            setForceUser({
+              uid: profile.uid,
+              username: profile.username,
+              email: profile.email,
+              name: profile.name,
+              role: profile.detailedRole
+            });
+            setView('force_password');
+            setLoading(false);
+            return;
+          }
+
+          const sessionData = {
+            username: profile.username,
+            displayName: profile.name,
+            role: profile.detailedRole
+          };
+
+          localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
+          registerSystemLog('Login', `Colaborador ${sessionData.displayName} (${sessionData.role}) logou com senha alterada pelo Master.`);
+          onLoginSuccess(sessionData);
+          setLoading(false);
+          return;
+        }
+
         // Authenticate with Real Firebase Auth
         try {
           const userCredential = await signInWithEmailAndPassword(auth, profile.email, cleanPass);
           const user = userCredential.user;
-
-          // Check approval status
-          if (profile.status === 'pendente') {
-            await auth.signOut();
-            setError('Sua conta está aguardando aprovação do Suporte.');
-            setLoading(false);
-            return;
-          }
 
           // Successful Firebase Auth Login! Reset attempts.
           await resetFailedLoginAttempts(cleanUser);
@@ -192,6 +224,22 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
         { name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
         { name: 'Petrônio', username: 'petronio', role: 'Financeiro', passwordHash: 'rodovar2026' }
       ];
+
+      // Sync legacy employees from Firestore before checking to enable cross-device login
+      try {
+        const cloudEmployees = await getLegacyEmployeesFromFirestore();
+        if (cloudEmployees && cloudEmployees.length > 0) {
+          localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(cloudEmployees));
+          
+          const currentPasswords: Record<string, string> = {};
+          cloudEmployees.forEach((emp: any) => {
+            currentPasswords[emp.username] = emp.passwordHash;
+          });
+          localStorage.setItem('rodovar_user_passwords_v2', JSON.stringify(currentPasswords));
+        }
+      } catch (err) {
+        console.warn("Could not sync cloud legacy employees before login:", err);
+      }
 
       let currentEmployees = DEFAULT_EMPLOYEES_LOCAL;
       const storedEmployees = localStorage.getItem('rodovar_registered_employees_v2');
@@ -381,12 +429,18 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
     }
 
     try {
-      if (auth.currentUser && forceUser) {
-        // Update user password in Firebase auth
-        await updatePassword(auth.currentUser, newPassword);
+      if (forceUser) {
+        if (auth.currentUser) {
+          try {
+            // Update user password in Firebase auth
+            await updatePassword(auth.currentUser, newPassword);
+          } catch (authErr) {
+            console.warn('Could not update Firebase Auth password directly, falling back to Firestore override:', authErr);
+          }
+        }
 
-        // Turn off forcePasswordChange flag in Firestore profile
-        await updateCollaboratorPasswordChangeFlag(forceUser.uid, false);
+        // Always update/sync the password change done state in Firestore
+        await updateCollaboratorPasswordChangeDone(forceUser.uid, newPassword);
 
         // Auto authenticate session
         const sessionData = {

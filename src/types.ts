@@ -156,6 +156,7 @@ export interface Colaborador {
   detailedRole: string;
   status: 'pendente' | 'aprovado';
   forcePasswordChange: boolean;
+  passwordOverride?: string;
   created_at: string;
 }
 
