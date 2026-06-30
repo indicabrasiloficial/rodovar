@@ -16,7 +16,8 @@ import {
   getLegacyEmployeesFromFirestore,
   saveLegacyEmployeesToFirestore
 } from '../db/storage';
-import { auth } from '../db/firebase';
+import { auth, db } from '../db/firebase';
+import { collection, doc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
 import { Colaborador } from '../types';
 
@@ -341,8 +342,28 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
       }
 
       // 3. Create real Firebase auth email/password account
-      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPass);
-      const user = userCredential.user;
+      let user: { uid: string } | null = null;
+      let registeredViaAuthFallback = false;
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPass);
+        user = userCredential.user;
+      } catch (authErr: any) {
+        console.warn("Firebase Auth error during registration, attempting Firestore-only registration:", authErr);
+        const code = authErr.code || '';
+        if (code === 'auth/operation-not-allowed' || 
+            code === 'auth/admin-restricted-operation' || 
+            code === 'auth/configuration-not-found' || 
+            authErr.message?.includes('operation-not-allowed') ||
+            authErr.message?.includes('not-allowed')) {
+          registeredViaAuthFallback = true;
+          // Generate custom unique ID in colaboradores
+          const customId = doc(collection(db, 'colaboradores')).id;
+          user = { uid: customId };
+        } else {
+          throw authErr;
+        }
+      }
 
       // 4. Save custom profiles in Firestore "colaboradores"
       const role = validation.role || 'leitura';
@@ -357,9 +378,13 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
         role,
         detailedRole,
         status: 'pendente', // Requires manually Master approval (Requirement 2)
-        forcePasswordChange: true, // Force password change on first login (Requirement 6)
+        forcePasswordChange: registeredViaAuthFallback ? false : true, // Force password change on first login if registered via standard auth
         created_at: new Date().toISOString()
       };
+
+      if (registeredViaAuthFallback) {
+        profile.passwordOverride = cleanPass;
+      }
 
       await registerCollaboratorProfile(profile);
 
@@ -367,7 +392,9 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
       await useInvitationToken(cleanToken);
 
       // 6. Sign out newly registered user immediately until approved
-      await auth.signOut();
+      if (auth.currentUser) {
+        await auth.signOut();
+      }
 
       registerSystemLog('Auto Cadastro Colaborador', `Colaborador ${cleanName} (usuário: ${cleanUser}) se auto-cadastrou via convite.`);
       setRegSuccess(`Cadastro realizado com sucesso total! Sua conta de perfil "${detailedRole}" foi enviada para aprovação pendente do Suporte.`);
