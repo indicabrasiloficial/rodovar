@@ -945,7 +945,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                       
                       {/* Financial info if true */}
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 font-mono text-[11px] text-zinc-400">
-                        <div>Vendedor: <strong className="text-zinc-205 text-white">{cleanVendedor(e.vendedor) || 'Sem Vendedor'}</strong></div>
+                        <div>Atendente: <strong className="text-zinc-205 text-white">{cleanVendedor(e.vendedor) || 'Sem Atendente'}</strong></div>
                         <div>•</div>
                         <div>Motorista: <strong className="text-white">{e.motorista} ({e.tel_motorista || 'Sem fone'})</strong></div>
                         <div>•</div>
@@ -1275,7 +1275,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                     <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-zinc-500" />
                     <input
                       type="text"
-                      placeholder="Filtrar motorista, destino, vendedor..."
+                      placeholder="Filtrar motorista, destino, atendente..."
                       value={routeSearchQuery}
                       onChange={(e) => setRouteSearchQuery(e.target.value)}
                       className="w-full bg-zinc-900/60 border border-zinc-800 rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#FFD600] font-sans"
@@ -1311,7 +1311,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                               <span className="text-[#FFD600]/85">{c.destino}</span>
                             </div>
                             <div className="text-[8px] text-zinc-650 font-mono mt-0.5">
-                              Vend: {cleanVendedor(c.vendedor || '')} • Criado em: {c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : 'Sem data'}
+                              Aten: {cleanVendedor(c.vendedor || '')} • Criado em: {c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : 'Sem data'}
                             </div>
                           </button>
                         );

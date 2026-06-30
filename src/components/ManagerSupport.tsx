@@ -105,7 +105,7 @@ export default function ManagerSupport({ entregas, initialEntregaId }: ManagerSu
     
     if (activeEntrega) {
       msg += `Route Details:\n`;
-      msg += `👤 *Cliente:* ${activeEntrega.cliente} (Vendedor: ${activeEntrega.vendedor})\n`;
+      msg += `👤 *Cliente:* ${activeEntrega.cliente} (Atendente: ${activeEntrega.vendedor})\n`;
       msg += `📞 *Tel Cliente:* ${activeEntrega.tel_cliente || 'Não cadastrado'}\n`;
       msg += `🚚 *Motorista:* ${activeEntrega.motorista}\n`;
       msg += `📱 *Tel Motorista:* ${activeEntrega.tel_motorista || 'Não cadastrado'}\n`;

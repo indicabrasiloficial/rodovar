@@ -1068,11 +1068,11 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               <div className="bg-zinc-950/50 p-4 border border-zinc-900 rounded-xl space-y-3">
                 <span className="text-[11px] font-mono uppercase tracking-widest text-[#FFD600] flex items-center gap-1.5 font-bold">
                   <User className="w-3.5 h-3.5" />
-                  VENDEDOR RESPONSÁVEL
+                  ATENDENTE RESPONSÁVEL
                 </span>
                 <div className="space-y-1">
                   <span className="text-gray-350 font-sans font-bold text-sm block">{entrega.vendedor || 'Sem registro'}</span>
-                  <span className="text-[9px] text-gray-550 font-mono block">RESPONSÁVEL COMERCIAL</span>
+                  <span className="text-[9px] text-gray-550 font-mono block">RESPONSÁVEL PELO ATENDIMENTO</span>
                 </div>
               </div>
 

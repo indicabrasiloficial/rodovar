@@ -193,8 +193,8 @@ export function parsePastedTextToDeliveries(text: string) {
       match = cleanLine.match(/(?:DATA\s+CARREGAMENTO|DATA\s+COLETA|DATA)[:\s]+(.*)/i);
       if (match) return { key: 'data_coleta', val: match[1].trim() };
       
-      // 6. COMERCIAL / VENDEDOR
-      match = cleanLine.match(/(?:COMERCIAL|VENDEDOR)[:\s]+(.*)/i);
+      // 6. COMERCIAL / ATENDENTE
+      match = cleanLine.match(/(?:COMERCIAL|VENDEDOR|ATENDENTE)[:\s]+(.*)/i);
       if (match) return { key: 'vendedor', val: match[1].trim() };
       
       // 7. ORIGEM
@@ -304,7 +304,7 @@ export function parsePastedTextToDeliveries(text: string) {
     // Check if first line contains header keywords to skip them
     let startIndex = 0;
     const firstLine = lines[0].toLowerCase();
-    const keywords = ['data', 'vendedor', 'cliente', 'motorista', 'origem', 'destino', 'frete', 'status', 'prazo', 'obs'];
+    const keywords = ['data', 'vendedor', 'atendente', 'cliente', 'motorista', 'origem', 'destino', 'frete', 'status', 'prazo', 'obs'];
     const matchedKeywords = keywords.filter(kw => firstLine.includes(kw));
     
     let columnIndexes: Record<string, number> = {};
@@ -318,7 +318,7 @@ export function parsePastedTextToDeliveries(text: string) {
       headers.forEach((header, index) => {
         if (header.includes('data') || header.includes('coleta') || header === 'dt' || header === 'dt.coleta' || header === 'dt_coleta') {
           columnIndexes['data_coleta'] = index;
-        } else if (header.includes('vendedor') || header.includes('vend') || header === 'comercial') {
+        } else if (header.includes('vendedor') || header.includes('atendente') || header.includes('vend') || header.includes('aten') || header === 'comercial') {
           columnIndexes['vendedor'] = index;
         } else if (header.includes('cliente') || header.includes('cli') || header === 'destinatario') {
           columnIndexes['cliente'] = index;
@@ -631,7 +631,7 @@ function printDeliveries(entregas: Entrega[], options: { showFinance: boolean; s
             <p><strong>Origem:</strong> ${e.origem || 'Não informada'}</p>
             <p><strong>Destino:</strong> ${e.destino || 'Não informado'}</p>
             <p><strong>Carga / KM:</strong> ${e.km ? e.km.toLocaleString('pt-BR') : '0'} km</p>
-            <p><strong>Vendedor (Comercial):</strong> ${e.vendedor || 'Sem Registro'}</p>
+            <p><strong>Atendente:</strong> ${e.vendedor || 'Sem Registro'}</p>
           </div>
           <div class="grid-col">
             <p><strong>Cliente:</strong> ${e.cliente || 'Sem cadastro'} ${e.tel_cliente ? `(${e.tel_cliente})` : ''}</p>
@@ -1507,7 +1507,7 @@ Tenha uma ótima e segura viagem!`;
               }`}
               id="comercial-team-dropdown-btn"
             >
-              <span>💼 Equipe Comercial{vendedorFilter ? `: ${vendedorFilter}` : ''}</span>
+              <span>💼 Equipe de Atendentes{vendedorFilter ? `: ${vendedorFilter}` : ''}</span>
               <svg className={`w-3.5 h-3.5 transition-transform ${isComercialOpen ? 'rotate-180 text-[#FFD600]' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
               </svg>
@@ -1524,12 +1524,12 @@ Tenha uma ótima e segura viagem!`;
                     className="flex items-center gap-1.5 text-left w-full px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-900 border-b border-zinc-900/40 rounded-lg hover:text-[#FFD600] transition-colors"
                   >
                     <span>👥</span>
-                    <span className="font-sans font-semibold">Mostrar Todos os Vendedores</span>
+                    <span className="font-sans font-semibold">Mostrar Todos os Atendentes</span>
                   </button>
                   <div className="my-1"></div>
                   {vendedoresList.length === 0 ? (
                     <div className="px-3 py-2 text-[11px] text-zinc-500 font-mono italic text-center">
-                      Nenhum vendedor registrado no sistema de cargas.
+                      Nenhum atendente registrado no sistema de cargas.
                     </div>
                   ) : (
                     vendedoresList.map((vend) => (
@@ -1570,7 +1570,7 @@ Tenha uma ótima e segura viagem!`;
             <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-500" />
             <input
               type="text"
-              placeholder="Buscar por motorista, vendedor, etc..."
+              placeholder="Buscar por motorista, atendente, etc..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className="w-full bg-zinc-900/50 border border-zinc-800 text-xs text-white rounded-lg pl-9 pr-3 py-2 focus:border-[#FFD600] focus:ring-0 focus:outline-none placeholder-gray-500 font-mono"
@@ -1793,7 +1793,7 @@ Tenha uma ótima e segura viagem!`;
                             <span className="text-[#FFD600]">{e.destino}</span>
                           </div>
                           <p className="text-[10px] text-gray-400 font-mono m-0">
-                            Vend: {cleanVendedorName(e.vendedor) || 'Sem registro'} • <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
+                            Aten: {cleanVendedorName(e.vendedor) || 'Sem registro'} • <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
                             {e.created_at && (
                               <>
                                 <span className="text-zinc-650"> •</span> Hora Cad: <span className="text-zinc-300 font-bold">{formatRegistrationTime(e.created_at)}</span>
@@ -2023,7 +2023,7 @@ Tenha uma ótima e segura viagem!`;
                               <span className="text-[#FFD600]">{e.destino}</span>
                             </div>
                             <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1.5 flex-wrap">
-                              <span>Vend: {cleanVendedorName(e.vendedor) || 'Sem registro'}</span>
+                              <span>Aten: {cleanVendedorName(e.vendedor) || 'Sem registro'}</span>
                               <span className="text-zinc-650">•</span>
                               <span className="text-[#FFD600] font-semibold">{getDeliveryKm(e).toLocaleString('pt-BR')} km</span>
                               {e.created_at && (
@@ -2245,7 +2245,7 @@ Tenha uma ótima e segura viagem!`;
                 </p>
                 <div className="bg-zinc-950/80 border border-zinc-900 p-3 mb-4 select-all rounded-lg">
                   <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-tight block overflow-x-auto whitespace-nowrap">
-                    DATA &nbsp;&nbsp;➔&nbsp;&nbsp; VENDEDOR &nbsp;&nbsp;➔&nbsp;&nbsp; CLIENTE &nbsp;&nbsp;➔&nbsp;&nbsp; TEL CLIENTE &nbsp;&nbsp;➔&nbsp;&nbsp; MOTORISTA &nbsp;&nbsp;➔&nbsp;&nbsp; TEL MOTORISTA &nbsp;&nbsp;➔&nbsp;&nbsp; ORIGEM &nbsp;&nbsp;➔&nbsp;&nbsp; DESTINO &nbsp;&nbsp;➔&nbsp;&nbsp; FRETE EMP. &nbsp;&nbsp;➔&nbsp;&nbsp; FRETE MOT. &nbsp;&nbsp;➔&nbsp;&nbsp; STATUS &nbsp;&nbsp;➔&nbsp;&nbsp; PRAZO &nbsp;&nbsp;➔&nbsp;&nbsp; OBS
+                    DATA &nbsp;&nbsp;➔&nbsp;&nbsp; ATENDENTE &nbsp;&nbsp;➔&nbsp;&nbsp; CLIENTE &nbsp;&nbsp;➔&nbsp;&nbsp; TEL CLIENTE &nbsp;&nbsp;➔&nbsp;&nbsp; MOTORISTA &nbsp;&nbsp;➔&nbsp;&nbsp; TEL MOTORISTA &nbsp;&nbsp;➔&nbsp;&nbsp; ORIGEM &nbsp;&nbsp;➔&nbsp;&nbsp; DESTINO &nbsp;&nbsp;➔&nbsp;&nbsp; FRETE EMP. &nbsp;&nbsp;➔&nbsp;&nbsp; FRETE MOT. &nbsp;&nbsp;➔&nbsp;&nbsp; STATUS &nbsp;&nbsp;➔&nbsp;&nbsp; PRAZO &nbsp;&nbsp;➔&nbsp;&nbsp; OBS
                   </span>
                 </div>
               </div>
@@ -2507,8 +2507,8 @@ Tenha uma ótima e segura viagem!`;
                             </div>
                             
                             <div className="truncate">
-                              <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-tight font-bold">Comercial / Cliente</span>
-                              <span className="text-white font-bold">{cleanVendedorName(e.vendedor) || 'Sem Vendedor'}</span>
+                              <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-tight font-bold">Atendente / Cliente</span>
+                              <span className="text-white font-bold">{cleanVendedorName(e.vendedor) || 'Sem Atendente'}</span>
                               <span className="text-gray-400 block truncate">{e.cliente || 'Sem Cliente'}</span>
                             </div>
 

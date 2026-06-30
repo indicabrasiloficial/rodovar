@@ -396,7 +396,7 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
       sendGroupChatMessage({
         id: 'carga-msg-' + saved.id,
         category: 'operacional',
-        text: `📢 *NOVA CARGA CADASTRADA*\n• *Cliente:* ${saved.cliente || 'Sem cliente'}\n• *Destino:* ${saved.destino || 'Sem destino'}\n• *Motorista:* ${saved.motorista || 'A definir'}\n• *Vendedor:* ${saved.vendedor || 'A definir'}\n• *Valor do Frete:* R$ ${saved.frete_empresa ? Number(saved.frete_empresa).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}`,
+        text: `📢 *NOVA CARGA CADASTRADA*\n• *Cliente:* ${saved.cliente || 'Sem cliente'}\n• *Destino:* ${saved.destino || 'Sem destino'}\n• *Motorista:* ${saved.motorista || 'A definir'}\n• *Atendente:* ${saved.vendedor || 'A definir'}\n• *Valor do Frete:* R$ ${saved.frete_empresa ? Number(saved.frete_empresa).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}`,
         userId: activeUser.username,
         userName: activeUser.displayName,
         userRole: activeUser.role,
@@ -814,19 +814,19 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
                   {errors.tel_cliente && <p className="text-[10px] text-red-400 font-mono">{errors.tel_cliente.message}</p>}
                 </div>
 
-                {/* Vendedor input suggestions autocomplete */}
+                {/* Atendente input suggestions autocomplete */}
                 <div className="space-y-1.5 relative sm:col-span-2">
-                  <label className="text-xs text-gray-400 font-medium">Vendedor Externo Rodovar</label>
+                  <label className="text-xs text-gray-400 font-medium">Atendente Externo Rodovar</label>
                   <input
                     type="text"
                     placeholder="Carlos Souza"
-                    {...register('vendedor', { required: 'Vendedor é obrigatório' })}
+                    {...register('vendedor', { required: 'Atendente é obrigatório' })}
                     onFocus={() => setShowVendedorSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowVendedorSuggestions(false), 200)}
                     className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-white focus:outline-none placeholder-gray-700 font-sans"
                     id="form-input-vendedor"
                   />
-                  {errors.vendedor && <p className="text-[10px] text-red-00 font-mono">{errors.vendedor.message}</p>}
+                  {errors.vendedor && <p className="text-[10px] text-red-400 font-mono">{errors.vendedor.message}</p>}
 
                   {showVendedorSuggestions && vendedoresList.length > 0 && (
                     <div className="absolute left-0 right-0 top-full mt-1 bg-[#18181b] border border-zinc-800 rounded-lg max-h-30 overflow-y-auto shadow-2xl z-50 font-sans text-xs">
