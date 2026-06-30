@@ -494,14 +494,12 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
   // Preset WhatsApp templates (humanized, short, natural and popular phrasing to avoid spam flags and feel trustful)
   const waTemplates = {
-    apresentar: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Vim desejar uma excelente viagem até ${entrega.destino} e informar que sua carga já foi registrada como Coletando no nosso sistema. Tamo junto!`,
-    solicitarLoc: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Por gentileza, quando puder, nos envie sua localização atualizada para realizarmos o acompanhamento da viagem. Muito obrigado!`,
-    rastreioGps: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Por gentileza, acesse o link abaixo para ativar o rastreamento via GPS de sua viagem in tempo real: ${generateTrackerLink({ cargoId: entrega.id, driver: entrega.motorista, route: `${entrega.origem} -> ${entrega.destino}`, client: entrega.cliente || 'Central' })}`,
-    informarCliente: `${getGreetingText()}, tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Passando para informar de maneira respeitosa que sua carga já está em trânsito com o motorista ${entrega.motorista}. A previsão estimada de entrega é para o dia ${formatDateBR(entrega.prazo)}. Qualquer dúvida estou à inteira disposição!`,
-    solicitarCanhoto: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Assim que você finalizar o descarrego, por gentileza nos envie uma foto nítida do canhoto assinado para darmos baixa no sistema. Excelente trabalho!`,
-    confirmarEntrega: `${getGreetingText()}, tudo bem? Confirmamos que a entrega da sua carga foi realizada com sucesso pelo motorista ${entrega.motorista} na data de hoje. Agradecemos imensamente pela parceria de sempre! Rodovar.`,
-    prazoMotorista: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Só para alinhar de forma organizada, a previsão limite para entrega de sua carga em ${entrega.destino} é até o dia ${formatDateBR(entrega.prazo)}. Está tudo sob controle para cumprirmos essa data? Agradeço o retorno!`,
-    prazoCliente: `${getGreetingText()}, tudo bem? Aqui é o ${getActiveUserFullName()} da Rodovar. Passando de forma educada para confirmar que a previsão para a entrega de sua mercadoria é o dia ${formatDateBR(entrega.prazo)}. O motorista ${entrega.motorista} segue viagem em conformidade e avisaremos qualquer novidade!`
+    solicitarDados: `Boa Tarde,\nMeu nome é Jairo e faço parte da equipe de logística da *Rodovar Transportadora*\n\nPara darmos início ao transporte da sua carga, poderia, por gentileza, informar os dados do destinatário?\n\nFRETE: *${entrega.origem} ➔ ${entrega.destino}*\n\n*• Nome do responsável pelo recebimento*\n*• Telefone para contato*\n*• Localização/endereço de entrega*\n*• Horário disponível para o recebimento da mercadoria*\n\nDesde já, agradeço pela colaboração e fico à disposição.`,
+    apresentar: `${getGreetingText()}, ${entrega.motorista ? entrega.motorista.toUpperCase() : 'MOTORISTA'}! Tudo bem? Aqui é o Jairo Bahia da Rodovar. Vim desejar uma excelente viagem até ${entrega.destino ? entrega.destino.toUpperCase() : ''}.`,
+    previsao: `${getGreetingText()}, tudo bem? Aqui é o Jairo Bahia da Rodovar. Passando para confirmar que a previsão estimada para a entrega de sua mercadoria em *${entrega.destino}* é o dia *${formatDateBR(entrega.prazo)}*. Qualquer dúvida estou à disposição!`,
+    solicitarLoc: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Por gentileza, nos envie sua localização atualizada/em tempo real quando puder para acompanharmos a viagem. Obrigado!`,
+    confirmarEntrega: `${getGreetingText()}, tudo bem? Passando para informar que a entrega de sua carga foi realizada e confirmada com sucesso pelo motorista ${entrega.motorista} na data de hoje. Agradecemos pela parceria! Rodovar Transportadora.`,
+    solicitarCanhoto: `${getGreetingText()}, ${entrega.motorista}! Tudo bem? Assim que você finalizar o descarrego, por gentileza nos envie uma foto nítida do canhoto assinado para darmos baixa no sistema. Excelente trabalho!`
   };
 
   const handleSolicitarCanhotoClick = () => {
@@ -1424,16 +1422,11 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
               </p>
 
               <div className="space-y-2 text-xs max-h-[550px] overflow-y-auto pr-1">
-                {renderScriptButton('apresentar', '1. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Olá ${entrega.motorista}! Aqui é o ${getActiveUserName()}...`)}
-                {renderScriptButton('solicitarLoc', '2. Solicitar Localização', entrega.tel_motorista, waTemplates.solicitarLoc, 'Poderia me enviar sua localização ao vivo?')}
-                {renderScriptButton('rastreioGps', '🛰️ Enviar Link Rastreio GPS', entrega.tel_motorista, waTemplates.rastreioGps, 'Enviar link de monitoramento por satélite ao vivo ao motorista...')}
-                {renderScriptButton('informarCliente', '3. Informar Cliente', entrega.tel_cliente, waTemplates.informarCliente, `Sua carga está a caminho...`)}
-                {renderScriptButton('solicitarCanhoto', '4. Solicitar Canhoto', entrega.tel_motorista, waTemplates.solicitarCanhoto, 'Após a entrega solicite o canhoto assinado...', true)}
-                {renderScriptButton('confirmarEntrega', '5. Entrega Confirmada', entrega.tel_cliente, waTemplates.confirmarEntrega, `Confirmamos a entrega pelo motorista ${entrega.motorista}.`)}
-                
-                {/* New deadline alignment scripts */}
-                {renderScriptButton('prazoMotorista', '6. Alinhar Prazo (Motorista)', entrega.tel_motorista, waTemplates.prazoMotorista, `Prazo limite de recebimento: ${formatDateBR(entrega.prazo)}.`)}
-                {renderScriptButton('prazoCliente', '7. Alinhar Prazo (Cliente)', entrega.tel_cliente, waTemplates.prazoCliente, `Confirmando prazo estimado de entrega: ${formatDateBR(entrega.prazo)}.`)}
+                {renderScriptButton('solicitarDados', '1. Solicitar Dados (Cliente)', entrega.tel_cliente, waTemplates.solicitarDados, 'Entrar em contato com o cliente solicitando dados do destinatário...')}
+                {renderScriptButton('apresentar', '2. Apresentar ao Motorista', entrega.tel_motorista, waTemplates.apresentar, `Desejar uma excelente viagem até ${entrega.destino ? entrega.destino.toUpperCase() : ''}...`)}
+                {renderScriptButton('previsao', '3. Previsão de Entrega (Cliente)', entrega.tel_cliente, waTemplates.previsao, `Informar a previsão de entrega (${formatDateBR(entrega.prazo)}) ao cliente...`)}
+                {renderScriptButton('solicitarLoc', '4. Solicitar Localização (Motorista)', entrega.tel_motorista, waTemplates.solicitarLoc, 'Solicitar localização atualizada/tempo real ao motorista...')}
+                {renderScriptButton('confirmarEntrega', '5. Entrega Confirmada (Cliente)', entrega.tel_cliente, waTemplates.confirmarEntrega, 'Informar ao cliente sobre a entrega realizada com sucesso...')}
               </div>
             </div>
           ) : (

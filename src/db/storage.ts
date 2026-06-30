@@ -455,6 +455,14 @@ export function sanitizeName(name: string | undefined | null): string {
   clean = clean.replace(/[!?.\-,;:]+$/, '').trim();
   // Remove multiple spacing
   clean = clean.replace(/\s+/g, ' ');
+
+  // Unify SUELLEN / SUELEM and ARANDA to ARANDA as they are the same person
+  const isSuellen = ['SUELLEN', 'SUELEM', 'SUELE', 'SUELLENE', 'SULLEN', 'SUELEN'].includes(clean) || 
+                    clean.includes('SUELLEN') || 
+                    clean.includes('SUELEM');
+  if (isSuellen) {
+    return 'ARANDA';
+  }
   return clean;
 }
 

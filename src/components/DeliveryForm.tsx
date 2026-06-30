@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Entrega, DeliveryStatus } from '../types';
+import { calculateRealisticDistanceKm, estimateDeliveryDays } from '../utils/distance';
 import { 
   getUniqueVendedores, 
   getUniqueClientes, 
@@ -193,6 +194,38 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
       return cpfMatch || telMatch;
     });
   }, [watchCpf, watchTel, blacklist]);
+
+  const watchOrigem = watch('origem') || '';
+  const watchDestino = watch('destino') || '';
+  const watchDataColeta = watch('data_coleta') || '';
+
+  // Calculate dynamic estimated date based on KM
+  useEffect(() => {
+    if (watchOrigem && watchDestino) {
+      if (isEditMode && entregaId) {
+        const original = getEntregaById(entregaId);
+        if (original) {
+          const isOrigemUnchanged = watchOrigem.trim().toLowerCase() === (original.origem || '').trim().toLowerCase();
+          const isDestinoUnchanged = watchDestino.trim().toLowerCase() === (original.destino || '').trim().toLowerCase();
+          const isColetaUnchanged = watchDataColeta === (original.data_coleta || '').split('T')[0];
+          
+          if (isOrigemUnchanged && isDestinoUnchanged && isColetaUnchanged) {
+            // Keep the manually saved date from database on initial load
+            return;
+          }
+        }
+      }
+
+      const km = calculateRealisticDistanceKm(watchOrigem, watchDestino);
+      const days = estimateDeliveryDays(km);
+      
+      const baseDate = watchDataColeta ? new Date(watchDataColeta + 'T12:00:00') : new Date();
+      baseDate.setDate(baseDate.getDate() + days);
+      const estimatedDateStr = baseDate.toISOString().split('T')[0];
+      
+      setValue('prazo', estimatedDateStr);
+    }
+  }, [watchOrigem, watchDestino, watchDataColeta, isEditMode, entregaId, setValue]);
 
   // Helpers for CPF styling
   const formatCPF = (value: string) => {
@@ -557,7 +590,10 @@ export default function DeliveryForm({ entregaId, onBack, onSaved, onImportClick
                     className="w-full bg-zinc-950 border-2 border-[#FFD600]/40 focus:border-[#FFD600] rounded-lg p-2.5 text-xs text-[#FFD600] focus:outline-none font-mono"
                     id="form-input-prazo"
                   />
-                  {errors.prazo && <p className="text-[10px] text-red-00 font-mono">{errors.prazo.message}</p>}
+                  {errors.prazo && <p className="text-[10px] text-red-400 font-mono">{errors.prazo.message}</p>}
+                  <span className="text-[9px] text-[#FFD600] font-sans block leading-normal mt-1 opacity-90">
+                    💡 <strong>Data Inteligente:</strong> Calculada de acordo com a distância (KM) estimada. Você pode alterar livremente.
+                  </span>
                 </div>
 
                 {/* Número do CT-e */}

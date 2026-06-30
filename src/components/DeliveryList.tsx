@@ -33,6 +33,9 @@ const cleanVendedorName = (name: string): string => {
   const parts = name.split(/[\/\-\\]/);
   let p = (parts[0] || '').trim().toUpperCase();
   if (p === 'MÔNICA') p = 'MONICA';
+  if (['SUELLEN', 'SUELEM', 'SUELE', 'SUELLENE', 'SULLEN', 'SUELEN'].includes(p) || p.includes('SUELLEN') || p.includes('SUELEM')) {
+    p = 'ARANDA';
+  }
   return p;
 };
 
@@ -1407,44 +1410,7 @@ Tenha uma ótima e segura viagem!`;
   };
 
   const renderLocationReminderBadge = (e: Entrega) => {
-    if (e.status === 'entregue') return null;
-    if (e.link_localizacao && e.link_localizacao.trim().startsWith('http')) return null;
-
-    if (e.status === 'coletando') {
-      return (
-        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap" onClick={(ev) => ev.stopPropagation()} id={`loc-critical-alert-${e.id}`}>
-          <span className="bg-red-500/15 border border-red-500/40 text-red-400 font-mono text-[9px] font-black uppercase px-2 py-0.5 rounded flex items-center gap-1 shadow-[0_0_10px_rgba(239,68,68,0.1)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-            ⚠️ CRÍTICO: PEDIR LOCALIZAÇÃO AO CLIENTE! (COLETA INICIADA)
-          </span>
-          <button
-            type="button"
-            onClick={(ev) => handleDirectRequestClientLoc(ev, e)}
-            className="bg-red-650 hover:bg-red-700 hover:scale-[1.03] active:scale-[0.97] text-white font-mono text-[8.5px] font-black uppercase px-2 py-0.5 rounded border border-red-600 cursor-pointer flex items-center gap-1 shadow transition-all"
-            title="Enviar WhatsApp solicitando Localização"
-          >
-            <Phone className="w-2.5 h-2.5" /> Pedir Agora
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap" onClick={(ev) => ev.stopPropagation()} id={`loc-pending-alert-${e.id}`}>
-        <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-[9px] font-bold uppercase px-1.5 py-0.5 rounded flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-          ⚠️ PENDENTE: PEDIR LOCALIZAÇÃO AO CLIENTE
-        </span>
-        <button
-          type="button"
-          onClick={(ev) => handleDirectRequestClientLoc(ev, e)}
-          className="bg-amber-500/15 hover:bg-[#FFD600] text-amber-400 hover:text-black font-mono text-[8.5px] font-bold uppercase px-1.5 py-0.5 rounded border border-amber-500/20 hover:border-transparent cursor-pointer flex items-center gap-1 shadow transition-all"
-          title="Fazer Cobrança via WhatsApp"
-        >
-          <Phone className="w-2.5 h-2.5" /> Solicitar
-        </button>
-      </div>
-    );
+    return null;
   };
 
   return (

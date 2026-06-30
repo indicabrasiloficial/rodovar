@@ -198,3 +198,15 @@ export function getDeliveryKm(e: any): number {
   if (e.km && e.km > 0) return e.km;
   return calculateRealisticDistanceKm(e.origem, e.destino);
 }
+
+// Estimate days for delivery based on distance (KM)
+export function estimateDeliveryDays(km: number): number {
+  if (km <= 0) return 5;
+  if (km <= 300) return 1; // 1 day
+  if (km <= 600) return 2; // 2 days
+  if (km <= 900) return 3; // 3 days
+  if (km <= 1200) return 4; // 4 days
+  if (km <= 1600) return 5; // 5 days
+  return Math.ceil(km / 350); // > 1600 km e.g. 2100 km / 350 = 6 days
+}
+

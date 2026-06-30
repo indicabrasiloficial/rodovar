@@ -14,6 +14,60 @@ const getCleanedVendedorName = (name: string): string => {
   return p;
 };
 
+const removeAccents = (str: string): string => {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
+export function matchDelivery(e: Entrega, filters: PaginatedFilters): boolean {
+  // Status filter
+  if (filters.status && filters.status !== 'all') {
+    if (e.status !== filters.status) return false;
+  }
+  // Collection date filter
+  if (filters.dataColeta) {
+    if (e.data_coleta !== filters.dataColeta) return false;
+  }
+  // Vendedor filter
+  if (filters.vendedor?.trim()) {
+    const v = removeAccents(getCleanedVendedorName(filters.vendedor));
+    const ev = removeAccents(getCleanedVendedorName(e.vendedor || ''));
+    if (ev !== v && !ev.includes(v)) return false;
+  }
+  // Origin filter
+  if (filters.origem.trim()) {
+    const o = removeAccents(filters.origem);
+    if (!removeAccents(e.origem || '').includes(o)) return false;
+  }
+  // Destino filter
+  if (filters.destino.trim()) {
+    const d = removeAccents(filters.destino);
+    if (!removeAccents(e.destino || '').includes(d)) return false;
+  }
+  // Cliente filter
+  if (filters.cliente.trim()) {
+    const c = removeAccents(filters.cliente);
+    if (!removeAccents(e.cliente || '').includes(c)) return false;
+  }
+  // General text search (motorista, vendedor, cliente, origem, destino, observacoes, id)
+  if (filters.search.trim()) {
+    const s = removeAccents(filters.search);
+    return (
+      removeAccents(e.motorista || '').includes(s) ||
+      removeAccents(e.vendedor || '').includes(s) ||
+      removeAccents(e.cliente || '').includes(s) ||
+      removeAccents(e.origem || '').includes(s) ||
+      removeAccents(e.destino || '').includes(s) ||
+      removeAccents(e.observacoes || '').includes(s) ||
+      removeAccents(e.id || '').includes(s)
+    );
+  }
+  return true;
+}
+
 // High performance parsing helper identical to storage.ts (retained for backward compatibility / useVoice imports)
 export function parseFirestoreDocToEntrega(docSnap: any): Entrega {
   const data = docSnap.data();
@@ -91,51 +145,7 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
       }
 
       // Apply all filtering compound logic 100% in-memory over our fast local storage/TTL database
-      const filtered = items.filter(e => {
-        // Status filter
-        if (filters.status && filters.status !== 'all') {
-          if (e.status !== filters.status) return false;
-        }
-        // Collection date filter
-        if (filters.dataColeta) {
-          if (e.data_coleta !== filters.dataColeta) return false;
-        }
-        // Vendedor filter
-        if (filters.vendedor?.trim()) {
-          const v = getCleanedVendedorName(filters.vendedor).toLowerCase();
-          const ev = getCleanedVendedorName(e.vendedor || '').toLowerCase();
-          if (ev !== v && !ev.includes(v)) return false;
-        }
-        // Origin filter
-        if (filters.origem.trim()) {
-          const o = filters.origem.toLowerCase().trim();
-          if (!(e.origem || '').toLowerCase().includes(o)) return false;
-        }
-        // Destino filter
-        if (filters.destino.trim()) {
-          const d = filters.destino.toLowerCase().trim();
-          if (!(e.destino || '').toLowerCase().includes(d)) return false;
-        }
-        // Cliente filter
-        if (filters.cliente.trim()) {
-          const c = filters.cliente.toLowerCase().trim();
-          if (!(e.cliente || '').toLowerCase().includes(c)) return false;
-        }
-        // General text search (motorista, vendedor, cliente, origem, destino, observacoes, id)
-        if (filters.search.trim()) {
-          const s = filters.search.toLowerCase().trim();
-          return (
-            (e.motorista || '').toLowerCase().includes(s) ||
-            (e.vendedor || '').toLowerCase().includes(s) ||
-            (e.cliente || '').toLowerCase().includes(s) ||
-            (e.origem || '').toLowerCase().includes(s) ||
-            (e.destino || '').toLowerCase().includes(s) ||
-            (e.observacoes || '').toLowerCase().includes(s) ||
-            (e.id || '').toLowerCase().includes(s)
-          );
-        }
-        return true;
-      });
+      const filtered = items.filter(e => matchDelivery(e, filters));
 
       // Slice page 0 locally (instantaneous and cost-free!)
       const page0 = filtered.slice(0, PAGE_SIZE);
@@ -191,44 +201,7 @@ export function usePaginatedEntregas(initialFilters: PaginatedFilters) {
     try {
       const items = [...getEntregas()];
       
-      const filtered = items.filter(e => {
-        if (filters.status && filters.status !== 'all') {
-          if (e.status !== filters.status) return false;
-        }
-        if (filters.dataColeta) {
-          if (e.data_coleta !== filters.dataColeta) return false;
-        }
-        if (filters.vendedor?.trim()) {
-          const v = getCleanedVendedorName(filters.vendedor).toLowerCase();
-          const ev = getCleanedVendedorName(e.vendedor || '').toLowerCase();
-          if (ev !== v && !ev.includes(v)) return false;
-        }
-        if (filters.origem.trim()) {
-          const o = filters.origem.toLowerCase().trim();
-          if (!(e.origem || '').toLowerCase().includes(o)) return false;
-        }
-        if (filters.destino.trim()) {
-          const d = filters.destino.toLowerCase().trim();
-          if (!(e.destino || '').toLowerCase().includes(d)) return false;
-        }
-        if (filters.cliente.trim()) {
-          const c = filters.cliente.toLowerCase().trim();
-          if (!(e.cliente || '').toLowerCase().includes(c)) return false;
-        }
-        if (filters.search.trim()) {
-          const s = filters.search.toLowerCase().trim();
-          return (
-            (e.motorista || '').toLowerCase().includes(s) ||
-            (e.vendedor || '').toLowerCase().includes(s) ||
-            (e.cliente || '').toLowerCase().includes(s) ||
-            (e.origem || '').toLowerCase().includes(s) ||
-            (e.destino || '').toLowerCase().includes(s) ||
-            (e.observacoes || '').toLowerCase().includes(s) ||
-            (e.id || '').toLowerCase().includes(s)
-          );
-        }
-        return true;
-      });
+      const filtered = items.filter(e => matchDelivery(e, filters));
 
       const start = nextPageIndex * PAGE_SIZE;
       const end = start + PAGE_SIZE;
