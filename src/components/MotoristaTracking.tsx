@@ -20,6 +20,62 @@ interface MotoristaTrackingProps {
   onClose?: () => void;
 }
 
+// Helper function to generate a perfect 2-second silent/sub-audible hum WAV file Blob dynamically.
+// Playing a continuous varying wave at a sub-audible 35Hz frequency with extremely low amplitude
+// establishes a fully active audio pipeline on mobile browsers without audible sound to the driver.
+// This prevents mobile OS/Chrome from freezing the JS thread when minimized or the screen is off.
+const generateSilentWav = (): string => {
+  const sampleRate = 8000;
+  const duration = 2; // 2 seconds
+  const numSamples = sampleRate * duration;
+  const buffer = new ArrayBuffer(44 + numSamples);
+  const view = new DataView(buffer);
+
+  const writeString = (v: DataView, offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      v.setUint8(offset + i, str.charCodeAt(i));
+    }
+  };
+
+  /* RIFF identifier */
+  writeString(view, 0, 'RIFF');
+  /* file length */
+  view.setUint32(4, 36 + numSamples, true);
+  /* WAVE identifier */
+  writeString(view, 8, 'WAVE');
+  /* format chunk identifier */
+  writeString(view, 12, 'fmt ');
+  /* chunk length */
+  view.setUint32(16, 16, true);
+  /* sample format (raw PCM) */
+  view.setUint16(20, 1, true);
+  /* channel count (mono) */
+  view.setUint16(22, 1, true);
+  /* sample rate */
+  view.setUint32(24, sampleRate, true);
+  /* byte rate */
+  view.setUint32(28, sampleRate, true);
+  /* block align */
+  view.setUint16(32, 1, true);
+  /* bits per sample */
+  view.setUint16(34, 8, true);
+  /* data chunk identifier */
+  writeString(view, 36, 'data');
+  /* chunk length */
+  view.setUint32(40, numSamples, true);
+
+  // Generate a sub-audible 35Hz hum wave (small amplitude to guarantee inaudibility but ensure active signal)
+  const freq = 35;
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const val = Math.round(128 + 3 * Math.sin(2 * Math.PI * freq * t));
+    view.setUint8(44 + i, val);
+  }
+
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return URL.createObjectURL(blob);
+};
+
 export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose }) => {
   const [trackingCode, setTrackingCode] = useState('');
   const [delivery, setDelivery] = useState<Entrega | null>(null);
@@ -31,6 +87,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [lastCoords, setLastCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [lastTime, setLastTime] = useState<string | null>(null);
+  const [showSetupGuide, setShowSetupGuide] = useState(false);
   
   const watchIdRef = useRef<number | null>(null);
   const wakeLockRef = useRef<any>(null);
@@ -46,8 +103,8 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
     latestDeliveryRef.current = delivery;
   }, [delivery]);
 
-  // Base64 micro silent WAV track loop (keeps browser audio context alive and prevents OS freeze)
-  const SILENT_SOUND = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAAAAAA==";
+  // Dynamically generated silent/hum WAV track loop
+  const SILENT_SOUND = generateSilentWav();
 
   const requestWakeLock = async () => {
     if ('wakeLock' in navigator) {
@@ -219,6 +276,24 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
             ultimaAtualizacao: nowStr
           });
           setIsSharing(true);
+
+          // Also save to Realtime Database to trigger immediate pulsing green "AO VIVO" indicator
+          try {
+            await dbAdapter.atualizarTrackingCargo(activeDelivery.id, {
+              connected: true,
+              lastSeen: Date.now(),
+              location: {
+                lat,
+                lng,
+                timestamp: Date.now(),
+                accuracy: position.coords.accuracy || 0
+              },
+              status: activeDelivery.status || 'em_transito',
+              updatedAt: Date.now()
+            });
+          } catch (rtdbErr) {
+            console.error('Error writing positions to Realtime Database:', rtdbErr);
+          }
         } catch (err: any) {
           console.error('Error writing positions to Firestore:', err);
           setGpsError('Falha ao sincronizar posição com o servidor central: ' + (err.message || 'Sem permissão'));
@@ -235,8 +310,8 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         errorMsg = 'Tempo limite esgotado ao buscar localização GPS.';
       }
       setGpsError(errorMsg);
-      // We do not silently stop tracking on temporary timeouts to ensure continuous tracing attempt
-      if (err.code !== err.TIMEOUT) {
+      // Only stop tracking if permission is permanently denied (code 1)
+      if (err.code === err.PERMISSION_DENIED) {
         stopTracking();
       }
       if (window.falarRodovar) {
@@ -245,7 +320,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
     };
 
     try {
-      // 1. Trigger user-initiated silent audio keeps alive play (crucial bypass for Android/iOS tabs freeze)
+      // 1. Trigger user-initiated silent/hum audio keeps alive play (crucial bypass for Android/iOS tabs freeze)
       if (!audioRef.current) {
         const audio = document.createElement('audio');
         audio.src = SILENT_SOUND;
@@ -253,7 +328,33 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         audio.volume = 0.05;
         audioRef.current = audio;
       }
-      audioRef.current.play().catch(e => console.log('Audio keep-alive allowed outline:', e));
+      audioRef.current.play().then(() => {
+        console.log('Rodovar: Background silent/hum audio playback started');
+      }).catch(e => console.log('Audio keep-alive allowed outline:', e));
+
+      // 1b. Inject browser Media Session metadata to render active audio playback status bar controls
+      const activeDelivery = latestDeliveryRef.current;
+      if ('mediaSession' in navigator && activeDelivery) {
+        try {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: `Rastreamento Ativo (${activeDelivery.trackingCode || 'Rodovar'})`,
+            artist: 'Rodovar Monitora - Em Viagem',
+            album: 'Sinal de Satélite em 2º Plano (100% Ativo)',
+            artwork: [
+              { src: 'https://rodovar.com.br/wp-content/uploads/2026/02/logo.png', sizes: '512x512', type: 'image/png' }
+            ]
+          });
+          navigator.mediaSession.setActionHandler('play', () => {
+            audioRef.current?.play().catch(e => console.log(e));
+          });
+          navigator.mediaSession.setActionHandler('pause', () => {
+            // Keep playing to ensure OS doesn't stop background context execution
+            audioRef.current?.play().catch(e => console.log(e));
+          });
+        } catch (e) {
+          console.warn('MediaSession initialization ignored:', e);
+        }
+      }
 
       // 2. Trigger infrasound Web Audio API Session to secure high-priority background execution in mobile browsers
       startWebAudioKeepAlive();
@@ -286,6 +387,16 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         }
       }, 25000);
 
+      // Sync initial active state to Realtime Database
+      if (activeDelivery && activeDelivery.id) {
+        dbAdapter.atualizarTrackingCargo(activeDelivery.id, {
+          connected: true,
+          lastSeen: Date.now(),
+          status: activeDelivery.status || 'em_transito',
+          updatedAt: Date.now()
+        }).catch(e => console.error('Error writing initial RTDB state:', e));
+      }
+
       setIsSharing(true);
     } catch (err: any) {
       setGpsError('Falha ao iniciar captura física: ' + (err.message || 'Erro desconhecido'));
@@ -293,6 +404,15 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   };
 
   const stopTracking = () => {
+    const activeDelivery = latestDeliveryRef.current;
+    if (activeDelivery && activeDelivery.id) {
+      // Sync offline state to Realtime Database
+      dbAdapter.atualizarTrackingCargo(activeDelivery.id, {
+        connected: false,
+        lastSeen: Date.now()
+      }).catch(e => console.error('Error writing offline state to RTDB:', e));
+    }
+
     // Clear GPS watch
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -326,6 +446,14 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         audioCtxRef.current.close();
       } catch (e) {}
       audioCtxRef.current = null;
+    }
+
+    // Clear mediaSession handlers
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+      } catch (e) {}
     }
 
     if (window.falarRodovar) {
@@ -594,6 +722,56 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
                   <Compass className="w-5 h-5 animate-spin-slow text-zinc-950" />
                   <span>ATIVAR RASTREAMENTO AO VIVO</span>
                 </button>
+              )}
+            </div>
+
+            {/* Background Tracking Settings Guide / Manual */}
+            <div className="bg-zinc-950 rounded-2xl border border-zinc-900 overflow-hidden shadow-xl" id="bg-tracking-guide-card">
+              <button
+                type="button"
+                onClick={() => setShowSetupGuide(!showSetupGuide)}
+                className="w-full p-4 flex items-center justify-between text-left text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400 hover:bg-zinc-900/40 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">⚙️</span>
+                  <span>Rastrear em 2º Plano (Tela Desligada)</span>
+                </div>
+                <span className="text-zinc-500 font-sans text-[10px] lowercase">{showSetupGuide ? '▲ fechar' : '▼ abrir instruções'}</span>
+              </button>
+              
+              {showSetupGuide && (
+                <div className="p-4 pt-0 border-t border-zinc-900/60 space-y-4 text-xs text-zinc-400 leading-relaxed font-sans">
+                  <p className="text-[11px]">
+                    Para garantir que o sinal de localização não feche ou congele quando você bloquear o celular ou abrir outros aplicativos (WhatsApp, Waze, etc.), siga estas orientações rápidas:
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800/60 space-y-1">
+                      <span className="font-extrabold text-amber-400 font-mono block uppercase text-[10px]">🔋 1. SEM RESTRIÇÕES DE BATERIA</span>
+                      <p className="text-[11px]">
+                        Alguns aparelhos (Samsung, Xiaomi, Motorola) suspendem o Chrome com a tela apagada para economizar bateria. 
+                      </p>
+                      <ul className="list-disc pl-4 mt-1 text-[11px] space-y-0.5 text-zinc-300">
+                        <li>Mantenha pressionado o ícone do <strong>Google Chrome</strong> e clique em <strong>"Informações do app"</strong>.</li>
+                        <li>Vá em <strong>"Bateria"</strong> e selecione a opção <strong>"Sem Restrições"</strong> (ou desligue a otimização).</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800/60 space-y-1">
+                      <span className="font-extrabold text-[#00E5FF] font-mono block uppercase text-[10px]">📍 2. LOCALIZAÇÃO "SEMPRE PERMITIDA"</span>
+                      <p className="text-[11px]">
+                        Nas permissões do Chrome, certifique-se de que a Localização está configurada como <strong>"Permitir o tempo todo"</strong>. Se não existir essa opção, mantenha a tela do app ativa.
+                      </p>
+                    </div>
+
+                    <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800/60 space-y-1">
+                      <span className="font-extrabold text-emerald-400 font-mono block uppercase text-[10px]">🎧 3. NOSSO SISTEMA DE INFRASOM CONTÍNUO</span>
+                      <p className="text-[11px]">
+                        Ao ativar o rastreamento, o app passa a reproduzir um som silencioso contínuo e cria uma notificação de mídia no celular. Isso faz com que o sistema entenda que o Chrome é um tocador de música, impedindo-o de congelar a localização em 2º plano!
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 

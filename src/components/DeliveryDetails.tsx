@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Entrega, DeliveryStatus } from '../types';
 import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats, syncSingleEntregaCache, sendGroupChatMessage } from '../db/storage';
 import { dbAdapter } from '../db/databaseAdapter';
@@ -150,6 +150,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [clickedScripts, setClickedScripts] = useState<string[]>([]);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedToastMessage, setCopiedToastMessage] = useState('');
 
   const [visitorResponse, setVisitorResponse] = useState<'sim' | 'nao' | null>(() => {
     try {
@@ -478,11 +479,73 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     }
   };
 
+  // Helper to copy an image to the clipboard using the CORS proxy
+  const copyImageToClipboard = async (imageUrl: string) => {
+    try {
+      const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`;
+      const response = await fetch(proxyUrl);
+      if (!response.ok) {
+        throw new Error("Erro ao obter imagem via proxy");
+      }
+      const blob = await response.blob();
+      
+      // ClipboardItem expects PNG on some browsers, let's wrap it nicely
+      let finalBlob = blob;
+      if (blob.type !== 'image/png') {
+        finalBlob = new Blob([blob], { type: 'image/png' });
+      }
+      
+      if (typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'image/png': finalBlob
+          })
+        ]);
+        return true;
+      } else {
+        console.warn("ClipboardItem not supported in this browser environment.");
+        return false;
+      }
+    } catch (err) {
+      console.error("Erro ao copiar imagem para clipboard:", err);
+      return false;
+    }
+  };
+
   // WhatsApp Trigger helpers
-  const clickWhatsApp = (phone: string, text: string) => {
+  const clickWhatsApp = async (phone: string, text: string, isSolicitarLoc = false) => {
     const cleanPhone = phone.replace(/\D/g, '');
     const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(text)}`;
-    window.open(url, 'whatsapp');
+    
+    // Copy text to clipboard as safety backup
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      console.warn("Could not copy text to clipboard:", e);
+    }
+
+    if (isSolicitarLoc) {
+      const imgUrl = "https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png";
+      const success = await copyImageToClipboard(imgUrl);
+      if (success) {
+        if (window.falarRodovar) {
+          window.falarRodovar("O texto e a imagem explicativa foram copiados! No WhatsApp, aperte Control V para colar.");
+        }
+        setCopiedToastMessage("📋 Texto do roteiro e a IMAGEM explicativa foram copiados com sucesso! No WhatsApp, basta colar (Ctrl + V) na caixa de texto.");
+        setTimeout(() => setCopiedToastMessage(''), 8000);
+      } else {
+        if (window.falarRodovar) {
+          window.falarRodovar("Texto copiado com sucesso.");
+        }
+        setCopiedToastMessage("📋 Texto copiado com sucesso! Para enviar a imagem, clique com o botão direito nela abaixo e escolha 'Copiar Imagem' para colar no WhatsApp.");
+        setTimeout(() => setCopiedToastMessage(''), 8000);
+      }
+    } else {
+      setCopiedToastMessage("📋 Texto do script copiado para a Área de Transferência!");
+      setTimeout(() => setCopiedToastMessage(''), 4000);
+    }
+
+    window.open(url, '_blank');
   };
 
   const getGreetingText = (): string => {
@@ -533,7 +596,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
       if (isCanhoto) {
         handleSolicitarCanhotoClick();
       } else {
-        clickWhatsApp(phone, templateText);
+        clickWhatsApp(phone, templateText, key === 'solicitarLoc');
       }
       markScriptAsClicked(key);
     };
@@ -599,23 +662,68 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
         {key === 'solicitarLoc' && (
           <div className="mt-2 border border-zinc-800 rounded bg-black/40 overflow-hidden" onClick={(ev) => ev.stopPropagation()}>
-            <div className="p-1 bg-zinc-900/50 text-[9px] font-mono text-zinc-500 flex justify-between items-center">
+            <div className="p-1.5 bg-zinc-900/50 text-[9px] font-mono text-zinc-400 flex justify-between items-center">
               <span>Imagem Anexa:</span>
-              <a 
-                href="https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png" 
-                target="_blank" 
-                rel="noreferrer" 
-                className="text-[#FFD600] hover:underline flex items-center gap-0.5"
-              >
-                Abrir imagem ↗
-              </a>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async (ev) => {
+                    ev.stopPropagation();
+                    const success = await copyImageToClipboard("https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png");
+                    if (success) {
+                      setCopiedToastMessage("📋 Imagem explicativa copiada para a Área de Transferência! Agora vá ao WhatsApp e pressione Ctrl + V para colar.");
+                      setTimeout(() => setCopiedToastMessage(''), 8000);
+                      if (window.falarRodovar) {
+                        window.falarRodovar("Imagem copiada com sucesso!");
+                      }
+                    } else {
+                      setCopiedToastMessage("⚠️ Não foi possível copiar automaticamente devido a restrições do navegador. Clique com o botão direito na imagem abaixo e selecione 'Copiar Imagem'.");
+                      setTimeout(() => setCopiedToastMessage(''), 8000);
+                    }
+                  }}
+                  className="text-[#FFD600] hover:text-[#ffd600]/80 hover:underline flex items-center gap-0.5 cursor-pointer font-bold transition-all"
+                  title="Copiar imagem para o clipboard"
+                >
+                  📋 Copiar Imagem
+                </button>
+                <span className="text-zinc-700">|</span>
+                <a 
+                  href="https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png" 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="text-zinc-300 hover:text-[#FFD600] hover:underline flex items-center gap-0.5 transition-colors"
+                >
+                  Abrir imagem ↗
+                </a>
+              </div>
             </div>
-            <img 
-              src="https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png" 
-              alt="Instrução de localização" 
-              className="w-full h-auto max-h-40 object-contain block opacity-85 hover:opacity-100 transition"
-              referrerPolicy="no-referrer"
-            />
+            <div className="relative group cursor-pointer" title="Clique na imagem para copiar">
+              <img 
+                onClick={async (ev) => {
+                  ev.stopPropagation();
+                  const success = await copyImageToClipboard("https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png");
+                  if (success) {
+                    setCopiedToastMessage("📋 Imagem explicativa copiada! Basta pressionar Ctrl + V no WhatsApp.");
+                    setTimeout(() => setCopiedToastMessage(''), 8000);
+                    if (window.falarRodovar) {
+                      window.falarRodovar("Imagem copiada!");
+                    }
+                  }
+                }}
+                src="https://rodovar.com.br/wp-content/uploads/2026/06/ChatGPT-Image-13-de-jun.-de-2026-11_46_33.png" 
+                alt="Instrução de localização" 
+                className="w-full h-auto max-h-40 object-contain block opacity-85 hover:opacity-100 transition duration-200"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                <span className="text-[10px] font-bold text-white bg-zinc-900/90 px-2 py-1 rounded border border-zinc-700">
+                  Clique para Copiar Imagem 📋
+                </span>
+              </div>
+            </div>
+            <div className="p-1.5 bg-zinc-950/80 border-t border-zinc-900 text-[8.5px] text-zinc-400 font-medium">
+              💡 <span className="text-emerald-400 font-bold">Dica Útil:</span> Ao abrir o WhatsApp, a mensagem preenche o texto automaticamente. Você só precisa pressionar <span className="bg-zinc-900 px-1 py-0.5 text-zinc-200 rounded font-bold">Ctrl + V</span> para anexar esta imagem explicativa e enviar tudo junto!
+            </div>
           </div>
         )}
       </div>
@@ -624,6 +732,35 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification para feedback visual de cópia */}
+      <AnimatePresence>
+        {copiedToastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-[1050] w-[92%] max-w-lg p-4 bg-zinc-950/95 border-2 border-emerald-500 text-white rounded-xl shadow-[0_10px_30px_rgba(16,185,129,0.2)] flex items-start gap-3 backdrop-blur-md"
+          >
+            <div className="bg-emerald-500 text-black p-1.5 rounded-full shrink-0 mt-0.5">
+              <Check className="w-4 h-4 stroke-[3px]" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-black uppercase text-emerald-400 tracking-wider mb-0.5">Copiado para Área de Transferência!</p>
+              <p className="text-[11px] text-zinc-300 leading-relaxed font-semibold">
+                {copiedToastMessage}
+              </p>
+            </div>
+            <button 
+              onClick={() => setCopiedToastMessage('')} 
+              className="text-zinc-400 hover:text-white font-mono text-sm p-1 cursor-pointer transition-colors"
+            >
+              ✕
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header navigations */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <button

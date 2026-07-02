@@ -15,9 +15,13 @@ window.open = function(url?: string | URL, target?: string, features?: string) {
                      urlStr.includes('wa.me/');
 
   if (isWhatsApp && urlStr) {
-    // Usamos o target 'whatsapp' para que o navegador reutilize a mesma aba nativamente.
-    // Mantemos a URL original (ex: wa.me ou api.whatsapp.com) para evitar conflitos de múltiplas instâncias do Web Client e fechamento inesperado de abas.
-    const w = originalWindowOpen.call(window, urlStr, 'whatsapp', features);
+    // Se for link de redirecionamento de mensagem direta (wa.me ou api.whatsapp.com/send),
+    // usamos '_blank' para abrir em uma nova aba e evitar que o navegador sobrescreva
+    // ou feche a aba ativa que o usuário já tem aberta com o WhatsApp Web.
+    const isDirectSendLink = urlStr.includes('wa.me/') || urlStr.includes('api.whatsapp.com/send');
+    const finalTarget = isDirectSendLink ? '_blank' : 'whatsapp';
+
+    const w = originalWindowOpen.call(window, urlStr, finalTarget, features);
     if (w) {
       try {
         w.focus();

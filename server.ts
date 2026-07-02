@@ -176,6 +176,30 @@ app.post("/api/webhook/dispatch", async (req, res) => {
   }
 });
 
+// Endpoint para fazer proxy de imagem e evitar problemas de CORS no cliente ao copiar para o clipboard
+app.get("/api/proxy-image", async (req, res) => {
+  try {
+    const imageUrl = req.query.url as string;
+    if (!imageUrl) {
+      return res.status(400).send("Falta a URL da imagem.");
+    }
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      return res.status(response.status).send("Erro ao obter imagem");
+    }
+    const contentType = response.headers.get("content-type") || "image/png";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return res.send(buffer);
+  } catch (err: any) {
+    console.error("Erro no proxy de imagem:", err);
+    return res.status(500).send(err.message);
+  }
+});
+
 // Endpoint serving active firebase config parameters to the standalone tracker client
 app.get("/api/firebase-config", (req, res) => {
   try {
