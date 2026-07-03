@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbAdapter } from '../db/databaseAdapter';
 import { Entrega } from '../types';
+import { ENV } from '../config/env';
 import { 
   Truck, 
   MapPin, 
@@ -97,6 +98,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
   const audioCtxRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
+  const workerRef = useRef<Worker | null>(null);
 
   // Synchronize dynamic delivery collection state to our mutable reference to avoid React closure locks
   useEffect(() => {
@@ -215,6 +217,13 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
       }
+      if (workerRef.current) {
+        try {
+          workerRef.current.postMessage('stop');
+          workerRef.current.terminate();
+        } catch (e) {}
+        workerRef.current = null;
+      }
       releaseWakeLock();
       if (audioRef.current) {
         audioRef.current.pause();
@@ -293,6 +302,35 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
             });
           } catch (rtdbErr) {
             console.error('Error writing positions to Realtime Database:', rtdbErr);
+          }
+
+          // [RODOVAR MILITARY BG] Dual-Write REST API Fallback
+          // Standard SDK uses persistent WebSockets which easily freeze/disconnect in locked screens or background tabs.
+          // Directly patching RTDB via HTTP fetch works on modern mobile browsers even with paused background WebSockets!
+          try {
+            const dbUrl = ENV.FIREBASE.databaseURL;
+            if (dbUrl) {
+              const restUrl = `${dbUrl.replace(/\/$/, '')}/tracking/${activeDelivery.id}.json`;
+              fetch(restUrl, {
+                method: 'PATCH',
+                mode: 'cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  connected: true,
+                  lastSeen: Date.now(),
+                  location: {
+                    lat,
+                    lng,
+                    timestamp: Date.now(),
+                    accuracy: position.coords.accuracy || 0
+                  },
+                  status: activeDelivery.status || 'em_transito',
+                  updatedAt: Date.now()
+                })
+              }).catch((e) => console.warn('REST fallback failed in bg:', e));
+            }
+          } catch (restErr) {
+            console.warn('REST fallback exception:', restErr);
           }
         } catch (err: any) {
           console.error('Error writing positions to Firestore:', err);
@@ -395,6 +433,85 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
           status: activeDelivery.status || 'em_transito',
           updatedAt: Date.now()
         }).catch(e => console.error('Error writing initial RTDB state:', e));
+
+        // [RODOVAR MILITARY BG] Direct initial REST PATCH write
+        try {
+          const dbUrl = ENV.FIREBASE.databaseURL;
+          if (dbUrl) {
+            const url = `${dbUrl.replace(/\/$/, '')}/tracking/${activeDelivery.id}.json`;
+            fetch(url, {
+              method: 'PATCH',
+              mode: 'cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                connected: true,
+                lastSeen: Date.now(),
+                status: activeDelivery.status || 'em_transito',
+                updatedAt: Date.now()
+              })
+            }).catch(e => console.warn('REST initial fallback failed:', e));
+          }
+        } catch (restErr) {}
+      }
+
+      // [RODOVAR MILITARY BG] Start robust inline Web Worker interval to wake up geolocation on screen lock
+      if (workerRef.current) {
+        try {
+          workerRef.current.terminate();
+        } catch (e) {}
+        workerRef.current = null;
+      }
+      try {
+        const workerCode = `
+          let timer = null;
+          self.onmessage = function(e) {
+            if (e.data === 'start') {
+              if (timer) clearInterval(timer);
+              timer = setInterval(() => {
+                self.postMessage('pulse');
+              }, 15000);
+            } else if (e.data === 'stop') {
+              if (timer) {
+                clearInterval(timer);
+                timer = null;
+              }
+            }
+          };
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        const w = new Worker(url);
+        w.onmessage = (e) => {
+          if (e.data === 'pulse' && latestDeliveryRef.current && watchIdRef.current !== null) {
+            console.log('Rodovar Military BG: Web Worker pulse triggered. Refreshing hardware GPS...');
+            
+            // Re-assert Wake Lock and play/resume audio
+            requestWakeLock();
+            if (audioRef.current && audioRef.current.paused) {
+              audioRef.current.play().catch(() => {});
+            }
+
+            // Direct active satellite ping to bypass watchPosition freeze
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                console.log('Rodovar Military BG: Worker GPS success');
+                successCallback(pos);
+              },
+              (err) => {
+                console.warn('Rodovar Military BG: Worker GPS fallback error:', err.message);
+              },
+              {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+              }
+            );
+          }
+        };
+        w.postMessage('start');
+        workerRef.current = w;
+      } catch (workerErr) {
+        console.error('Failed to create background worker:', workerErr);
       }
 
       setIsSharing(true);
@@ -411,6 +528,32 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         connected: false,
         lastSeen: Date.now()
       }).catch(e => console.error('Error writing offline state to RTDB:', e));
+
+      // [RODOVAR MILITARY BG] Direct offline REST PATCH write
+      try {
+        const dbUrl = ENV.FIREBASE.databaseURL;
+        if (dbUrl) {
+          const url = `${dbUrl.replace(/\/$/, '')}/tracking/${activeDelivery.id}.json`;
+          fetch(url, {
+            method: 'PATCH',
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              connected: false,
+              lastSeen: Date.now()
+            })
+          }).catch(e => console.warn('REST offline fallback failed:', e));
+        }
+      } catch (restErr) {}
+    }
+
+    // [RODOVAR MILITARY BG] Terminate background Web Worker
+    if (workerRef.current) {
+      try {
+        workerRef.current.postMessage('stop');
+        workerRef.current.terminate();
+      } catch (e) {}
+      workerRef.current = null;
     }
 
     // Clear GPS watch
