@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#FFD700">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RODOVAR GPS">
   <title>RODOVAR MONITORA - Rastreamento de Viagem</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -236,14 +241,32 @@
     }
 
     // ============================================================
-    // URL PARAMS (Tratamento robusto de parâmetros incluindo cargold para total compatibilidade)
+    // URL PARAMS & LOCAL STORAGE RECOVERY FOR PWA STANDALONE
     // ============================================================
     const urlParams = new URLSearchParams(window.location.search);
-    const rawCargoId = urlParams.get("cargoId") || urlParams.get("cargoid") || urlParams.get("cargold") || urlParams.get("cargoLd") || urlParams.get("id") || "test-cargo";
-    const cargoId = rawCargoId; // Mantém o case original para compatibilidade absoluta
-    const driverName = urlParams.get("driver") || "Motorista Convidado";
-    const routeName = urlParams.get("route") || "Rota não especificada";
-    const clientName = urlParams.get("client") || "Destinatário não especificado";
+    let rawCargoId = urlParams.get("cargoId") || urlParams.get("cargoid") || urlParams.get("cargold") || urlParams.get("cargoLd") || urlParams.get("id");
+    let driverName = urlParams.get("driver");
+    let routeName = urlParams.get("route");
+    let clientName = urlParams.get("client");
+
+    if (rawCargoId) {
+      // Salva no localStorage para recuperação offline/PWA
+      localStorage.setItem("rodovar_pwa_last_cargo_id", rawCargoId);
+      if (driverName) localStorage.setItem("rodovar_pwa_last_driver", driverName);
+      if (routeName) localStorage.setItem("rodovar_pwa_last_route", routeName);
+      if (clientName) localStorage.setItem("rodovar_pwa_last_client", clientName);
+    } else {
+      // Recupera do localStorage se aberto a partir do ícone sem parâmetros
+      rawCargoId = localStorage.getItem("rodovar_pwa_last_cargo_id") || "test-cargo";
+      driverName = localStorage.getItem("rodovar_pwa_last_driver");
+      routeName = localStorage.getItem("rodovar_pwa_last_route");
+      clientName = localStorage.getItem("rodovar_pwa_last_client");
+    }
+
+    const cargoId = rawCargoId;
+    driverName = driverName || "Motorista Convidado";
+    routeName = routeName || "Rota não especificada";
+    clientName = clientName || "Destinatário não especificado";
 
     document.getElementById("disp-cargo-id").innerText = cargoId.toUpperCase();
     document.getElementById("disp-driver").innerText = driverName;
@@ -256,44 +279,7 @@
     // ============================================================
     // PWA — ÍCONE NA TELA INICIAL
     // ============================================================
-    function generatePngIconBase64(size) {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = size; canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, size, size);
-        ctx.beginPath(); ctx.arc(size/2, size/2, size*0.42, 0, 2*Math.PI);
-        ctx.fillStyle = '#FFD600'; ctx.fill();
-        ctx.fillStyle = '#000000';
-        ctx.font = `900 italic ${size*0.52}px system-ui`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('R', size/2, size/2 + size*0.02);
-        return canvas.toDataURL('image/png');
-      } catch(e) { return ''; }
-    }
-
     function setupPWA() {
-      const manifestObj = {
-        name: "RODOVAR Tracker", short_name: "RODOVAR GPS",
-        display: "standalone", background_color: "#0a0a0a", theme_color: "#FFD700",
-        start_url: window.location.href,
-        icons: [
-          { src: generatePngIconBase64(192), sizes: "192x192", type: "image/png" },
-          { src: generatePngIconBase64(512), sizes: "512x512", type: "image/png" }
-        ]
-      };
-      const blob = new Blob([JSON.stringify(manifestObj)], { type: 'application/json' });
-      const link = document.createElement('link');
-      link.rel = 'manifest'; link.href = URL.createObjectURL(blob);
-      document.head.appendChild(link);
-
-      ['apple-mobile-web-app-capable','mobile-web-app-capable'].forEach(name => {
-        const m = document.createElement('meta'); m.name = name; m.content = 'yes';
-        document.head.appendChild(m);
-      });
-      const mt = document.createElement('meta'); mt.name = 'apple-mobile-web-app-title'; mt.content = 'RODOVAR GPS';
-      document.head.appendChild(mt);
-
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
       if (isStandalone) { masterLog("[PWA] Executando em modo standalone (instalado).", "success"); return; }
 
@@ -301,13 +287,19 @@
       window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault(); deferredPrompt = e;
         masterLog("[PWA] Pronto para instalação na tela inicial.", "success");
+        
+        // Remove banner existente se houver
+        const existingBanner = document.getElementById('pwa-banner-container');
+        if (existingBanner) existingBanner.remove();
+
         const banner = document.createElement('div');
+        banner.id = 'pwa-banner-container';
         banner.className = 'bg-brand-card border border-brand-yellow/30 rounded-xl p-4 mb-4 flex flex-col gap-2 relative overflow-hidden';
         banner.innerHTML = `
           <div class="absolute top-0 left-0 bottom-0 w-1.5 bg-brand-yellow"></div>
           <div class="flex justify-between items-start pl-2">
             <div class="flex gap-2 items-start">
-              <div class="w-10 h-10 rounded-lg bg-brand-yellow/15 border border-brand-yellow/30 flex items-center justify-center text-brand-yellow text-lg font-black shrink-0">🛰️</div>
+              <img src="/icon-192.png" class="w-10 h-10 rounded-lg border border-brand-yellow/30 shrink-0 object-contain" alt="Logo">
               <div>
                 <h4 class="text-xs font-black text-white uppercase">Instalar RODOVAR GPS</h4>
                 <p class="text-[11px] text-zinc-400 mt-0.5 whitespace-nowrap">Adicione à tela inicial para GPS sem interrupções.</p>
@@ -318,10 +310,21 @@
           <div class="pl-2">
             <button id="pwa-install" class="w-full bg-brand-yellow text-black font-black uppercase py-2 rounded-lg text-[10px] cursor-pointer">✨ Adicionar à Tela Inicial</button>
           </div>`;
-        document.querySelector('main').insertBefore(banner, document.querySelector('main').firstChild);
+        
+        const mainEl = document.querySelector('main');
+        if (mainEl) {
+          mainEl.insertBefore(banner, mainEl.firstChild);
+        }
+        
         document.getElementById('pwa-close').onclick = () => banner.remove();
         document.getElementById('pwa-install').onclick = async () => {
-          if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; banner.remove(); }
+          if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            masterLog(`[PWA] Usuário escolheu instalação: ${outcome}`, "info");
+            deferredPrompt = null;
+            banner.remove();
+          }
         };
       });
     }
@@ -449,22 +452,10 @@
     async function registerServiceWorker() {
       if (!('serviceWorker' in navigator)) return;
       try {
-        const swCode = `
-          const CACHE='rodovar-v3.1';
-          self.addEventListener('install', e => { self.skipWaiting(); });
-          self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
-          self.addEventListener('fetch', e => {
-            e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-          });
-          self.addEventListener('message', e => {
-            if(e.data && e.data.type==='KEEPALIVE') e.source.postMessage({type:'KEEPALIVE_ACK'});
-          });
-        `;
-        const blob = new Blob([swCode], { type: 'application/javascript' });
-        const reg = await navigator.serviceWorker.register(URL.createObjectURL(blob));
+        const reg = await navigator.serviceWorker.register('/sw.js');
         setInterval(() => { if(reg.active) reg.active.postMessage({type:'KEEPALIVE'}); }, 20000);
         masterLog("Service Worker GPS registrado (segundo plano ativo).", "success");
-      } catch(e) { masterLog("Service Worker não suportado: " + e.message, "warn"); }
+      } catch(e) { masterLog("Service Worker falhou: " + e.message, "warn"); }
     }
 
     // ============================================================
