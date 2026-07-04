@@ -732,6 +732,7 @@
     // ============================================================
     async function init() {
       setupPWA();
+      await registerServiceWorker();
       masterLog("SISTEMA RODOVAR MONITORA v3.1 INICIADO", "sys");
       masterLog("Cargo ID: " + cargoId, "info");
       masterLog("Motorista: " + driverName, "info");
