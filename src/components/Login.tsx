@@ -224,8 +224,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
         { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
         { name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
         { name: 'Petrônio', username: 'petronio', role: 'Financeiro', passwordHash: 'rodovar2026' },
-        { name: 'Mateus', username: 'mateus', role: 'Operador', passwordHash: 'rodovar2026' },
-        { name: 'Priscila', username: 'priscila', role: 'Operador', passwordHash: 'rodovar2026' }
+        { name: 'Mateus', username: 'mateus', role: 'Operador', passwordHash: 'rodovar2026' }
       ];
 
       // Sync legacy employees from Firestore before checking to enable cross-device login

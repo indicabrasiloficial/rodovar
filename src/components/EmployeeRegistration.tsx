@@ -95,14 +95,6 @@ const DEFAULT_EMPLOYEES: Employee[] = [
     role: 'Operador',
     passwordHash: 'rodovar2026',
     created_at: '2026-01-01'
-  },
-  {
-    id: 'emp-priscila',
-    name: 'Priscila',
-    username: 'priscila',
-    role: 'Operador',
-    passwordHash: 'rodovar2026',
-    created_at: '2026-01-01'
   }
 ];
 

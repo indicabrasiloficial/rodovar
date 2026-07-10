@@ -27,6 +27,7 @@ import {
   subscribeToGroupChatRealtime, 
   deleteGroupChatMessage,
   subscribeToPresence,
+  updatePresence,
   markMessageAsSeen,
   getLegacyEmployeesFromFirestore,
   getCollaboratorsFromFirestore
@@ -158,6 +159,35 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
     });
     return () => unsubscribe();
   }, []);
+
+  // Update current user's presence state in Firestore on login/mount
+  useEffect(() => {
+    if (currentUser && currentUser.username) {
+      const setOnline = () => {
+        updatePresence(
+          currentUser.username,
+          currentUser.displayName,
+          currentUser.role || 'Colaborador',
+          true
+        ).catch(err => console.warn("Error updating presence to online:", err));
+      };
+
+      setOnline();
+
+      // Refresh presence status every 2 minutes
+      const interval = setInterval(setOnline, 2 * 60 * 1000);
+
+      return () => {
+        clearInterval(interval);
+        updatePresence(
+          currentUser.username,
+          currentUser.displayName,
+          currentUser.role || 'Colaborador',
+          false
+        ).catch(err => console.warn("Error updating presence to offline:", err));
+      };
+    }
+  }, [currentUser]);
 
   // Subscribe to the active room messages from Firebase
   useEffect(() => {
@@ -379,8 +409,7 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
       { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações' },
       { name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações' },
       { name: 'Petrônio', username: 'petronio', role: 'Financeiro' },
-      { name: 'Mateus', username: 'mateus', role: 'Operador' },
-      { name: 'Priscila', username: 'priscila', role: 'Operador' }
+      { name: 'Mateus', username: 'mateus', role: 'Operador' }
     ];
 
     // Combine loaded with default list and filter duplicates
