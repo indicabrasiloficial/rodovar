@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getEntregas, deleteEntrega, subscribeToRealtime, saveEntrega } from './db/storage';
+import { getEntregas, deleteEntrega, subscribeToRealtime, saveEntrega, registerSystemLog } from './db/storage';
 import { auth } from './db/firebase';
 import { Entrega } from './types';
 import { parsePastedTextToDeliveries } from './components/DeliveryList';
@@ -132,6 +132,13 @@ export default function App() {
       try {
         const parsed = JSON.parse(active);
         setUser(parsed);
+        
+        // Log system access once per browser tab session
+        const sessionKey = `rodovar_logged_session_${parsed.username}`;
+        if (!sessionStorage.getItem(sessionKey)) {
+          sessionStorage.setItem(sessionKey, 'true');
+          registerSystemLog('Entrada no Sistema', `Colaborador ${parsed.displayName} (${parsed.role}) entrou no painel do sistema.`, parsed);
+        }
       } catch {
         setUser(null);
       }
@@ -179,6 +186,9 @@ export default function App() {
   }, []);
 
   const handleLogout = () => {
+    if (user) {
+      registerSystemLog('Logout', `Colaborador ${user.displayName} (${user.role}) deslogou do sistema.`, user);
+    }
     localStorage.removeItem('rodovar_active_login_v2');
     setUser(null);
   };

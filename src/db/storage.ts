@@ -1507,7 +1507,7 @@ export function subscribeToSystemLogs(callback: (logs: SystemLog[]) => void): ()
     });
     // Sort descending by timestamp so latest logs are shown first
     list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    callback(list.slice(0, 150)); // Limit to last 150 entries for performance
+    callback(list); // Return all logs as requested
   }, (error) => {
     console.error("Error subscribing to system logs:", error);
   });
