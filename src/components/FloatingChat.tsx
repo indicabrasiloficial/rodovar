@@ -27,7 +27,9 @@ import {
   subscribeToGroupChatRealtime, 
   deleteGroupChatMessage,
   subscribeToPresence,
-  markMessageAsSeen
+  markMessageAsSeen,
+  getLegacyEmployeesFromFirestore,
+  getCollaboratorsFromFirestore
 } from '../db/storage';
 import { getRegisteredEmployees } from './EmployeeRegistration';
 import { GroupChatMessage } from '../types';
@@ -91,12 +93,59 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
 
   // Fetch employees on mount
   useEffect(() => {
-    const list = getRegisteredEmployees();
-    setRegisteredEmployees(list);
+    const fetchAllEmployees = async () => {
+      try {
+        const legacyLocal = getRegisteredEmployees();
+        
+        // Fetch real-time cloud employees
+        const cloudLegacyPromise = getLegacyEmployeesFromFirestore();
+        const firebaseColabsPromise = getCollaboratorsFromFirestore();
+        
+        const [cloudLegacy, firebaseColabs] = await Promise.all([
+          cloudLegacyPromise,
+          firebaseColabsPromise
+        ]);
+        
+        const merged: any[] = [...legacyLocal];
+        
+        // Add cloud legacy if not already there
+        if (cloudLegacy && Array.isArray(cloudLegacy)) {
+          cloudLegacy.forEach((emp: any) => {
+            if (!merged.some(m => m.username === emp.username)) {
+              merged.push(emp);
+            }
+          });
+        }
+        
+        // Add Firebase approved collaborators if not already there
+        if (firebaseColabs && Array.isArray(firebaseColabs)) {
+          const approved = firebaseColabs.filter((c: any) => c.status === 'aprovado');
+          approved.forEach((c: any) => {
+            if (!merged.some(m => m.username === c.username)) {
+              merged.push({
+                id: c.id || c.uid,
+                name: c.name,
+                username: c.username,
+                role: c.detailedRole || c.role || 'Colaborador',
+                passwordHash: '',
+                created_at: c.created_at || ''
+              });
+            }
+          });
+        }
+        
+        setRegisteredEmployees(merged);
+      } catch (err) {
+        console.warn("[FloatingChat] Error loading employees from Firestore:", err);
+        setRegisteredEmployees(getRegisteredEmployees());
+      }
+    };
+
+    fetchAllEmployees();
 
     // Setup periodic reload of employees list
     const interval = setInterval(() => {
-      setRegisteredEmployees(getRegisteredEmployees());
+      fetchAllEmployees();
     }, 15000);
 
     return () => clearInterval(interval);
@@ -329,7 +378,9 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
       { name: 'Alexandre', username: 'alexandre', role: 'Diretor Comercial' },
       { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações' },
       { name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações' },
-      { name: 'Petrônio', username: 'petronio', role: 'Financeiro' }
+      { name: 'Petrônio', username: 'petronio', role: 'Financeiro' },
+      { name: 'Mateus', username: 'mateus', role: 'Operador' },
+      { name: 'Priscila', username: 'priscila', role: 'Operador' }
     ];
 
     // Combine loaded with default list and filter duplicates

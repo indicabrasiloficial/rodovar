@@ -87,6 +87,22 @@ const DEFAULT_EMPLOYEES: Employee[] = [
     role: 'Financeiro',
     passwordHash: 'rodovar2026',
     created_at: '2026-01-01'
+  },
+  {
+    id: 'emp-mateus',
+    name: 'Mateus',
+    username: 'mateus',
+    role: 'Operador',
+    passwordHash: 'rodovar2026',
+    created_at: '2026-01-01'
+  },
+  {
+    id: 'emp-priscila',
+    name: 'Priscila',
+    username: 'priscila',
+    role: 'Operador',
+    passwordHash: 'rodovar2026',
+    created_at: '2026-01-01'
   }
 ];
 
@@ -114,9 +130,6 @@ export function getRegisteredEmployees(): Employee[] {
     });
     localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
   }
-
-  // Filter out Priscila and Mateus from custom lists if they were already saved in local storage
-  list = list.filter(emp => emp.username !== 'mateus' && emp.username !== 'priscila');
 
   // Guarantee master user is always filtered out and never listed
   return list.filter(emp => emp.username !== 'master');
