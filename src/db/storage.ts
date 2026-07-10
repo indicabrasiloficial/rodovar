@@ -1463,14 +1463,22 @@ export interface SystemLog {
   details: string;
 }
 
-export async function registerSystemLog(action: string, details: string): Promise<void> {
+export async function registerSystemLog(
+  action: string, 
+  details: string,
+  userOverride?: { username: string; displayName: string; role: string }
+): Promise<void> {
   let activeUser = { username: 'sistema', displayName: 'Sistema', role: 'Operador Rodovar' };
-  const userStored = localStorage.getItem('rodovar_active_login_v2');
-  if (userStored) {
-    try {
-      activeUser = JSON.parse(userStored);
-    } catch {
-      // Ignored
+  if (userOverride) {
+    activeUser = userOverride;
+  } else {
+    const userStored = localStorage.getItem('rodovar_active_login_v2');
+    if (userStored) {
+      try {
+        activeUser = JSON.parse(userStored);
+      } catch {
+        // Ignored
+      }
     }
   }
 

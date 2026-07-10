@@ -118,7 +118,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
           };
           await resetFailedLoginAttempts('master');
           localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
-          registerSystemLog('Login', `Administrador Master realizou login no sistema.`);
+          await registerSystemLog('Login', `Administrador Master realizou login no sistema.`, sessionData);
           onLoginSuccess(sessionData);
           setLoading(false);
           return;
@@ -169,7 +169,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
           };
 
           localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
-          registerSystemLog('Login', `Colaborador ${sessionData.displayName} (${sessionData.role}) logou com senha alterada pelo Master.`);
+          await registerSystemLog('Login', `Colaborador ${sessionData.displayName} (${sessionData.role}) logou com senha alterada pelo Master.`, sessionData);
           onLoginSuccess(sessionData);
           setLoading(false);
           return;
@@ -204,7 +204,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
           };
 
           localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
-          registerSystemLog('Login', `Colaborador ${sessionData.displayName} (${sessionData.role}) realizou login real no Firebase.`);
+          await registerSystemLog('Login', `Colaborador ${sessionData.displayName} (${sessionData.role}) realizou login real no Firebase.`, sessionData);
           onLoginSuccess(sessionData);
         } catch (authError: any) {
           // Increment failed attempts
@@ -273,7 +273,7 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
         
         await resetFailedLoginAttempts(cleanUser);
         localStorage.setItem('rodovar_active_login_v2', JSON.stringify(sessionData));
-        registerSystemLog('Login Legacy', `Colaborador ${sessionData.displayName} (${sessionData.role}) logado via legado.`);
+        await registerSystemLog('Login', `Colaborador ${sessionData.displayName} (${sessionData.role}) logado via legado.`, sessionData);
         onLoginSuccess(sessionData);
       } else {
         await registerFailedLoginAttempt(cleanUser);
