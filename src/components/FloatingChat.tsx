@@ -27,10 +27,7 @@ import {
   subscribeToGroupChatRealtime, 
   deleteGroupChatMessage,
   subscribeToPresence,
-  updatePresence,
-  markMessageAsSeen,
-  getLegacyEmployeesFromFirestore,
-  getCollaboratorsFromFirestore
+  markMessageAsSeen
 } from '../db/storage';
 import { getRegisteredEmployees } from './EmployeeRegistration';
 import { GroupChatMessage } from '../types';
@@ -94,59 +91,12 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
 
   // Fetch employees on mount
   useEffect(() => {
-    const fetchAllEmployees = async () => {
-      try {
-        const legacyLocal = getRegisteredEmployees();
-        
-        // Fetch real-time cloud employees
-        const cloudLegacyPromise = getLegacyEmployeesFromFirestore();
-        const firebaseColabsPromise = getCollaboratorsFromFirestore();
-        
-        const [cloudLegacy, firebaseColabs] = await Promise.all([
-          cloudLegacyPromise,
-          firebaseColabsPromise
-        ]);
-        
-        const merged: any[] = [...legacyLocal];
-        
-        // Add cloud legacy if not already there
-        if (cloudLegacy && Array.isArray(cloudLegacy)) {
-          cloudLegacy.forEach((emp: any) => {
-            if (!merged.some(m => m.username === emp.username)) {
-              merged.push(emp);
-            }
-          });
-        }
-        
-        // Add Firebase approved collaborators if not already there
-        if (firebaseColabs && Array.isArray(firebaseColabs)) {
-          const approved = firebaseColabs.filter((c: any) => c.status === 'aprovado');
-          approved.forEach((c: any) => {
-            if (!merged.some(m => m.username === c.username)) {
-              merged.push({
-                id: c.id || c.uid,
-                name: c.name,
-                username: c.username,
-                role: c.detailedRole || c.role || 'Colaborador',
-                passwordHash: '',
-                created_at: c.created_at || ''
-              });
-            }
-          });
-        }
-        
-        setRegisteredEmployees(merged);
-      } catch (err) {
-        console.warn("[FloatingChat] Error loading employees from Firestore:", err);
-        setRegisteredEmployees(getRegisteredEmployees());
-      }
-    };
-
-    fetchAllEmployees();
+    const list = getRegisteredEmployees();
+    setRegisteredEmployees(list);
 
     // Setup periodic reload of employees list
     const interval = setInterval(() => {
-      fetchAllEmployees();
+      setRegisteredEmployees(getRegisteredEmployees());
     }, 15000);
 
     return () => clearInterval(interval);
@@ -159,35 +109,6 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
     });
     return () => unsubscribe();
   }, []);
-
-  // Update current user's presence state in Firestore on login/mount
-  useEffect(() => {
-    if (currentUser && currentUser.username) {
-      const setOnline = () => {
-        updatePresence(
-          currentUser.username,
-          currentUser.displayName,
-          currentUser.role || 'Colaborador',
-          true
-        ).catch(err => console.warn("Error updating presence to online:", err));
-      };
-
-      setOnline();
-
-      // Refresh presence status every 2 minutes
-      const interval = setInterval(setOnline, 2 * 60 * 1000);
-
-      return () => {
-        clearInterval(interval);
-        updatePresence(
-          currentUser.username,
-          currentUser.displayName,
-          currentUser.role || 'Colaborador',
-          false
-        ).catch(err => console.warn("Error updating presence to offline:", err));
-      };
-    }
-  }, [currentUser]);
 
   // Subscribe to the active room messages from Firebase
   useEffect(() => {
@@ -408,8 +329,7 @@ export default function FloatingChat({ currentUser }: FloatingChatProps) {
       { name: 'Alexandre', username: 'alexandre', role: 'Diretor Comercial' },
       { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações' },
       { name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações' },
-      { name: 'Petrônio', username: 'petronio', role: 'Financeiro' },
-      { name: 'Mateus', username: 'mateus', role: 'Operador' }
+      { name: 'Petrônio', username: 'petronio', role: 'Financeiro' }
     ];
 
     // Combine loaded with default list and filter duplicates

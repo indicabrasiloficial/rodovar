@@ -162,17 +162,6 @@ export async function fetchEntregasFromServer(force = false): Promise<void> {
       } as Entrega);
     });
 
-    newEntregas.forEach((se) => {
-      const existing = cachedEntregas.find(e => e.id === se.id);
-      if (existing && existing.updated_at && se.updated_at) {
-        if (new Date(existing.updated_at).getTime() > new Date(se.updated_at).getTime()) {
-           // Local cache is newer than the fetched document (due to pending writes).
-           // Keep local properties, but make sure it is updated.
-           Object.assign(se, existing);
-        }
-      }
-    });
-
     cachedEntregas = newEntregas;
     cachedEntregas.sort((a, b) => new Date(b.created_at || b.updated_at).getTime() - new Date(a.created_at || a.updated_at).getTime());
 
@@ -1518,7 +1507,7 @@ export function subscribeToSystemLogs(callback: (logs: SystemLog[]) => void): ()
     });
     // Sort descending by timestamp so latest logs are shown first
     list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    callback(list); // Return all logs as requested
+    callback(list.slice(0, 150)); // Limit to last 150 entries for performance
   }, (error) => {
     console.error("Error subscribing to system logs:", error);
   });

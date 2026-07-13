@@ -55,10 +55,7 @@ export default function ActivityLogs({ currentUser }: ActivityLogsProps) {
   const getActionBadgeClass = (action: string) => {
     switch (action) {
       case 'Login':
-      case 'Entrada no Sistema':
         return 'bg-blue-900/40 text-blue-300 border-blue-500/30';
-      case 'Logout':
-        return 'bg-zinc-800 text-zinc-400 border-zinc-700/50';
       case 'Cadastro de Carga':
         return 'bg-emerald-900/40 text-emerald-300 border-emerald-500/30';
       case 'Alteração de Carga':
@@ -106,7 +103,7 @@ export default function ActivityLogs({ currentUser }: ActivityLogsProps) {
       log.details.toLowerCase().includes(search.toLowerCase());
 
     if (filterAction === 'all') return matchesSearch;
-    if (filterAction === 'login') return matchesSearch && (log.action === 'Login' || log.action === 'Entrada no Sistema' || log.action === 'Logout');
+    if (filterAction === 'login') return matchesSearch && log.action === 'Login';
     if (filterAction === 'cargas') return matchesSearch && log.action.includes('Carga');
     if (filterAction === 'colaboradores') return matchesSearch && log.action.includes('Colaborador');
     if (filterAction === 'backups') return matchesSearch && log.action.includes('Backup');

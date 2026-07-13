@@ -297,6 +297,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
                 timestamp: Date.now(),
                 accuracy: position.coords.accuracy || 0
               },
+              status: activeDelivery.status || 'em_transito',
               updatedAt: Date.now()
             });
           } catch (rtdbErr) {
@@ -323,6 +324,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
                     timestamp: Date.now(),
                     accuracy: position.coords.accuracy || 0
                   },
+                  status: activeDelivery.status || 'em_transito',
                   updatedAt: Date.now()
                 })
               }).catch((e) => console.warn('REST fallback failed in bg:', e));
@@ -428,6 +430,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
         dbAdapter.atualizarTrackingCargo(activeDelivery.id, {
           connected: true,
           lastSeen: Date.now(),
+          status: activeDelivery.status || 'em_transito',
           updatedAt: Date.now()
         }).catch(e => console.error('Error writing initial RTDB state:', e));
 
@@ -443,6 +446,7 @@ export const MotoristaTracking: React.FC<MotoristaTrackingProps> = ({ onClose })
               body: JSON.stringify({
                 connected: true,
                 lastSeen: Date.now(),
+                status: activeDelivery.status || 'em_transito',
                 updatedAt: Date.now()
               })
             }).catch(e => console.warn('REST initial fallback failed:', e));

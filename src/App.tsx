@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getEntregas, deleteEntrega, subscribeToRealtime, saveEntrega, registerSystemLog } from './db/storage';
+import { getEntregas, deleteEntrega, subscribeToRealtime, saveEntrega } from './db/storage';
 import { auth } from './db/firebase';
 import { Entrega } from './types';
 import { parsePastedTextToDeliveries } from './components/DeliveryList';
@@ -132,13 +132,6 @@ export default function App() {
       try {
         const parsed = JSON.parse(active);
         setUser(parsed);
-        
-        // Log system access once per browser tab session
-        const sessionKey = `rodovar_logged_session_${parsed.username}`;
-        if (!sessionStorage.getItem(sessionKey)) {
-          sessionStorage.setItem(sessionKey, 'true');
-          registerSystemLog('Entrada no Sistema', `Colaborador ${parsed.displayName} (${parsed.role}) entrou no painel do sistema.`, parsed);
-        }
       } catch {
         setUser(null);
       }
@@ -186,9 +179,6 @@ export default function App() {
   }, []);
 
   const handleLogout = () => {
-    if (user) {
-      registerSystemLog('Logout', `Colaborador ${user.displayName} (${user.role}) deslogou do sistema.`, user);
-    }
     localStorage.removeItem('rodovar_active_login_v2');
     setUser(null);
   };
@@ -563,6 +553,8 @@ export default function App() {
               greeting = `Olá, Administrador Mestre! O sistema Rodovar está totalmente liberado. O painel de controle e cadastro de funcionários foi desbloqueado com segurança.`;
             } else if (lowerUser === 'mateus') {
               greeting = `Seja bem vindo ao sistema Rodovar Monitora, Mateus! O painel operacional está pronto para uso. Vamos acompanhar as cargas juntos hoje?`;
+            } else if (lowerUser === 'priscila') {
+              greeting = `Seja bem vindo ao sistema Rodovar Monitora, Priscila! Painel de controle operacional ativo. Quais rotas vamos vigiar hoje?`;
             } else if (lowerUser === 'jairobahia') {
               greeting = `Seja bem vindo ao sistema Rodovar Monitora, Jairo Bahia! Painel de controle operacional ativo. Como estão as coletas e os envios de WhatsApp hoje?`;
             } else if (lowerRole.includes('operador')) {
@@ -1426,13 +1418,11 @@ export default function App() {
                                 row.status === 'entregue' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/50' :
                                 row.status === 'em_transito' ? 'bg-yellow-950/40 text-[#FFD600] border border-yellow-900/50' :
                                 row.status === 'parado' ? 'bg-red-950/40 text-red-400 border border-red-900/50' :
-                                row.status === 'descarregando' ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50' :
                                 'bg-blue-950/40 text-blue-400 border border-blue-900/50'
                               }`}>
                                 {row.status === 'entregue' ? 'Entregue ✅' :
                                  row.status === 'em_transito' ? 'Trânsito 🚚' :
                                  row.status === 'parado' ? 'Parado 🛑' :
-                                 row.status === 'descarregando' ? 'Descarregando 🏢' :
                                  'Coletando 📦'}
                               </span>
                             </td>

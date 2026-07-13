@@ -285,16 +285,12 @@ export default function ManagerSupport({ entregas, initialEntregaId }: ManagerSu
 
                 <div className="flex sm:flex-col items-end gap-2 shrink-0">
                   <span className={`px-2.5 py-1 text-[10px] font-mono rounded font-bold uppercase border ${
-                    activeEntrega.status === 'entregue' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30' :
                     activeEntrega.status === 'em_transito' ? 'bg-yellow-950/40 text-[#FFD600] border-yellow-900/30' :
                     activeEntrega.status === 'parado' ? 'bg-red-950/40 text-red-400 border-red-900/30' :
-                    activeEntrega.status === 'descarregando' ? 'bg-purple-950/40 text-purple-400 border-purple-900/30' :
                     'bg-blue-950/40 text-blue-400 border-blue-900/30'
                   }`}>
-                    {activeEntrega.status === 'entregue' ? 'Entregue ✅' :
-                     activeEntrega.status === 'em_transito' ? 'Trânsito 🚚' :
-                     activeEntrega.status === 'parado' ? 'Parado 🛑' :
-                     activeEntrega.status === 'descarregando' ? 'Descarregando 🏢' : 'Coletando 📦'}
+                    {activeEntrega.status === 'em_transito' ? 'Trânsito 🚚' :
+                     activeEntrega.status === 'parado' ? 'Parado 🛑' : 'Coletando 📦'}
                   </span>
                   <div className="text-[10px] text-zinc-500 font-mono">Limite: {activeEntrega.prazo}</div>
                 </div>
