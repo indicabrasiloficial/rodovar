@@ -616,6 +616,7 @@ function printDeliveries(entregas: Entrega[], options: { showFinance: boolean; s
   let cardsHtml = '';
   entregas.forEach((e, idx) => {
     const statusText = e.status === 'entregue' ? 'Entregue ✅' : 
+                       e.status === 'descarregando' ? 'Descarregando 🏢' : 
                        e.status === 'em_transito' ? 'Previsão de Entrega' : 
                        e.status === 'parado' ? 'Parado 🛑' : 'Coletando 📦';
     
@@ -2312,11 +2313,13 @@ Tenha uma ótima e segura viagem!`;
                                 row.status === 'entregue' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/50' :
                                 row.status === 'em_transito' ? 'bg-yellow-950/40 text-[#FFD600] border border-yellow-900/50' :
                                 row.status === 'parado' ? 'bg-red-950/40 text-red-400 border border-red-900/50' :
+                                row.status === 'descarregando' ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50' :
                                 'bg-blue-950/40 text-blue-400 border border-blue-900/50'
                               }`}>
                                 {row.status === 'entregue' ? 'Entregue ✅' :
                                  row.status === 'em_transito' ? 'Trânsito 🚚' :
                                  row.status === 'parado' ? 'Parado 🛑' :
+                                 row.status === 'descarregando' ? 'Descarregando 🏢' :
                                  'Coletando 📦'}
                               </span>
                             </td>
@@ -2525,11 +2528,13 @@ Tenha uma ótima e segura viagem!`;
                                 e.status === 'entregue' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/50' :
                                 e.status === 'em_transito' ? 'bg-yellow-950/40 text-[#FFD600] border border-yellow-900/50' :
                                 e.status === 'parado' ? 'bg-red-950/40 text-red-400 border border-red-900/50' :
+                                e.status === 'descarregando' ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50' :
                                 'bg-blue-950/40 text-blue-400 border border-blue-900/50'
                               }`}>
                                 {e.status === 'entregue' ? 'Entregue ✅' :
                                  e.status === 'em_transito' ? 'Trânsito 🚚' :
                                  e.status === 'parado' ? 'Parado 🛑' :
+                                 e.status === 'descarregando' ? 'Descarregando 🏢' :
                                  'Coletando 📦'}
                               </span>
                             </div>
