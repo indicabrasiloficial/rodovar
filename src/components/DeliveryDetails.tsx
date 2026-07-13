@@ -371,7 +371,8 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
       if (details) {
         if (!details.trackingCode) {
           // Enforce auto-generation and immediately save the newly stamped object
-          const healed = saveEntrega(details);
+          const generatedCode = details.id ? details.id.replace('ent-', '').substring(0, 6).toUpperCase() : Math.random().toString(36).substring(2, 8).toUpperCase();
+          const healed = saveEntrega({ ...details, trackingCode: generatedCode });
           setEntrega(healed);
           setLocLinkInput(healed.link_localizacao || '');
         } else {
