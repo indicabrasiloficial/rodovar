@@ -5,6 +5,7 @@ import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR, formatRegistrationTime } from '../utils/date';
 import { generateTrackerLink } from '../utils/generateTrackerLink';
+import AcompanharBadge from './AcompanharBadge';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
@@ -990,6 +991,23 @@ export default function DeliveryList({
     }
     return '';
   };
+
+  const getActiveUserId = (): string => {
+    const active = localStorage.getItem('rodovar_active_login_v2');
+    if (active) {
+      try {
+        const parsed = JSON.parse(active);
+        if (parsed && (parsed.uid || parsed.username || parsed.id)) {
+          return String(parsed.uid || parsed.username || parsed.id);
+        }
+      } catch {}
+    }
+    const name = getActiveUserFullName();
+    return name.toLowerCase().replace(/\s+/g, '_');
+  };
+
+  const currentOperadorNome = getActiveUserFullName();
+  const currentOperadorId = getActiveUserId();
   
   const [origemFilter, setOrigemFilter] = useState('');
   const [destinoFilter, setDestinoFilter] = useState('');
@@ -1804,10 +1822,21 @@ Tenha uma ótima e segura viagem!`;
                         </div>
                       </div>
                       
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold shrink-0 ${badge.bg} ${badge.text}`} onClick={() => onSelectDelivery(e.id)}>
-                        <BadgeIcon className="w-2.5 h-2.5" />
-                        {badge.label}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold ${badge.bg} ${badge.text}`} onClick={() => onSelectDelivery(e.id)}>
+                          <BadgeIcon className="w-2.5 h-2.5" />
+                          {badge.label}
+                        </span>
+
+                        {/* Inserir <AcompanharBadge /> aqui, logo após o badge de status */}
+                        <AcompanharBadge
+                          freteId={e.id}
+                          operadorId={currentOperadorId}
+                          operadorNome={currentOperadorNome}
+                          acompanhando={e.acompanhando}
+                          compact
+                        />
+                      </div>
                     </div>
 
                     {/* Middle Row: Key Info Grid */}
@@ -2121,11 +2150,21 @@ Tenha uma ótima e segura viagem!`;
                         </td>
 
                         {/* status Badge */}
-                        <td className="py-3.5 px-4 text-center" onClick={() => onSelectDelivery(e.id)}>
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${badge.bg} ${badge.text}`}>
-                            <BadgeIcon className="w-3 h-3" />
-                            {badge.label}
-                          </span>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${badge.bg} ${badge.text}`} onClick={() => onSelectDelivery(e.id)}>
+                              <BadgeIcon className="w-3 h-3" />
+                              {badge.label}
+                            </span>
+
+                            {/* Inserir <AcompanharBadge /> aqui, logo após o badge de status */}
+                            <AcompanharBadge
+                              freteId={e.id}
+                              operadorId={currentOperadorId}
+                              operadorNome={currentOperadorNome}
+                              acompanhando={e.acompanhando}
+                            />
+                          </div>
                         </td>
 
                         {/* Rapid actions contacts */}

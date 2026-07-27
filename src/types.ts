@@ -66,6 +66,10 @@ export interface Entrega {
   };
   notasOperador?: string;
   notasAtualizadaEm?: any;
+  acompanhando?: Record<string, {
+    nome: string;
+    desde: string | any;
+  }>;
 }
 
 export interface DocumentoAnexo {
