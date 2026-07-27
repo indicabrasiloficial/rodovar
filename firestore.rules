@@ -1,21 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Regras de segurança específicas para entregas/cargas
+    // Regras para entregas/cargas (leitura pública para rastreio e operações)
     match /entregas/{entregaId} {
       allow read: if true;
-      allow create: if true;
-      allow delete: if true;
-      
-      // Permite que atualizações modifiquem APENAS os campos de geolocalização do motorista
-      allow update: if (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['localizacaoAtual', 'ultimaAtualizacao'])
-      ) || (
-        true
-      );
+      allow create, update, delete: if true;
     }
 
-    // Outros caminhos/documentos mantêm acesso padrão do ambiente
+    // Acesso geral do ambiente para colaboradores e sistemas
     match /{document=**} {
       allow read, write: if true;
     }

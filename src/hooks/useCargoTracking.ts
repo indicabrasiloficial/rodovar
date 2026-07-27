@@ -17,7 +17,14 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
   const [isLive, setIsLive] = useState<boolean>(false);
   const [lastSeenSeconds, setLastSeenSeconds] = useState<number | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'live' | 'weak' | 'offline' | 'local'>('offline');
+  const isLiveRef = useRef<boolean>(false);
   const lastTsRef = useRef<number | null>(null);
+
+  // Keep isLiveRef in sync with statusVal updates
+  const updateIsLive = (val: boolean) => {
+    isLiveRef.current = val;
+    setIsLive(val);
+  };
 
   useEffect(() => {
     if (!entrega) {
@@ -137,7 +144,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
         }
 
         setConnectionStatus(statusVal);
-        setIsLive(statusVal === 'live');
+        updateIsLive(statusVal === 'live');
         setLastSeenSeconds(activeSource === 'whatsapp' ? null : ageSeconds);
         return true;
       }
@@ -145,7 +152,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
     };
 
     const applyFallbacks = () => {
-      setIsLive(false);
+      updateIsLive(false);
       setLastSeenSeconds(null);
       lastTsRef.current = null;
       if (entrega.link_localizacao) {
@@ -192,7 +199,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
         const minutosOffline = ageSeconds / 60;
         
         let statusVal: 'live' | 'weak' | 'offline' = 'offline';
-        if (minutosOffline < 2 && isLive) {
+        if (minutosOffline < 2 && isLiveRef.current) {
           statusVal = 'live';
         } else if (minutosOffline < 5) {
           statusVal = 'weak';
@@ -201,7 +208,7 @@ export function useCargoTracking(entrega: Entrega | null): CargoTrackingResult {
         }
         
         setConnectionStatus(statusVal);
-        setIsLive(statusVal === 'live');
+        updateIsLive(statusVal === 'live');
         setLastSeenSeconds(ageSeconds);
       }
     }, 5000);
