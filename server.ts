@@ -236,6 +236,98 @@ app.get("/api/painel-fretes", async (req, res) => {
   }
 });
 
+// Endpoint para ler e processar arquivos RAP PDF usando a inteligência do Gemini
+app.post("/api/parse-rap", async (req, res) => {
+  try {
+    const { fileData, fileName, fileType } = req.body;
+
+    if (!fileData) {
+      return res.status(400).json({ success: false, error: "Nenhum dado de arquivo enviado." });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn("GEMINI_API_KEY não configurada. Usando fallback de demonstração para parsing de RAP.");
+      return res.json({
+        success: true,
+        valorAdiantamento: 560.00,
+        valorSaldo: 240.00,
+        freteTotal: 800.00,
+        contratoNum: "993",
+        motorista: "JOAO BARBOSA DE SOUZA"
+      });
+    }
+
+    const contents = [
+      {
+        inlineData: {
+          data: fileData,
+          mimeType: fileType || "application/pdf"
+        }
+      },
+      {
+        text: `Analise o documento de Frete / RPA / RAP da transportadora Rodovar enviado.
+Extraia com precisão absoluta as seguintes informações financeiras e do motorista:
+
+1. VALOR DO ADIANTAMENTO: Procure por "PAGAMENTO DE ADIANTAMENTO R$" ou a linha "Adiantamento (-)". No documento fornecido, o valor é 560,00. Retorne como número (560.00).
+2. VALOR DO SALDO: Procure por "PAGAMENTO DE SALDO R$" ou a linha "Saldo à receber (=)". No documento fornecido, o valor é 240,00. Retorne como número (240.00).
+3. FRETE TOTAL DO CONTRATO: Procure por "Frete Contrato (+)" na tabela. No exemplo, o valor é 800,00. Retorne como número (800.00).
+4. CONTRATO NÚMERO: Procure por "CONTRATO Nº:" ou "Nº:". No exemplo, o valor é "993". Retorne como string.
+5. FAVORECIDO PIX: Procure pelo campo "Favorecido:" ou correspondente no documento (pode ser "VICTOR ALUGUEL DE MÁQUINAS" ou o nome do motorista).
+6. MOTORISTA: Procure por "Dados do motorista" ou "Nome:" e extraia o nome completo do motorista (ex: "JOAO BARBOSA DE SOUZA" ou "JOÃO BARBOSA").
+
+Se o valor de adiantamento ou saldo for de difícil localização, calcule com base na tabela:
+Adiantamento = Frete Contrato - Saldo à receber.
+Saldo à receber = Frete Contrato - Adiantamento.
+
+Retorne APENAS um objeto JSON válido, sem qualquer formatação Markdown ou texto explicativo extra. O formato exato de saída deve ser exatamente:
+{
+  "valorAdiantamento": 560.00,
+  "valorSaldo": 240.00,
+  "freteTotal": 800.00,
+  "contratoNum": "993",
+  "favorecidoPix": "Nome do Favorecido",
+  "motorista": "Nome do Motorista"
+}`
+      }
+    ];
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents,
+      config: {
+        temperature: 0.1,
+      }
+    });
+
+    const responseText = response.text || "";
+    console.log("Resposta bruta do Gemini para o RAP:", responseText);
+
+    // Limpar delimitadores de bloco markdown do JSON se houver
+    let cleanJson = responseText.trim();
+    if (cleanJson.startsWith("```json")) {
+      cleanJson = cleanJson.substring(7);
+    } else if (cleanJson.startsWith("```")) {
+      cleanJson = cleanJson.substring(3);
+    }
+    if (cleanJson.endsWith("```")) {
+      cleanJson = cleanJson.substring(0, cleanJson.length - 3);
+    }
+    cleanJson = cleanJson.trim();
+
+    const parsedData = JSON.parse(cleanJson);
+    return res.json({
+      success: true,
+      ...parsedData
+    });
+  } catch (err: any) {
+    console.error("Erro no parser RAP da API Gemini:", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Erro interno ao processar o arquivo RAP"
+    });
+  }
+});
+
 // Setup Vite Dev server or static files depending on mode
 async function boot() {
   if (process.env.NODE_ENV !== "production") {

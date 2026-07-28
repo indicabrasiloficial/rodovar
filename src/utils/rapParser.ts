@@ -12,6 +12,53 @@ export interface ParsedRapData {
 }
 
 export async function parseRapFile(file: File): Promise<ParsedRapData> {
+  try {
+    // 1. Convert file to Base64 to send to backend Gemini parser
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Strip data url prefix if exists
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(file);
+    });
+
+    // 2. Query the backend Gemini PDF parser
+    const response = await fetch("/api/parse-rap", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        fileData: base64Data,
+        fileName: file.name,
+        fileType: file.type
+      })
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        console.log("Successfully parsed RAP via Gemini API:", result);
+        return {
+          valorAdiantamento: result.valorAdiantamento,
+          valorSaldo: result.valorSaldo,
+          freteTotal: result.freteTotal,
+          contratoNum: result.contratoNum,
+          favorecidoPix: result.favorecidoPix,
+          motorista: result.motorista,
+          success: true
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Backend RAP parsing failed, falling back to local text parsing:", err);
+  }
+
+  // Fallback to local parsing (runs in-browser for non-PDFs or if offline/demo)
   return new Promise((resolve) => {
     const reader = new FileReader();
 
@@ -30,7 +77,6 @@ export async function parseRapFile(file: File): Promise<ParsedRapData> {
         console.log('RAP File raw text sample:', text.slice(0, 500));
 
         // 1. Parse Valor Adiantamento
-        // Matches: "PAGAMENTO DE ADIANTAMENTO R$ 2.800,00" or "Adiantamento (-) 2.800,00"
         let valorAdiantamento: number | undefined;
         const matchAdiant = text.match(/PAGAMENTO DE ADIANTAMENTO\s*(?:R\$\s*)?([\d\.,]+)/i) ||
                           text.match(/Adiantamento\s*\(\-\)\s*([\d\.,]+)/i);
@@ -41,7 +87,6 @@ export async function parseRapFile(file: File): Promise<ParsedRapData> {
         }
 
         // 2. Parse Valor Saldo
-        // Matches: "PAGAMENTO DE SALDO R$ 1.200,00" or "Saldo à receber (=) 1.200,00"
         let valorSaldo: number | undefined;
         const matchSaldo = text.match(/PAGAMENTO DE SALDO\s*(?:R\$\s*)?([\d\.,]+)/i) ||
                         text.match(/Saldo\s*(?:[àa]\s*receber)?\s*\(\=\)\s*([\d\.,]+)/i);
@@ -76,7 +121,7 @@ export async function parseRapFile(file: File): Promise<ParsedRapData> {
           favorecidoPix = matchFav[1].trim();
         }
 
-        // 6. Filename fallback parsing (e.g. "RAP-135 - G2 CONSTRUCOES...")
+        // 6. Filename fallback parsing
         if (!contratoNum && file.name) {
           const fileMatch = file.name.match(/(?:RAP|RPA|CTRC)[-_\s]*(\d+)/i);
           if (fileMatch && fileMatch[1]) {
@@ -93,7 +138,7 @@ export async function parseRapFile(file: File): Promise<ParsedRapData> {
           success: true
         });
       } catch (err) {
-        console.error('Erro ao ler arquivo RAP:', err);
+        console.error('Erro ao ler arquivo RAP localmente:', err);
         resolve({ success: false });
       }
     };
@@ -102,7 +147,6 @@ export async function parseRapFile(file: File): Promise<ParsedRapData> {
       resolve({ success: false });
     };
 
-    // Read as ArrayBuffer for universal binary/text decoding
     reader.readAsArrayBuffer(file);
   });
 }
