@@ -259,18 +259,20 @@ app.post("/api/parse-rap", async (req, res) => {
 
     const contents = [
       {
-        inlineData: {
-          data: fileData,
-          mimeType: fileType || "application/pdf"
-        }
-      },
-      {
-        text: `Analise o documento de Frete / RPA / RAP da transportadora Rodovar enviado.
+        parts: [
+          {
+            inlineData: {
+              data: fileData,
+              mimeType: fileType || "application/pdf"
+            }
+          },
+          {
+            text: `Analise o documento de Frete / RPA / RAP da transportadora Rodovar enviado.
 Extraia com precisão absoluta as seguintes informações financeiras e do motorista:
 
-1. VALOR DO ADIANTAMENTO: Procure por "PAGAMENTO DE ADIANTAMENTO R$" ou a linha "Adiantamento (-)". No documento fornecido, o valor é 560,00. Retorne como número (560.00).
-2. VALOR DO SALDO: Procure por "PAGAMENTO DE SALDO R$" ou a linha "Saldo à receber (=)". No documento fornecido, o valor é 240,00. Retorne como número (240.00).
-3. FRETE TOTAL DO CONTRATO: Procure por "Frete Contrato (+)" na tabela. No exemplo, o valor é 800,00. Retorne como número (800.00).
+1. VALOR DO ADIANTAMENTO: Procure por "PAGAMENTO DE ADIANTAMENTO R$" ou "Adiantamento (-)" ou "VALOR ADIANTAMENTO". No exemplo, o valor é 560,00. Retorne como número decimal limpo (ex: 560.00).
+2. VALOR DO SALDO: Procure por "PAGAMENTO DE SALDO R$" ou "Saldo à receber (=)" ou "VALOR SALDO". No exemplo, o valor é 240,00. Retorne como número decimal limpo (ex: 240.00).
+3. FRETE TOTAL DO CONTRATO: Procure por "Frete Contrato (+)". No exemplo, o valor é 800,00. Retorne como número decimal limpo (ex: 800.00).
 4. CONTRATO NÚMERO: Procure por "CONTRATO Nº:" ou "Nº:". No exemplo, o valor é "993". Retorne como string.
 5. FAVORECIDO PIX: Procure pelo campo "Favorecido:" ou correspondente no documento (pode ser "VICTOR ALUGUEL DE MÁQUINAS" ou o nome do motorista).
 6. MOTORISTA: Procure por "Dados do motorista" ou "Nome:" e extraia o nome completo do motorista (ex: "JOAO BARBOSA DE SOUZA" ou "JOÃO BARBOSA").
@@ -288,6 +290,8 @@ Retorne APENAS um objeto JSON válido, sem qualquer formatação Markdown ou tex
   "favorecidoPix": "Nome do Favorecido",
   "motorista": "Nome do Motorista"
 }`
+          }
+        ]
       }
     ];
 

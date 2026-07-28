@@ -66,16 +66,26 @@ const extractFromObservacoes = (obs: string) => {
   let pix = '';
   let banco = '';
 
+  // 1. Match Favorecido
   const favMatch = obs.match(/favorecido:\s*([^|\n\r\-🚨]+)/i);
   if (favMatch) {
     favorecido = favMatch[1].trim();
+  } else {
+    // If no "Favorecido:" keyword, try to extract whatever name is before "PIX" or "|"
+    // Example: "VICTOR ALUGUEL DE MÁQUINAS | PIX: 57798047000160"
+    const prePixMatch = obs.match(/^([^|\n\r\-🚨]+?)\s*\|\s*(?:pix|chave)/i);
+    if (prePixMatch) {
+      favorecido = prePixMatch[1].trim();
+    }
   }
 
-  const pixMatch = obs.match(/(?:pix|chave(?:\s+pix)?):\s*([^|\n\r\-🚨]+)/i);
+  // 2. Match PIX / Chave
+  const pixMatch = obs.match(/(?:pix|chave(?:\s+pix)?):\s*([^|\n\r\-🚨\s]+)/i);
   if (pixMatch) {
     pix = pixMatch[1].trim();
   }
 
+  // 3. Match Banco
   const bancoMatch = obs.match(/banco:\s*([^|\n\r\-🚨]+)/i);
   if (bancoMatch) {
     banco = bancoMatch[1].trim();
@@ -126,7 +136,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
       const cpfKey = (e.cpf_motorista || '').replace(/\D/g, '');
 
       // Parse from e.observacoes first!
-      const fromObs = extractFromObservacoes(e.observacoes || '');
+      const fromObs = extractFromObservacoes(e.observacoes || (e as any).obs || '');
 
       const info = {
         chavePix: fromObs.pix || e.chavePix || '',
@@ -159,7 +169,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     const cpfKey = (e.cpf_motorista || '').replace(/\D/g, '');
 
     // 1. Extract from e.observacoes first (highest priority, for all!)
-    const fromObs = extractFromObservacoes(e.observacoes || '');
+    const fromObs = extractFromObservacoes(e.observacoes || (e as any).obs || '');
 
     let resolvedChave = fromObs.pix || e.chavePix || '';
     let resolvedFavorecido = fromObs.favorecido || e.favorecidoPix || '';
@@ -320,7 +330,8 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
         contratoNum: rpaCte || rpaModalEntrega.contratoNum,
         favorecidoPix: rpaFavorecido,
         chavePix: rpaChavePix,
-        bancoPix: rpaBancoPix
+        bancoPix: rpaBancoPix,
+        rpaLido: true
       });
 
       setRpaModalEntrega(null);
@@ -1188,9 +1199,14 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               // Check if RAP file has been loaded & parsed
               const isRapLoaded = !!entrega.rpaLido || (entrega.anexosPagamento && entrega.anexosPagamento.some(a => a.tipo === 'rap'));
 
-              // Values calculation: ONLY set if RAP file loaded or manually input
-              const valAdiantamento = isRapLoaded && entrega.valorAdiantamento !== undefined ? entrega.valorAdiantamento : null;
-              const valSaldo = isRapLoaded && entrega.valorSaldo !== undefined ? entrega.valorSaldo : null;
+              // Values calculation: Prioritize manually entered or read values, fallback to 70%/30% estimation of total freight
+              const totalMot = Number(entrega.frete_motorista) || 0;
+              const valAdiantamento = (entrega.valorAdiantamento !== undefined && entrega.valorAdiantamento !== null)
+                ? entrega.valorAdiantamento
+                : (totalMot > 0 ? Math.round(totalMot * 0.7) : 0);
+              const valSaldo = (entrega.valorSaldo !== undefined && entrega.valorSaldo !== null)
+                ? entrega.valorSaldo
+                : (totalMot > 0 ? Math.round(totalMot * 0.3) : 0);
 
               // Individual Statuses
               const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
@@ -1393,30 +1409,45 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                 <div className="grid grid-cols-2 gap-2.5">
                   
                   {/* Bloco ADIANTAMENTO */}
-                  <div className={`border rounded-xl p-3 flex flex-col justify-between space-y-2 ${
+                  <div 
+                    onClick={() => openRpaModal(entrega)}
+                    title="Clique para ajustar ou lançar valores de RPA manualmente"
+                    className={`border rounded-xl p-3 flex flex-col justify-between space-y-2 cursor-pointer hover:border-[#FFD600] hover:bg-zinc-900 active:scale-[0.98] transition-all group ${
                     isAdiantamentoPago 
                       ? 'bg-emerald-950/20 border-emerald-900/50' 
                       : isAdiantamentoAtrasado 
                       ? 'bg-red-950/20 border-red-900/50' 
                       : 'bg-zinc-900/80 border-zinc-800'
                   }`}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[#FFD600] flex items-center justify-center shrink-0">
-                        <DollarSign className="w-4 h-4 stroke-[2.5]" />
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[#FFD600] flex items-center justify-center shrink-0 group-hover:bg-[#FFD600]/10">
+                          <DollarSign className="w-4 h-4 stroke-[2.5]" />
+                        </div>
+                        <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider truncate">
+                          ADIANTAMENTO
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider">
-                        ADIANTAMENTO
-                      </span>
+                      
+                      {entrega.rpaLido ? (
+                        <span className="text-[8px] font-bold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 uppercase tracking-wider whitespace-nowrap shrink-0 scale-90 origin-right">
+                          Confirmado
+                        </span>
+                      ) : (
+                        <span className="text-[8px] font-bold text-amber-500 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-900/50 uppercase tracking-wider whitespace-nowrap shrink-0 scale-90 origin-right">
+                          Estimado
+                        </span>
+                      )}
                     </div>
 
                     <div>
                       {valAdiantamento !== null ? (
-                        <p className="text-base font-black text-white font-mono">
+                        <p className="text-base font-black text-white font-mono group-hover:text-[#FFD600] transition-colors">
                           {formatCurrencyVal(valAdiantamento)}
                         </p>
                       ) : (
                         <p className="text-xs font-black text-amber-400 font-mono italic animate-pulse">
-                          R$ -- (Aguardando RAP)
+                          R$ 0,00
                         </p>
                       )}
                       
@@ -1429,7 +1460,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                           </span>
                         ) : isAdiantamentoAtrasado ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-red-400">
-                            <AlertTriangle className="w-3 h-3" />
+                            <AlertTriangle className="w-3 h-3 animate-pulse" />
                             <span>Atrasado ({formatDateBR(prazoAdiantamentoIso)})</span>
                           </span>
                         ) : (
@@ -1443,30 +1474,45 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   </div>
 
                   {/* Bloco SALDO */}
-                  <div className={`border rounded-xl p-3 flex flex-col justify-between space-y-2 ${
+                  <div 
+                    onClick={() => openRpaModal(entrega)}
+                    title="Clique para ajustar ou lançar valores de RPA manualmente"
+                    className={`border rounded-xl p-3 flex flex-col justify-between space-y-2 cursor-pointer hover:border-[#FFD600] hover:bg-zinc-900 active:scale-[0.98] transition-all group ${
                     isSaldoPago 
                       ? 'bg-emerald-950/20 border-emerald-900/50' 
                       : isSaldoAtrasado 
                       ? 'bg-red-950/20 border-red-900/50' 
                       : 'bg-zinc-900/80 border-zinc-800'
                   }`}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[#FFD600] flex items-center justify-center shrink-0">
-                        <DollarSign className="w-4 h-4 stroke-[2.5]" />
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[#FFD600] flex items-center justify-center shrink-0 group-hover:bg-[#FFD600]/10">
+                          <DollarSign className="w-4 h-4 stroke-[2.5]" />
+                        </div>
+                        <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider truncate">
+                          SALDO
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider">
-                        SALDO
-                      </span>
+
+                      {entrega.rpaLido ? (
+                        <span className="text-[8px] font-bold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 uppercase tracking-wider whitespace-nowrap shrink-0 scale-90 origin-right">
+                          Confirmado
+                        </span>
+                      ) : (
+                        <span className="text-[8px] font-bold text-amber-500 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-900/50 uppercase tracking-wider whitespace-nowrap shrink-0 scale-90 origin-right">
+                          Estimado
+                        </span>
+                      )}
                     </div>
 
                     <div>
                       {valSaldo !== null ? (
-                        <p className="text-base font-black text-white font-mono">
+                        <p className="text-base font-black text-white font-mono group-hover:text-[#FFD600] transition-colors">
                           {formatCurrencyVal(valSaldo)}
                         </p>
                       ) : (
                         <p className="text-xs font-black text-amber-400 font-mono italic animate-pulse">
-                          R$ -- (Aguardando RAP)
+                          R$ 0,00
                         </p>
                       )}
 
@@ -1479,7 +1525,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                           </span>
                         ) : isSaldoAtrasado ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-red-400">
-                            <AlertTriangle className="w-3 h-3" />
+                            <AlertTriangle className="w-3 h-3 animate-pulse" />
                             <span>Atrasado ({formatDateBR(prazoSaldoIso)})</span>
                           </span>
                         ) : (
@@ -1951,7 +1997,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               {/* CARD 1: SCRIPT ADIANTAMENTO */}
               {(() => {
                 const isRapLoaded = !!scriptModalEntrega.rpaLido || (scriptModalEntrega.anexosPagamento && scriptModalEntrega.anexosPagamento.some(a => a.tipo === 'rap'));
-                const valAdiant = scriptModalEntrega.valorAdiantamento !== undefined ? scriptModalEntrega.valorAdiantamento : 0;
+                const totalMot = Number(scriptModalEntrega.frete_motorista) || 0;
+                const valAdiant = (scriptModalEntrega.valorAdiantamento !== undefined && scriptModalEntrega.valorAdiantamento !== null)
+                  ? scriptModalEntrega.valorAdiantamento
+                  : (totalMot > 0 ? Math.round(totalMot * 0.7) : 0);
                 const pixInfo = resolveDriverPixInfo(scriptModalEntrega);
 
                 const scriptAdiantamentoTexto = `RODOVAR PAGAMENTOS — SOLICITAÇÃO DE ADIANTAMENTO
@@ -1959,7 +2008,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
 • MOTORISTA: ${scriptModalEntrega.motorista}
 • CLIENTE: ${scriptModalEntrega.cliente}
 • ROTA: ${scriptModalEntrega.origem} ➔ ${scriptModalEntrega.destino}
-• VALOR ADIANTAMENTO: ${valAdiant > 0 || isRapLoaded ? 'R$ ' + valAdiant.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'R$ -- (Aguardando arquivo RAP)'}
+• VALOR ADIANTAMENTO: ${valAdiant > 0 ? 'R$ ' + valAdiant.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'R$ 0,00'}
 --------------------------------------------------
 • FAVORECIDO PIX: ${pixInfo.favorecidoPix || scriptModalEntrega.motorista}
 • CHAVE PIX: ${pixInfo.chavePix || scriptModalEntrega.tel_motorista || 'N/A'}
@@ -1974,7 +2023,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                           SOLICITAÇÃO DE ADIANTAMENTO
                         </span>
                         <span className="text-[10px] font-mono text-zinc-400 font-bold">
-                          {valAdiant > 0 ? `R$ ${valAdiant.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Sem RAP'}
+                          {valAdiant > 0 ? `R$ ${valAdiant.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00'}
                         </span>
                       </div>
 
@@ -2018,7 +2067,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               {/* CARD 2: SCRIPT SALDO */}
               {(() => {
                 const isRapLoaded = !!scriptModalEntrega.rpaLido || (scriptModalEntrega.anexosPagamento && scriptModalEntrega.anexosPagamento.some(a => a.tipo === 'rap'));
-                const valSal = scriptModalEntrega.valorSaldo !== undefined ? scriptModalEntrega.valorSaldo : 0;
+                const totalMot = Number(scriptModalEntrega.frete_motorista) || 0;
+                const valSal = (scriptModalEntrega.valorSaldo !== undefined && scriptModalEntrega.valorSaldo !== null)
+                  ? scriptModalEntrega.valorSaldo
+                  : (totalMot > 0 ? Math.round(totalMot * 0.3) : 0);
                 const pixInfo = resolveDriverPixInfo(scriptModalEntrega);
 
                 const scriptSaldoTexto = `RODOVAR PAGAMENTOS — SOLICITAÇÃO DE SALDO - FRETE FINALIZADO
@@ -2026,7 +2078,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
 • MOTORISTA: ${scriptModalEntrega.motorista}
 • CLIENTE: ${scriptModalEntrega.cliente}
 • ROTA: ${scriptModalEntrega.origem} ➔ ${scriptModalEntrega.destino}
-• VALOR SALDO: ${valSal > 0 || isRapLoaded ? 'R$ ' + valSal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'R$ -- (Aguardando arquivo RAP)'}
+• VALOR SALDO: ${valSal > 0 ? 'R$ ' + valSal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'R$ 0,00'}
 --------------------------------------------------
 • FAVORECIDO PIX: ${pixInfo.favorecidoPix || scriptModalEntrega.motorista}
 • CHAVE PIX: ${pixInfo.chavePix || scriptModalEntrega.tel_motorista || 'N/A'}
@@ -2041,7 +2093,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                           SOLICITAÇÃO DE SALDO
                         </span>
                         <span className="text-[10px] font-mono text-zinc-400 font-bold">
-                          {valSal > 0 ? `R$ ${valSal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Sem RAP'}
+                          {valSal > 0 ? `R$ ${valSal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00'}
                         </span>
                       </div>
 
