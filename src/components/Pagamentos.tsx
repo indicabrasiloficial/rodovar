@@ -59,6 +59,31 @@ interface PagamentosProps {
 
 type FilterPill = 'TODOS' | 'NO_PRAZO' | 'PAGO_HOJE' | 'ATRASADOS';
 
+const extractFromObservacoes = (obs: string) => {
+  if (!obs) return { favorecido: '', pix: '', banco: '' };
+  
+  let favorecido = '';
+  let pix = '';
+  let banco = '';
+
+  const favMatch = obs.match(/favorecido:\s*([^|\n\r\-🚨]+)/i);
+  if (favMatch) {
+    favorecido = favMatch[1].trim();
+  }
+
+  const pixMatch = obs.match(/(?:pix|chave(?:\s+pix)?):\s*([^|\n\r\-🚨]+)/i);
+  if (pixMatch) {
+    pix = pixMatch[1].trim();
+  }
+
+  const bancoMatch = obs.match(/banco:\s*([^|\n\r\-🚨]+)/i);
+  if (bancoMatch) {
+    banco = bancoMatch[1].trim();
+  }
+
+  return { favorecido, pix, banco };
+};
+
 export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   const [entregas, setEntregas] = useState<Entrega[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -100,10 +125,13 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
       const nameKey = (e.motorista || '').toLowerCase().trim();
       const cpfKey = (e.cpf_motorista || '').replace(/\D/g, '');
 
+      // Parse from e.observacoes first!
+      const fromObs = extractFromObservacoes(e.observacoes || '');
+
       const info = {
-        chavePix: e.chavePix || '',
-        favorecidoPix: e.favorecidoPix || '',
-        bancoPix: e.bancoPix || ''
+        chavePix: fromObs.pix || e.chavePix || '',
+        favorecidoPix: fromObs.favorecido || e.favorecidoPix || '',
+        bancoPix: fromObs.banco || e.bancoPix || ''
       };
 
       if (info.chavePix || info.favorecidoPix || info.bancoPix) {
@@ -130,27 +158,34 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     const nameKey = (e.motorista || '').toLowerCase().trim();
     const cpfKey = (e.cpf_motorista || '').replace(/\D/g, '');
 
-    let resolvedChave = e.chavePix || '';
-    let resolvedFavorecido = e.favorecidoPix || '';
-    let resolvedBanco = e.bancoPix || '';
+    // 1. Extract from e.observacoes first (highest priority, for all!)
+    const fromObs = extractFromObservacoes(e.observacoes || '');
 
-    // 1. Lookup by CPF
-    if (cpfKey && driverRegistry.registryByCpf[cpfKey]) {
-      const reg = driverRegistry.registryByCpf[cpfKey];
-      if (!resolvedChave) resolvedChave = reg.chavePix;
-      if (!resolvedFavorecido) resolvedFavorecido = reg.favorecidoPix;
-      if (!resolvedBanco) resolvedBanco = reg.bancoPix;
+    let resolvedChave = fromObs.pix || e.chavePix || '';
+    let resolvedFavorecido = fromObs.favorecido || e.favorecidoPix || '';
+    let resolvedBanco = fromObs.banco || e.bancoPix || '';
+
+    // 2. Lookup by CPF in registry if still empty
+    if (!resolvedChave || !resolvedFavorecido || !resolvedBanco) {
+      if (cpfKey && driverRegistry.registryByCpf[cpfKey]) {
+        const reg = driverRegistry.registryByCpf[cpfKey];
+        if (!resolvedChave) resolvedChave = reg.chavePix;
+        if (!resolvedFavorecido) resolvedFavorecido = reg.favorecidoPix;
+        if (!resolvedBanco) resolvedBanco = reg.bancoPix;
+      }
     }
 
-    // 2. Lookup by Name
-    if (nameKey && driverRegistry.registryByName[nameKey]) {
-      const reg = driverRegistry.registryByName[nameKey];
-      if (!resolvedChave) resolvedChave = reg.chavePix;
-      if (!resolvedFavorecido) resolvedFavorecido = reg.favorecidoPix;
-      if (!resolvedBanco) resolvedBanco = reg.bancoPix;
+    // 3. Lookup by Name in registry if still empty
+    if (!resolvedChave || !resolvedFavorecido || !resolvedBanco) {
+      if (nameKey && driverRegistry.registryByName[nameKey]) {
+        const reg = driverRegistry.registryByName[nameKey];
+        if (!resolvedChave) resolvedChave = reg.chavePix;
+        if (!resolvedFavorecido) resolvedFavorecido = reg.favorecidoPix;
+        if (!resolvedBanco) resolvedBanco = reg.bancoPix;
+      }
     }
 
-    // 3. Fallback to motorista name if favorecido is still empty
+    // 4. Fallback to motorista name if favorecido is still empty
     if (!resolvedFavorecido) {
       resolvedFavorecido = e.motorista || '';
     }
@@ -260,10 +295,11 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     setRpaFreteTotal(totalMot ? String(totalMot) : '');
     setRpaAdiantamento(valAd ? String(valAd) : '');
     setRpaSaldo(valSal ? String(valSal) : '');
+    const pixInfo = resolveDriverPixInfo(entrega);
     setRpaCte(entrega.cte || entrega.contratoNum || '');
-    setRpaFavorecido(entrega.favorecidoPix || entrega.motorista || '');
-    setRpaChavePix(entrega.chavePix || entrega.tel_motorista || '');
-    setRpaBancoPix(entrega.bancoPix || '');
+    setRpaFavorecido(pixInfo.favorecidoPix || entrega.motorista || '');
+    setRpaChavePix(pixInfo.chavePix || entrega.tel_motorista || '');
+    setRpaBancoPix(pixInfo.bancoPix || '');
   };
 
   // Save RPA & CTA data automatically
