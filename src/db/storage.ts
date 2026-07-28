@@ -364,7 +364,7 @@ export function getEntregas(): Entrega[] {
   if (now - lastEntregasFetchTime >= CACHE_TTL_ENTREGAS) {
     fetchEntregasFromServer(false);
   }
-  return cachedEntregas;
+  return [...cachedEntregas];
 }
 
 export function getEntregaById(id: string): Entrega | undefined {

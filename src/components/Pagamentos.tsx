@@ -389,7 +389,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
       });
 
       const data = getEntregas();
-      setEntregas(data);
+      setEntregas([...data]);
 
       alert(`✅ ARQUIVO RAP LIDO E DADOS ATUALIZADOS!\n\n` +
             `• Contrato/CTRC: ${contratoNum}\n` +
@@ -413,7 +413,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   useEffect(() => {
     const loadEntregas = () => {
       const data = getEntregas();
-      setEntregas(data);
+      setEntregas([...data]);
       setLoading(false);
     };
 
@@ -1741,30 +1741,58 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                     {pagoDropdownOpenId === entrega.id && (
                       <div className="absolute right-0 bottom-full mb-2 w-56 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 text-xs font-mono">
                         <button
+                          type="button"
                           onClick={() => handleSetStatusPago(entrega.id, 'adiantamento')}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-zinc-900 text-zinc-200 hover:text-emerald-400 flex items-center justify-between cursor-pointer"
+                          className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
+                            isAdiantamentoPago 
+                              ? 'bg-emerald-950/40 text-emerald-400 hover:bg-emerald-950/60 font-bold' 
+                              : 'text-zinc-300 hover:bg-zinc-900 hover:text-[#FFD600]'
+                          }`}
                         >
                           <span>Pago Adiantamento</span>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          {isAdiantamentoPago ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[3]" />
+                          ) : (
+                            <div className="w-3 h-3 rounded-full border border-zinc-700" />
+                          )}
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleSetStatusPago(entrega.id, 'saldo')}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-zinc-900 text-zinc-200 hover:text-emerald-400 flex items-center justify-between cursor-pointer"
+                          className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
+                            isSaldoPago 
+                              ? 'bg-emerald-950/40 text-emerald-400 hover:bg-emerald-950/60 font-bold' 
+                              : 'text-zinc-300 hover:bg-zinc-900 hover:text-[#FFD600]'
+                          }`}
                         >
                           <span>Pago Saldo</span>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          {isSaldoPago ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[3]" />
+                          ) : (
+                            <div className="w-3 h-3 rounded-full border border-zinc-700" />
+                          )}
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleSetStatusPago(entrega.id, 'ambos')}
-                          className="w-full text-left px-3 py-2 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 font-bold flex items-center justify-between cursor-pointer border border-emerald-800"
+                          className={`w-full text-left px-3 py-2 rounded-lg font-bold flex items-center justify-between cursor-pointer border transition-colors ${
+                            isAdiantamentoPago && isSaldoPago
+                              ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700/80 hover:bg-emerald-900/60' 
+                              : 'bg-zinc-900/50 border-zinc-800 text-zinc-300 hover:bg-zinc-900 hover:text-emerald-400'
+                          }`}
                         >
                           <span>Pago Ambos (100%)</span>
-                          <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          {isAdiantamentoPago && isSaldoPago ? (
+                            <CheckCheck className="w-3.5 h-3.5 text-emerald-400 stroke-[3]" />
+                          ) : (
+                            <div className="w-3 h-3 rounded-full border border-zinc-700" />
+                          )}
                         </button>
                         <div className="border-t border-zinc-900 my-1" />
                         <button
+                          type="button"
                           onClick={() => handleSetStatusPago(entrega.id, 'reset')}
-                          className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-zinc-300 flex items-center justify-between cursor-pointer text-[10px]"
+                          className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-red-950/30 text-zinc-500 hover:text-red-400 flex items-center justify-between cursor-pointer text-[10px]"
                         >
                           <span>Resetar para Pendente</span>
                         </button>
