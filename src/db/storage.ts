@@ -2156,14 +2156,55 @@ export async function updatePagamentoEntrega(
   entregaId: string,
   payload: Partial<Entrega>
 ): Promise<void> {
+  const targetDelivery = cachedEntregas.find(e => e.id === entregaId);
+  const motoristaName = targetDelivery?.motorista;
+  const cpfMotorista = targetDelivery?.cpf_motorista;
+
+  const hasPixFields = 'chavePix' in payload || 'favorecidoPix' in payload || 'bancoPix' in payload;
+  
+  // Prepare list of objects to update in this batch
+  const updates: { id: string; data: Partial<Entrega> }[] = [
+    { id: entregaId, data: payload }
+  ];
+
+  if (hasPixFields && motoristaName) {
+    const nameNorm = motoristaName.trim().toLowerCase();
+    const cpfNorm = cpfMotorista ? cpfMotorista.replace(/\D/g, '') : '';
+    
+    const pixPayload: Partial<Entrega> = {};
+    if ('chavePix' in payload) pixPayload.chavePix = payload.chavePix;
+    if ('favorecidoPix' in payload) pixPayload.favorecidoPix = payload.favorecidoPix;
+    if ('bancoPix' in payload) pixPayload.bancoPix = payload.bancoPix;
+
+    // Find all other deliveries of the same motorista to propagate details
+    for (const e of cachedEntregas) {
+      if (e.id === entregaId) continue;
+      
+      const eNameNorm = (e.motorista || '').trim().toLowerCase();
+      const eCpfNorm = e.cpf_motorista ? e.cpf_motorista.replace(/\D/g, '') : '';
+      
+      const matchByName = nameNorm && eNameNorm === nameNorm;
+      const matchByCpf = cpfNorm && eCpfNorm === cpfNorm;
+
+      if (matchByName || matchByCpf) {
+        updates.push({
+          id: e.id,
+          data: pixPayload
+        });
+      }
+    }
+  }
+
   // 1. Atualiza no cache local em memória
-  const index = cachedEntregas.findIndex(e => e.id === entregaId);
-  if (index !== -1) {
-    cachedEntregas[index] = {
-      ...cachedEntregas[index],
-      ...payload,
-      updated_at: new Date().toISOString()
-    };
+  for (const up of updates) {
+    const index = cachedEntregas.findIndex(e => e.id === up.id);
+    if (index !== -1) {
+      cachedEntregas[index] = {
+        ...cachedEntregas[index],
+        ...up.data,
+        updated_at: new Date().toISOString()
+      };
+    }
   }
 
   try {
@@ -2176,11 +2217,23 @@ export async function updatePagamentoEntrega(
   // 2. Persiste no Firestore
   if ((window as any).rodovar_quota_exceeded !== true) {
     try {
-      const docRef = doc(db, ENTREGAS_COLLECTION, entregaId);
-      await updateDoc(docRef, {
-        ...payload,
-        updated_at: new Date().toISOString()
-      });
+      if (updates.length > 1) {
+        const batch = writeBatch(db);
+        for (const up of updates) {
+          const docRef = doc(db, ENTREGAS_COLLECTION, up.id);
+          batch.update(docRef, {
+            ...up.data,
+            updated_at: new Date().toISOString()
+          });
+        }
+        await batch.commit();
+      } else {
+        const docRef = doc(db, ENTREGAS_COLLECTION, entregaId);
+        await updateDoc(docRef, {
+          ...payload,
+          updated_at: new Date().toISOString()
+        });
+      }
     } catch (error) {
       console.error('Erro ao atualizar pagamento da entrega no Firestore:', error);
       handleFirestoreError(error, OperationType.UPDATE, `${ENTREGAS_COLLECTION}/${entregaId}`);

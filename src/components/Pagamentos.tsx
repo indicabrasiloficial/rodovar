@@ -84,6 +84,84 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   // Expanded cards accordion state
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
+  // Registry of driver PIX and Favorecido details built from all deliveries
+  const driverRegistry = useMemo(() => {
+    const registryByName: Record<string, { chavePix: string; favorecidoPix: string; bancoPix: string; cpf_motorista?: string }> = {};
+    const registryByCpf: Record<string, { chavePix: string; favorecidoPix: string; bancoPix: string; motorista?: string }> = {};
+
+    // Sort list so that the most recently updated or complete records are processed last
+    const sorted = [...entregas].sort((a, b) => {
+      const dateA = a.updated_at || a.data_coleta || '';
+      const dateB = b.updated_at || b.data_coleta || '';
+      return dateA.localeCompare(dateB);
+    });
+
+    for (const e of sorted) {
+      const nameKey = (e.motorista || '').toLowerCase().trim();
+      const cpfKey = (e.cpf_motorista || '').replace(/\D/g, '');
+
+      const info = {
+        chavePix: e.chavePix || '',
+        favorecidoPix: e.favorecidoPix || '',
+        bancoPix: e.bancoPix || ''
+      };
+
+      if (info.chavePix || info.favorecidoPix || info.bancoPix) {
+        if (nameKey) {
+          registryByName[nameKey] = {
+            ...info,
+            cpf_motorista: e.cpf_motorista
+          };
+        }
+        if (cpfKey) {
+          registryByCpf[cpfKey] = {
+            ...info,
+            motorista: e.motorista
+          };
+        }
+      }
+    }
+
+    return { registryByName, registryByCpf };
+  }, [entregas]);
+
+  // Helper to resolve PIX details for any delivery using the registry
+  const resolveDriverPixInfo = (e: Entrega) => {
+    const nameKey = (e.motorista || '').toLowerCase().trim();
+    const cpfKey = (e.cpf_motorista || '').replace(/\D/g, '');
+
+    let resolvedChave = e.chavePix || '';
+    let resolvedFavorecido = e.favorecidoPix || '';
+    let resolvedBanco = e.bancoPix || '';
+
+    // 1. Lookup by CPF
+    if (cpfKey && driverRegistry.registryByCpf[cpfKey]) {
+      const reg = driverRegistry.registryByCpf[cpfKey];
+      if (!resolvedChave) resolvedChave = reg.chavePix;
+      if (!resolvedFavorecido) resolvedFavorecido = reg.favorecidoPix;
+      if (!resolvedBanco) resolvedBanco = reg.bancoPix;
+    }
+
+    // 2. Lookup by Name
+    if (nameKey && driverRegistry.registryByName[nameKey]) {
+      const reg = driverRegistry.registryByName[nameKey];
+      if (!resolvedChave) resolvedChave = reg.chavePix;
+      if (!resolvedFavorecido) resolvedFavorecido = reg.favorecidoPix;
+      if (!resolvedBanco) resolvedBanco = reg.bancoPix;
+    }
+
+    // 3. Fallback to motorista name if favorecido is still empty
+    if (!resolvedFavorecido) {
+      resolvedFavorecido = e.motorista || '';
+    }
+
+    return {
+      chavePix: resolvedChave,
+      favorecidoPix: resolvedFavorecido,
+      bancoPix: resolvedBanco
+    };
+  };
+
   const handleCopyPix = (pixKey: string, driverId: string) => {
     if (!pixKey) return;
     navigator.clipboard.writeText(pixKey);
@@ -106,25 +184,28 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
       "Saldo (R$)", "Status Saldo", "Valor Carga", "Prazo"
     ];
 
-    const rows = entregas.map(e => [
-      `"${e.motorista || ''}"`,
-      `"${e.cpf_motorista || ''}"`,
-      `"${e.chavePix || e.tel_motorista || ''}"`,
-      `"${e.favorecidoPix || e.motorista || ''}"`,
-      `"${e.bancoPix || ''}"`,
-      `"${e.cliente || ''}"`,
-      `"${e.cte || e.contratoNum || ''}"`,
-      `"${e.origem || ''}"`,
-      `"${e.destino || ''}"`,
-      `"${e.data_coleta || ''}"`,
-      `"${(e.frete_motorista || 0).toFixed(2)}"`,
-      `"${(e.valorAdiantamento ?? Math.round((e.frete_motorista || 0) * 0.7)).toFixed(2)}"`,
-      `"${e.statusPagamentoAdiantamento === 'pago' ? 'Pago' : 'Pendente'}"`,
-      `"${(e.valorSaldo ?? Math.round((e.frete_motorista || 0) * 0.3)).toFixed(2)}"`,
-      `"${e.statusPagamentoSaldo === 'pago' ? 'Pago' : 'Pendente'}"`,
-      `"${(e.valor_carga || 0).toFixed(2)}"`,
-      `"${e.prazo || ''}"`
-    ]);
+    const rows = entregas.map(e => {
+      const pixInfo = resolveDriverPixInfo(e);
+      return [
+        `"${e.motorista || ''}"`,
+        `"${e.cpf_motorista || ''}"`,
+        `"${pixInfo.chavePix || e.tel_motorista || ''}"`,
+        `"${pixInfo.favorecidoPix || e.motorista || ''}"`,
+        `"${pixInfo.bancoPix || ''}"`,
+        `"${e.cliente || ''}"`,
+        `"${e.cte || e.contratoNum || ''}"`,
+        `"${e.origem || ''}"`,
+        `"${e.destino || ''}"`,
+        `"${e.data_coleta || ''}"`,
+        `"${(e.frete_motorista || 0).toFixed(2)}"`,
+        `"${(e.valorAdiantamento ?? Math.round((e.frete_motorista || 0) * 0.7)).toFixed(2)}"`,
+        `"${e.statusPagamentoAdiantamento === 'pago' ? 'Pago' : 'Pendente'}"`,
+        `"${(e.valorSaldo ?? Math.round((e.frete_motorista || 0) * 0.3)).toFixed(2)}"`,
+        `"${e.statusPagamentoSaldo === 'pago' ? 'Pago' : 'Pendente'}"`,
+        `"${(e.valor_carga || 0).toFixed(2)}"`,
+        `"${e.prazo || ''}"`
+      ];
+    });
 
     const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map(r => r.join(";"))].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -999,6 +1080,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                       const sal = e.valorSaldo !== undefined ? Number(e.valorSaldo) : Math.round(frete * 0.3);
                       const isAdPago = e.statusPagamentoAdiantamento === 'pago';
                       const isSalPago = e.statusPagamentoSaldo === 'pago';
+                      const pixInfo = resolveDriverPixInfo(e);
 
                       return (
                         <tr key={e.id} className="hover:bg-zinc-900/40 transition-colors">
@@ -1007,8 +1089,8 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             <div className="text-[10px] text-zinc-500 font-mono font-normal">{e.cpf_motorista || 'Sem CPF'}</div>
                           </td>
                           <td className="p-3 font-mono text-zinc-300">
-                            <div className="truncate max-w-[140px]">{e.chavePix || e.tel_motorista || 'N/A'}</div>
-                            <div className="text-[9px] text-zinc-500 truncate">{e.favorecidoPix || ''}</div>
+                            <div className="truncate max-w-[140px]">{pixInfo.chavePix || e.tel_motorista || 'N/A'}</div>
+                            <div className="text-[9px] text-zinc-500 truncate">{pixInfo.favorecidoPix || ''}</div>
                           </td>
                           <td className="p-3 text-zinc-400">{formatDateBR(e.data_coleta)}</td>
                           <td className="p-3 text-right font-bold text-white">{formatCurrencyVal(frete)}</td>
@@ -1062,9 +1144,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
             {paginatedEntregas.map(entrega => {
               const overallStatus = getPaymentCalculatedStatus(entrega);
               const isAccordionOpen = !!expandedCardIds[entrega.id];
+              const pixInfo = resolveDriverPixInfo(entrega);
 
               // Check if CTA / RPA has been loaded
-              const hasRpa = !!entrega.cte || (Number(entrega.frete_motorista) > 0 && !!entrega.favorecidoPix);
+              const hasRpa = !!entrega.cte || (Number(entrega.frete_motorista) > 0 && !!pixInfo.favorecidoPix);
 
               // Check if RAP file has been loaded & parsed
               const isRapLoaded = !!entrega.rpaLido || (entrega.anexosPagamento && entrega.anexosPagamento.some(a => a.tipo === 'rap'));
@@ -1225,9 +1308,9 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                           <Zap className="w-4 h-4 fill-[#FFD600]" />
                           <span>CHAVE PIX DO MOTORISTA</span>
                         </div>
-                        {entrega.bancoPix && (
+                        {pixInfo.bancoPix && (
                           <span className="text-[10px] font-mono font-semibold text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded">
-                            {entrega.bancoPix}
+                            {pixInfo.bancoPix}
                           </span>
                         )}
                       </div>
@@ -1235,17 +1318,17 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-mono font-black text-white truncate tracking-wide selection:bg-[#FFD600] selection:text-black">
-                            {entrega.chavePix || entrega.tel_motorista || entrega.cpf_motorista || 'Não informada (Lançar RPA)'}
+                            {pixInfo.chavePix || entrega.tel_motorista || entrega.cpf_motorista || 'Não informada (Lançar RPA)'}
                           </p>
                           <p className="text-[10px] font-sans text-zinc-400 truncate mt-0.5">
-                            Favorecido: <strong className="text-zinc-200">{entrega.favorecidoPix || entrega.motorista || 'N/A'}</strong>
+                            Favorecido: <strong className="text-zinc-200">{pixInfo.favorecidoPix || entrega.motorista || 'N/A'}</strong>
                           </p>
                         </div>
 
-                        {(entrega.chavePix || entrega.tel_motorista || entrega.cpf_motorista) && (
+                        {(pixInfo.chavePix || entrega.tel_motorista || entrega.cpf_motorista) && (
                           <button
                             type="button"
-                            onClick={() => handleCopyPix(entrega.chavePix || entrega.tel_motorista || entrega.cpf_motorista || '', entrega.id)}
+                            onClick={() => handleCopyPix(pixInfo.chavePix || entrega.tel_motorista || entrega.cpf_motorista || '', entrega.id)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-mono font-black uppercase flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-md ${
                               copiedPixId === entrega.id
                                 ? 'bg-emerald-500 text-black shadow-[0_0_12px_rgba(16,185,129,0.4)]'
@@ -1833,6 +1916,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               {(() => {
                 const isRapLoaded = !!scriptModalEntrega.rpaLido || (scriptModalEntrega.anexosPagamento && scriptModalEntrega.anexosPagamento.some(a => a.tipo === 'rap'));
                 const valAdiant = scriptModalEntrega.valorAdiantamento !== undefined ? scriptModalEntrega.valorAdiantamento : 0;
+                const pixInfo = resolveDriverPixInfo(scriptModalEntrega);
 
                 const scriptAdiantamentoTexto = `RODOVAR PAGAMENTOS — SOLICITAÇÃO DE ADIANTAMENTO
 --------------------------------------------------
@@ -1841,9 +1925,9 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
 • ROTA: ${scriptModalEntrega.origem} ➔ ${scriptModalEntrega.destino}
 • VALOR ADIANTAMENTO: ${valAdiant > 0 || isRapLoaded ? 'R$ ' + valAdiant.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'R$ -- (Aguardando arquivo RAP)'}
 --------------------------------------------------
-• FAVORECIDO PIX: ${scriptModalEntrega.favorecidoPix || scriptModalEntrega.motorista}
-• CHAVE PIX: ${scriptModalEntrega.chavePix || scriptModalEntrega.tel_motorista || 'N/A'}
-• BANCO: ${scriptModalEntrega.bancoPix || 'N/A'}
+• FAVORECIDO PIX: ${pixInfo.favorecidoPix || scriptModalEntrega.motorista}
+• CHAVE PIX: ${pixInfo.chavePix || scriptModalEntrega.tel_motorista || 'N/A'}
+• BANCO: ${pixInfo.bancoPix || 'N/A'}
 • DATA DE COLETA: ${formatDateBR(scriptModalEntrega.data_coleta)}`;
 
                 return (
@@ -1899,6 +1983,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               {(() => {
                 const isRapLoaded = !!scriptModalEntrega.rpaLido || (scriptModalEntrega.anexosPagamento && scriptModalEntrega.anexosPagamento.some(a => a.tipo === 'rap'));
                 const valSal = scriptModalEntrega.valorSaldo !== undefined ? scriptModalEntrega.valorSaldo : 0;
+                const pixInfo = resolveDriverPixInfo(scriptModalEntrega);
 
                 const scriptSaldoTexto = `RODOVAR PAGAMENTOS — SOLICITAÇÃO DE SALDO - FRETE FINALIZADO
 --------------------------------------------------
@@ -1907,9 +1992,9 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
 • ROTA: ${scriptModalEntrega.origem} ➔ ${scriptModalEntrega.destino}
 • VALOR SALDO: ${valSal > 0 || isRapLoaded ? 'R$ ' + valSal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'R$ -- (Aguardando arquivo RAP)'}
 --------------------------------------------------
-• FAVORECIDO PIX: ${scriptModalEntrega.favorecidoPix || scriptModalEntrega.motorista}
-• CHAVE PIX: ${scriptModalEntrega.chavePix || scriptModalEntrega.tel_motorista || 'N/A'}
-• BANCO: ${scriptModalEntrega.bancoPix || 'N/A'}
+• FAVORECIDO PIX: ${pixInfo.favorecidoPix || scriptModalEntrega.motorista}
+• CHAVE PIX: ${pixInfo.chavePix || scriptModalEntrega.tel_motorista || 'N/A'}
+• BANCO: ${pixInfo.bancoPix || 'N/A'}
 • DATA DE COLETA: ${formatDateBR(scriptModalEntrega.data_coleta)}`;
 
                 return (
