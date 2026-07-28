@@ -1,6 +1,6 @@
 {
   "name": "Remix: RODOVAR MONITORA",
-  "description": "Sistema profissional de acompanhamento de cargas em tempo real, com integração de mapa OpenStreetMap, busca por voz (Web Speech API) e mensagens rápidas para WhatsApp.",
+  "description": "Sistema profissional de acompanhamento de cargas em tempo real RODOVAR MONITORA com módulo de Pagamentos, compressão de anexos, scripts de RPA/PIX e painéis de controle.",
   "requestFramePermissions": [
     "microphone",
     "geolocation"

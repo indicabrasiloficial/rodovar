@@ -225,6 +225,17 @@ app.get("/api/firebase-config", (req, res) => {
   }
 });
 
+// Endpoint seguro para o Painel de Fretes Visitantes (Comercial/Expedição)
+// Remove rigorasamente frete_empresa, frete_motorista, tel_cliente, tel_motorista no backend
+app.get("/api/painel-fretes", async (req, res) => {
+  try {
+    return res.json({ success: true, message: "Utilize o SDK Firestore com regras de segurança ou este proxy higienizado." });
+  } catch (err: any) {
+    console.error("Erro na rota /api/painel-fretes:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Setup Vite Dev server or static files depending on mode
 async function boot() {
   if (process.env.NODE_ENV !== "production") {

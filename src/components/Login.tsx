@@ -223,7 +223,21 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
         { name: 'Alexandre', username: 'alexandre', role: 'Diretor Comercial', passwordHash: 'rodovar2026' },
         { name: 'Vitor', username: 'vitor', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
         { name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações', passwordHash: 'rodovar2026' },
-        { name: 'Petrônio', username: 'petronio', role: 'Financeiro', passwordHash: 'rodovar2026' }
+        { name: 'Petrônio', username: 'petronio', role: 'Financeiro', passwordHash: 'rodovar2026' },
+        
+        // Equipe Comercial
+        { name: 'Jeise', username: 'jeise', role: 'Comercial', passwordHash: 'rodovar2026' },
+        { name: 'Marival', username: 'marival', role: 'Comercial', passwordHash: 'rodovar2026' },
+        { name: 'Mônica', username: 'monica', role: 'Comercial', passwordHash: 'rodovar2026' },
+        { name: 'Mariane', username: 'mariane', role: 'Comercial', passwordHash: 'rodovar2026' },
+        { name: 'Raisa', username: 'raisa', role: 'Comercial', passwordHash: 'rodovar2026' },
+
+        // Equipe Expedição
+        { name: 'César', username: 'cesar', role: 'Expedição', passwordHash: 'rodovar2026' },
+        { name: 'Ana', username: 'ana', role: 'Expedição', passwordHash: 'rodovar2026' },
+        { name: 'Eliete', username: 'eliete', role: 'Expedição', passwordHash: 'rodovar2026' },
+        { name: 'Priscila', username: 'priscila', role: 'Expedição', passwordHash: 'rodovar2026' },
+        { name: 'Juliane', username: 'juliane', role: 'Expedição', passwordHash: 'rodovar2026' }
       ];
 
       // Sync legacy employees from Firestore before checking to enable cross-device login
@@ -246,7 +260,15 @@ export default function Login({ onLoginSuccess, onBackToTracking }: LoginProps) 
       const storedEmployees = localStorage.getItem('rodovar_registered_employees_v2');
       if (storedEmployees) {
         try {
-          currentEmployees = JSON.parse(storedEmployees);
+          const parsedStored = JSON.parse(storedEmployees);
+          const mergedMap = new Map<string, any>();
+          DEFAULT_EMPLOYEES_LOCAL.forEach(e => mergedMap.set(e.username.toLowerCase(), e));
+          if (Array.isArray(parsedStored)) {
+            parsedStored.forEach((e: any) => {
+              if (e && e.username) mergedMap.set(e.username.toLowerCase(), e);
+            });
+          }
+          currentEmployees = Array.from(mergedMap.values());
         } catch {}
       }
 

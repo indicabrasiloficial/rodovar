@@ -2128,3 +2128,43 @@ export async function registerTelegramCommandLog(
     console.error("Error registering Telegram system log:", error);
   });
 }
+
+/**
+ * Atualiza dados de pagamento e anexos de uma entrega no Firestore e no cache local
+ */
+export async function updatePagamentoEntrega(
+  entregaId: string,
+  payload: Partial<Entrega>
+): Promise<void> {
+  // 1. Atualiza no cache local em memória
+  const index = cachedEntregas.findIndex(e => e.id === entregaId);
+  if (index !== -1) {
+    cachedEntregas[index] = {
+      ...cachedEntregas[index],
+      ...payload,
+      updated_at: new Date().toISOString()
+    };
+  }
+
+  try {
+    localStorage.setItem('rodovar_cached_entregas_fallback', JSON.stringify(cachedEntregas));
+  } catch {}
+
+  // Dispara evento para atualização instantânea na UI
+  window.dispatchEvent(new CustomEvent(REALTIME_EVENT, { detail: { action: 'SYNC' } }));
+
+  // 2. Persiste no Firestore
+  if ((window as any).rodovar_quota_exceeded !== true) {
+    try {
+      const docRef = doc(db, ENTREGAS_COLLECTION, entregaId);
+      await updateDoc(docRef, {
+        ...payload,
+        updated_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar pagamento da entrega no Firestore:', error);
+      handleFirestoreError(error, OperationType.UPDATE, `${ENTREGAS_COLLECTION}/${entregaId}`);
+    }
+  }
+}
+

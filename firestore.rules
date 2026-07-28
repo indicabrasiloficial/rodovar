@@ -5,6 +5,14 @@ service cloud.firestore {
     match /entregas/{entregaId} {
       allow read: if true;
       allow create, update, delete: if true;
+
+      // Subcoleção de comentários dos visitantes (Comercial / Expedição)
+      match /comentarios_visitantes/{comentarioId} {
+        allow read: if true;
+        allow create: if request.resource.data.uid != null 
+                      && request.resource.data.texto.size() <= 500;
+        allow update, delete: if false; // Histórico imutável para não permitir alteração posterior
+      }
     }
 
     // Acesso geral do ambiente para colaboradores e sistemas

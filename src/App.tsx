@@ -27,6 +27,8 @@ import ActivityLogs from './components/ActivityLogs';
 import FloatingChat from './components/FloatingChat';
 import TelegramIntegration from './components/TelegramIntegration';
 import SystemMigration from './components/SystemMigration';
+import PainelFretesVisitantes from './components/PainelFretesVisitantes';
+import Pagamentos from './components/Pagamentos';
 
 import { 
   Truck, 
@@ -56,13 +58,14 @@ import {
   Server,
   Globe,
   CheckSquare,
+  DollarSign,
   ChevronDown,
   ChevronUp,
   FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs' | 'telegram_integration' | 'migration';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs' | 'telegram_integration' | 'migration' | 'painel_fretes';
 
 
 export default function App() {
@@ -153,6 +156,10 @@ export default function App() {
       setSelectedView('motorista');
     } else if (path === '/operador/painel') {
       setSelectedView('operador_painel');
+    } else if (path === '/painel-fretes') {
+      setSelectedView('painel_fretes');
+    } else if (path === '/pagamentos') {
+      setSelectedView('pagamentos');
     } else if (hasInvite) {
       setSelectedView('list');
     }
@@ -326,8 +333,33 @@ export default function App() {
     setSelectedView('list');
   };
 
+  const userIsComercialOrExpedicao = useMemo(() => {
+    if (!user) return false;
+    const r = (user.role || '').toLowerCase();
+    return r === 'comercial' || r === 'expedição' || r === 'expedicao';
+  }, [user]);
+
+  useEffect(() => {
+    if (userIsComercialOrExpedicao && selectedView !== 'painel_fretes') {
+      setSelectedView('painel_fretes');
+    }
+  }, [userIsComercialOrExpedicao, selectedView]);
+
   // Views selector router
   const renderCurrentView = () => {
+    if (userIsComercialOrExpedicao) {
+      return (
+        <PainelFretesVisitantes 
+          currentUser={{ 
+            uid: user?.uid, 
+            username: user?.username, 
+            nome: user?.name, 
+            role: user?.role 
+          }} 
+        />
+      );
+    }
+
     switch (selectedView) {
       case 'dashboard':
         return (
@@ -477,6 +509,10 @@ export default function App() {
         return (
           <SystemMigration onClose={() => setSelectedView('dashboard')} />
         );
+      case 'pagamentos':
+        return (
+          <Pagamentos currentUser={user} />
+        );
       case 'agenda':
         return (
           <Agenda />
@@ -489,6 +525,13 @@ export default function App() {
               setSelectedView('list');
               window.history.pushState({ path: '/' }, '', '/');
             }}
+          />
+        );
+      case 'painel_fretes':
+        return (
+          <PainelFretesVisitantes
+            currentUser={user}
+            onNavigateHome={() => setSelectedView('list')}
           />
         );
       default:
@@ -1097,6 +1140,40 @@ export default function App() {
                 >
                   <BookOpen className="w-3.5 h-3.5 shrink-0 animate-pulse text-inherit" />
                   <span>Agenda</span>
+                </button>
+
+                {/* Nav Painel Comercial & Expedição */}
+                <button
+                  onClick={() => {
+                    setSelectedView('painel_fretes');
+                    window.history.pushState({ path: '/painel-fretes' }, '', '/painel-fretes');
+                  }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'painel_fretes'
+                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                    : 'bg-zinc-900/20 border-transparent text-zinc-350 hover:text-[#FFD600]'
+                  }`}
+                  id="desktop-nav-painel-fretes"
+                >
+                  <FileText className="w-3.5 h-3.5 shrink-0 text-inherit" />
+                  <span>Painel Comercial</span>
+                </button>
+
+                {/* Nav Pagamentos */}
+                <button
+                  onClick={() => {
+                    setSelectedView('pagamentos');
+                    window.history.pushState({ path: '/pagamentos' }, '', '/pagamentos');
+                  }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    selectedView === 'pagamentos'
+                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                    : 'bg-zinc-900/20 border-transparent text-zinc-350 hover:text-[#FFD600]'
+                  }`}
+                  id="desktop-nav-pagamentos"
+                >
+                  <DollarSign className="w-3.5 h-3.5 shrink-0 text-inherit" />
+                  <span>Pagamentos</span>
                 </button>
               </div>
             </div>

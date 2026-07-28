@@ -70,6 +70,37 @@ export interface Entrega {
     nome: string;
     desde: string | any;
   }>;
+  // Campos de Pagamento (Módulo Pagamentos RODOVAR)
+  statusPagamentoAdiantamento?: 'pendente' | 'pago' | 'atrasado';
+  statusPagamentoSaldo?: 'pendente' | 'pago' | 'atrasado';
+  dataPagoAdiantamento?: string | null;
+  dataPagoSaldo?: string | null;
+  prazoAdiantamento?: string; // YYYY-MM-DD
+  prazoSaldo?: string; // YYYY-MM-DD
+  valorAdiantamento?: number;
+  valorSaldo?: number;
+  anexosPagamento?: AnexoPagamento[];
+  rpaLido?: boolean;
+  rpaNomeArquivo?: string;
+  // Campos adicionais de RPA / Contrato
+  contratoNum?: string;
+  emissaoContrato?: string;
+  ciot?: string;
+  favorecidoPix?: string;
+  chavePix?: string;
+  bancoPix?: string;
+  telEmergencia?: string;
+  contatoEmergencia?: string;
+  placaVeiculo?: string;
+}
+
+export interface AnexoPagamento {
+  id: string;
+  tipo: 'nf' | 'coleta' | 'entrega' | 'rap';
+  url: string; // Data URL or storage link
+  nomeArquivo: string;
+  dataUpload: string;
+  tamanhoKb?: number;
 }
 
 export interface DocumentoAnexo {
