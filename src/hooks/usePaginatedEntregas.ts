@@ -22,6 +22,29 @@ const removeAccents = (str: string): string => {
     .trim();
 };
 
+export const normalizeDateStr = (val?: string): string => {
+  if (!val) return '';
+  const clean = val.trim().split('T')[0];
+  // If DD/MM/YYYY or DD-MM-YYYY
+  const brMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (brMatch) {
+    const day = brMatch[1].padStart(2, '0');
+    const month = brMatch[2].padStart(2, '0');
+    let year = brMatch[3];
+    if (year.length === 2) year = '20' + year;
+    return `${year}-${month}-${day}`;
+  }
+  // If DD/MM or DD-MM
+  const shortMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+  if (shortMatch) {
+    const day = shortMatch[1].padStart(2, '0');
+    const month = shortMatch[2].padStart(2, '0');
+    const year = new Date().getFullYear();
+    return `${year}-${month}-${day}`;
+  }
+  return clean;
+};
+
 export function matchDelivery(e: Entrega, filters: PaginatedFilters): boolean {
   // Status filter
   if (filters.status && filters.status !== 'all') {
@@ -29,7 +52,20 @@ export function matchDelivery(e: Entrega, filters: PaginatedFilters): boolean {
   }
   // Collection date filter
   if (filters.dataColeta) {
-    if (e.data_coleta !== filters.dataColeta) return false;
+    const filterIso = normalizeDateStr(filters.dataColeta);
+    const eColetaIso = normalizeDateStr(e.data_coleta);
+    const eDataIso = normalizeDateStr(e.data);
+    const ePrazoIso = normalizeDateStr(e.prazo);
+    const eCreatedIso = e.created_at ? e.created_at.split('T')[0] : '';
+
+    if (
+      eColetaIso !== filterIso && 
+      eDataIso !== filterIso && 
+      ePrazoIso !== filterIso && 
+      eCreatedIso !== filterIso
+    ) {
+      return false;
+    }
   }
   // Vendedor filter
   if (filters.vendedor?.trim()) {

@@ -33,6 +33,8 @@ const cleanVendedorName = (name: string): string => {
   // Split by slashes, backslashes, or dashes to keep only the first name
   const parts = name.split(/[\/\-\\]/);
   let p = (parts[0] || '').trim().toUpperCase();
+  if (p.includes('ELINETE')) return 'ELINETE';
+  if (p.includes('RAISA')) return 'RAISA';
   if (p === 'MÔNICA') p = 'MONICA';
   if (['SUELLEN', 'SUELEM', 'SUELE', 'SUELLENE', 'SULLEN', 'SUELEN'].includes(p) || p.includes('SUELLEN') || p.includes('SUELEM')) {
     p = 'ARANDA';
@@ -520,7 +522,19 @@ export function parsePastedTextToDeliveries(text: string) {
     }
   }
 
-  return results.filter(row => (row.origem && row.origem.trim() !== '') || (row.destino && row.destino.trim() !== ''));
+  const todayStr = new Date().toISOString().split('T')[0];
+  return results
+    .filter(row => (row.origem && row.origem.trim() !== '') || (row.destino && row.destino.trim() !== ''))
+    .map(row => {
+      let finalPrazo = row.prazo;
+      if (row.data_coleta && row.data_coleta > todayStr) {
+        finalPrazo = row.data_coleta;
+      }
+      return {
+        ...row,
+        prazo: finalPrazo
+      };
+    });
 }
 
 // High-fidelity shimmer skeleton loading component for mobile viewport card decks

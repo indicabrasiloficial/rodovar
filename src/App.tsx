@@ -1588,8 +1588,8 @@ export default function App() {
         />
       )}
 
-      {/* Persistent Floating Chat (Alteração Chat) */}
-      {user && (
+      {/* Persistent Floating Chat (Removido para Comercial e Expedição) */}
+      {user && !userIsComercialOrExpedicao && (
         <FloatingChat currentUser={user} />
       )}
     </div>

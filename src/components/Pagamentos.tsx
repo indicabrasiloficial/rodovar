@@ -32,7 +32,15 @@ import {
   FileUp,
   FileCheck,
   MessageSquare,
-  Send
+  Send,
+  EyeOff,
+  Zap,
+  BarChart3,
+  PieChart,
+  Download,
+  Printer,
+  TrendingUp,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Entrega, AnexoPagamento } from '../types';
 import { getEntregas, updatePagamentoEntrega } from '../db/storage';
@@ -61,8 +69,77 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   const todayIso = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
 
-  // Expanded attachments section per card
+  // Master toggle: Hide/Show values (Default: hidden as requested)
+  const [hideValues, setHideValues] = useState<boolean>(true);
+
+  // View mode tab: 'cards' vs 'estatisticas'
+  const [viewTab, setViewTab] = useState<'cards' | 'estatisticas'>('cards');
+
+  // Timeframe filter for statistics ('semanal' | 'mensal' | 'anual' | 'todos')
+  const [statsTimeframe, setStatsTimeframe] = useState<'semanal' | 'mensal' | 'anual' | 'todos'>('semanal');
+
+  // Copied Pix state for feedback
+  const [copiedPixId, setCopiedPixId] = useState<string | null>(null);
+
+  // Expanded cards accordion state
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
+
+  const handleCopyPix = (pixKey: string, driverId: string) => {
+    if (!pixKey) return;
+    navigator.clipboard.writeText(pixKey);
+    setCopiedPixId(driverId);
+    setTimeout(() => setCopiedPixId(null), 2500);
+  };
+
+  const formatCurrencyVal = (val: number | undefined | null) => {
+    if (val === undefined || val === null) return 'R$ --';
+    if (hideValues) return 'R$ ••••••';
+    return `R$ ${Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Export all payment data to CSV/Excel
+  const handleExportExcel = () => {
+    const headers = [
+      "Motorista", "CPF Motorista", "Chave PIX", "Favorecido", "Banco",
+      "Cliente", "CTRC/Contrato", "Origem", "Destino", "Data Coleta",
+      "Frete Motorista", "Adiantamento (R$)", "Status Adiantamento",
+      "Saldo (R$)", "Status Saldo", "Valor Carga", "Prazo"
+    ];
+
+    const rows = entregas.map(e => [
+      `"${e.motorista || ''}"`,
+      `"${e.cpf_motorista || ''}"`,
+      `"${e.chavePix || e.tel_motorista || ''}"`,
+      `"${e.favorecidoPix || e.motorista || ''}"`,
+      `"${e.bancoPix || ''}"`,
+      `"${e.cliente || ''}"`,
+      `"${e.cte || e.contratoNum || ''}"`,
+      `"${e.origem || ''}"`,
+      `"${e.destino || ''}"`,
+      `"${e.data_coleta || ''}"`,
+      `"${(e.frete_motorista || 0).toFixed(2)}"`,
+      `"${(e.valorAdiantamento ?? Math.round((e.frete_motorista || 0) * 0.7)).toFixed(2)}"`,
+      `"${e.statusPagamentoAdiantamento === 'pago' ? 'Pago' : 'Pendente'}"`,
+      `"${(e.valorSaldo ?? Math.round((e.frete_motorista || 0) * 0.3)).toFixed(2)}"`,
+      `"${e.statusPagamentoSaldo === 'pago' ? 'Pago' : 'Pendente'}"`,
+      `"${(e.valor_carga || 0).toFixed(2)}"`,
+      `"${e.prazo || ''}"`
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map(r => r.join(";"))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `pagamentos_rodovar_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   // Loading state for upload per file type per card
   const [uploadingState, setUploadingState] = useState<Record<string, boolean>>({});
@@ -434,6 +511,81 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     setTimeout(() => setCopiedScriptType(null), 2500);
   };
 
+  // Financial statistics calculation engine
+  const statsData = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const currentYear = now.getFullYear();
+    const currentMonthStr = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+    const filterByTimeframe = (e: Entrega, tf: 'semanal' | 'mensal' | 'anual' | 'todos') => {
+      const d = e.data_coleta || e.created_at?.slice(0, 10) || todayStr;
+      if (tf === 'semanal') return d >= sevenDaysAgoStr && d <= todayStr;
+      if (tf === 'mensal') return d.startsWith(currentMonthStr);
+      if (tf === 'anual') return d.startsWith(String(currentYear));
+      return true;
+    };
+
+    const calculateTotals = (tf: 'semanal' | 'mensal' | 'anual' | 'todos') => {
+      const list = entregas.filter(e => filterByTimeframe(e, tf));
+      let totalFrete = 0;
+      let totalAd = 0;
+      let totalAdPago = 0;
+      let totalAdPendente = 0;
+      let totalSal = 0;
+      let totalSalPago = 0;
+      let totalSalPendente = 0;
+
+      list.forEach(e => {
+        const frete = Number(e.frete_motorista) || 0;
+        totalFrete += frete;
+
+        const ad = e.valorAdiantamento !== undefined ? Number(e.valorAdiantamento) : Math.round(frete * 0.7);
+        const sal = e.valorSaldo !== undefined ? Number(e.valorSaldo) : Math.round(frete * 0.3);
+
+        totalAd += ad;
+        if (e.statusPagamentoAdiantamento === 'pago') {
+          totalAdPago += ad;
+        } else {
+          totalAdPendente += ad;
+        }
+
+        totalSal += sal;
+        if (e.statusPagamentoSaldo === 'pago') {
+          totalSalPago += sal;
+        } else {
+          totalSalPendente += sal;
+        }
+      });
+
+      return {
+        count: list.length,
+        list,
+        totalFrete,
+        totalAd,
+        totalAdPago,
+        totalAdPendente,
+        totalSal,
+        totalSalPago,
+        totalSalPendente,
+        totalPago: totalAdPago + totalSalPago,
+        totalPendente: totalAdPendente + totalSalPendente
+      };
+    };
+
+    return {
+      semanal: calculateTotals('semanal'),
+      mensal: calculateTotals('mensal'),
+      anual: calculateTotals('anual'),
+      todos: calculateTotals('todos'),
+      active: calculateTotals(statsTimeframe)
+    };
+  }, [entregas, statsTimeframe]);
+
   return (
     <div className="min-h-screen bg-[#0d0d0d] text-zinc-100 font-sans p-3 sm:p-6 space-y-6">
       
@@ -463,7 +615,74 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {/* View Mode Tabs */}
+            <div className="flex items-center bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setViewTab('cards')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewTab === 'cards'
+                    ? 'bg-[#FFD600] text-black shadow-md'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Cards</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewTab('estatisticas')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewTab === 'estatisticas'
+                    ? 'bg-[#FFD600] text-black shadow-md'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Estatísticas</span>
+              </button>
+            </div>
+
+            {/* Toggle Hide/Show Values */}
+            <button
+              type="button"
+              onClick={() => setHideValues(!hideValues)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                hideValues
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                  : 'bg-zinc-900 text-zinc-200 border-zinc-800 hover:border-zinc-700'
+              }`}
+              title={hideValues ? "Clique para Mostrar Valores" : "Clique para Ocultar Valores"}
+            >
+              {hideValues ? <EyeOff className="w-4 h-4 text-amber-400" /> : <Eye className="w-4 h-4 text-emerald-400" />}
+              <span className="hidden md:inline">{hideValues ? 'Valores Ocultos' : 'Valores Visíveis'}</span>
+            </button>
+
+            {/* Export Excel */}
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="p-2 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-mono font-bold shadow-md"
+              title="Exportar para Excel (CSV)"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span className="hidden xl:inline">Excel</span>
+            </button>
+
+            {/* Print */}
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-mono font-bold shadow-md"
+              title="Imprimir relatório"
+            >
+              <Printer className="w-4 h-4 text-[#FFD600]" />
+              <span className="hidden xl:inline">Imprimir</span>
+            </button>
+
+            {/* Refresh */}
             <button
               onClick={() => {
                 setLoading(true);
@@ -473,7 +692,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               title="Atualizar dados"
             >
               <RefreshCw className="w-4 h-4" />
-              <span className="hidden sm:inline">Atualizar</span>
             </button>
           </div>
         </div>
@@ -607,10 +825,225 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
       </div>
 
       {/* ======================================================== */}
-      {/* GRID DE CARDS (3 COLUNAS DESKTOP, 1 COLUNA MOBILE)       */}
-      {/* 20 MOTORISTAS POR VEZ PARA PROTEGER COTA FIRESTORE       */}
+      {/* SELEÇÃO DE ABA: CARDS OU ESTATÍSTICAS FINANCEIRAS        */}
       {/* ======================================================== */}
-      {loading ? (
+      {viewTab === 'estatisticas' ? (
+        <div className="space-y-6 animate-fade-in">
+          {/* Sub-Header with Timeframe Selectors and Live Firestore Sync Badge */}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
+              <div>
+                <h2 className="text-lg font-black font-sans uppercase tracking-wider text-white flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-[#FFD600]" />
+                  Estatísticas Financeiras de Pagamentos
+                </h2>
+                <p className="text-xs text-zinc-400 font-mono mt-0.5">
+                  Análise semanal, mensal e anual de adiantamentos e saldos
+                </p>
+              </div>
+
+              {/* Live Firestore status indicator */}
+              <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-800/50 px-3 py-1.5 rounded-xl self-start md:self-auto">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                <span className="text-[11px] font-mono font-bold text-emerald-300">
+                  Firestore Sincronizado
+                </span>
+              </div>
+            </div>
+
+            {/* Timeframe Selector Pills & Actions */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 bg-zinc-900/90 p-1.5 rounded-xl border border-zinc-800">
+                {(['semanal', 'mensal', 'anual', 'todos'] as const).map(tf => (
+                  <button
+                    key={tf}
+                    type="button"
+                    onClick={() => setStatsTimeframe(tf)}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-mono font-black uppercase transition-all cursor-pointer ${
+                      statsTimeframe === tf
+                        ? 'bg-[#FFD600] text-black shadow-lg scale-[1.02]'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {tf === 'semanal' && 'Semanal (7 dias)'}
+                    {tf === 'mensal' && 'Mensal (Mês Atual)'}
+                    {tf === 'anual' && 'Anual (Ano Atual)'}
+                    {tf === 'todos' && 'Todo Período'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="px-3.5 py-2 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 rounded-xl text-xs font-mono font-bold uppercase flex items-center gap-2 cursor-pointer shadow-md active:scale-95 transition-all"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  <span>Exportar Excel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-mono font-bold uppercase flex items-center gap-2 cursor-pointer shadow-md active:scale-95 transition-all"
+                >
+                  <Printer className="w-4 h-4 text-[#FFD600]" />
+                  <span>Imprimir</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Metric Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            {/* 1. VOLUME TOTAL */}
+            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-2 shadow-xl">
+              <div className="flex items-center justify-between text-zinc-400">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider">Volume de Cargas</span>
+                <Truck className="w-4 h-4 text-[#FFD600]" />
+              </div>
+              <p className="text-2xl font-black text-white font-mono">
+                {statsData.active.count} <span className="text-xs text-zinc-500 font-normal">viagens</span>
+              </p>
+              <p className="text-xs font-mono font-bold text-[#FFD600]">
+                Frete Total: {formatCurrencyVal(statsData.active.totalFrete)}
+              </p>
+            </div>
+
+            {/* 2. ADIANTAMENTOS */}
+            <div className="bg-zinc-950 border border-amber-500/30 rounded-2xl p-5 space-y-2 shadow-xl">
+              <div className="flex items-center justify-between text-amber-400">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider">Adiantamento Total</span>
+                <DollarSign className="w-4 h-4 text-amber-400" />
+              </div>
+              <p className="text-xl font-black text-white font-mono">
+                {formatCurrencyVal(statsData.active.totalAd)}
+              </p>
+              <div className="flex items-center justify-between text-[10px] font-mono border-t border-zinc-900 pt-1.5">
+                <span className="text-emerald-400 font-bold">Pago: {formatCurrencyVal(statsData.active.totalAdPago)}</span>
+                <span className="text-amber-400 font-bold">Pend: {formatCurrencyVal(statsData.active.totalAdPendente)}</span>
+              </div>
+            </div>
+
+            {/* 3. SALDOS */}
+            <div className="bg-zinc-950 border border-blue-500/30 rounded-2xl p-5 space-y-2 shadow-xl">
+              <div className="flex items-center justify-between text-blue-400">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider">Saldo Total</span>
+                <DollarSign className="w-4 h-4 text-blue-400" />
+              </div>
+              <p className="text-xl font-black text-white font-mono">
+                {formatCurrencyVal(statsData.active.totalSal)}
+              </p>
+              <div className="flex items-center justify-between text-[10px] font-mono border-t border-zinc-900 pt-1.5">
+                <span className="text-emerald-400 font-bold">Pago: {formatCurrencyVal(statsData.active.totalSalPago)}</span>
+                <span className="text-blue-400 font-bold">Pend: {formatCurrencyVal(statsData.active.totalSalPendente)}</span>
+              </div>
+            </div>
+
+            {/* 4. TOTAL REPASSADO PAGO */}
+            <div className="bg-zinc-950 border border-emerald-500/30 rounded-2xl p-5 space-y-2 shadow-xl">
+              <div className="flex items-center justify-between text-emerald-400">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider">Total Repassado Pago</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              </div>
+              <p className="text-xl font-black text-emerald-400 font-mono">
+                {formatCurrencyVal(statsData.active.totalPago)}
+              </p>
+              <div className="text-[10px] font-mono text-zinc-400 border-t border-zinc-900 pt-1.5">
+                Pendente Total: <span className="text-amber-400 font-bold">{formatCurrencyVal(statsData.active.totalPendente)}</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Table Details */}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 shadow-2xl space-y-4 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+              <h3 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#FFD600]" />
+                <span>Detalhamento dos Lançamentos ({statsData.active.count} registros)</span>
+              </h3>
+              <span className="text-[10px] font-mono text-zinc-500">
+                Valores {hideValues ? 'Ocultos por Privacidade' : 'Visíveis'}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse font-mono text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-900/60 text-zinc-400 uppercase text-[10px]">
+                    <th className="p-3">Motorista / CPF</th>
+                    <th className="p-3">Chave PIX</th>
+                    <th className="p-3">Coleta</th>
+                    <th className="p-3 text-right">Frete Total</th>
+                    <th className="p-3 text-right">Adiantamento</th>
+                    <th className="p-3 text-center">Status Adiant.</th>
+                    <th className="p-3 text-right">Saldo</th>
+                    <th className="p-3 text-center">Status Saldo</th>
+                    <th className="p-3">Contrato/CTRC</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900 text-zinc-300">
+                  {statsData.active.list.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="p-8 text-center text-zinc-500 italic">
+                        Nenhum registro de pagamento encontrado para o período {statsTimeframe}.
+                      </td>
+                    </tr>
+                  ) : (
+                    statsData.active.list.map(e => {
+                      const frete = Number(e.frete_motorista) || 0;
+                      const ad = e.valorAdiantamento !== undefined ? Number(e.valorAdiantamento) : Math.round(frete * 0.7);
+                      const sal = e.valorSaldo !== undefined ? Number(e.valorSaldo) : Math.round(frete * 0.3);
+                      const isAdPago = e.statusPagamentoAdiantamento === 'pago';
+                      const isSalPago = e.statusPagamentoSaldo === 'pago';
+
+                      return (
+                        <tr key={e.id} className="hover:bg-zinc-900/40 transition-colors">
+                          <td className="p-3 font-sans font-bold text-white">
+                            <div>{e.motorista || 'Sem nome'}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono font-normal">{e.cpf_motorista || 'Sem CPF'}</div>
+                          </td>
+                          <td className="p-3 font-mono text-zinc-300">
+                            <div className="truncate max-w-[140px]">{e.chavePix || e.tel_motorista || 'N/A'}</div>
+                            <div className="text-[9px] text-zinc-500 truncate">{e.favorecidoPix || ''}</div>
+                          </td>
+                          <td className="p-3 text-zinc-400">{formatDateBR(e.data_coleta)}</td>
+                          <td className="p-3 text-right font-bold text-white">{formatCurrencyVal(frete)}</td>
+                          <td className="p-3 text-right font-bold text-amber-400">{formatCurrencyVal(ad)}</td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              isAdPago ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'
+                            }`}>
+                              {isAdPago ? 'PAGO' : 'PENDENTE'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-bold text-blue-400">{formatCurrencyVal(sal)}</td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              isSalPago ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-blue-950 text-blue-400 border border-blue-800'
+                            }`}>
+                              {isSalPago ? 'PAGO' : 'PENDENTE'}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-zinc-400 text-[11px]">{e.cte || e.contratoNum || 'N/A'}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ======================================================== */
+        /* GRID DE CARDS (3 COLUNAS DESKTOP, 1 COLUNA MOBILE)       */
+        /* 20 MOTORISTAS POR VEZ PARA PROTEGER COTA FIRESTORE       */
+        /* ======================================================== */
+        loading ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-3">
           <RefreshCw className="w-8 h-8 animate-spin text-[#FFD600]" />
           <p className="text-xs font-mono text-zinc-400">Carregando painel de pagamentos...</p>
@@ -784,6 +1217,57 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                         <span className="truncate">{entrega.destino || 'N/A'}</span>
                       </div>
                     </div>
+
+                    {/* CHAVE PIX EM DESTAQUE DO MOTORISTA */}
+                    <div className="bg-gradient-to-r from-[#1c190a] via-zinc-900 to-zinc-900 border border-[#FFD600]/40 rounded-xl p-3 shadow-lg relative overflow-hidden">
+                      <div className="flex items-center justify-between gap-2 border-b border-[#FFD600]/20 pb-1.5 mb-1.5">
+                        <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-[#FFD600]">
+                          <Zap className="w-4 h-4 fill-[#FFD600]" />
+                          <span>CHAVE PIX DO MOTORISTA</span>
+                        </div>
+                        {entrega.bancoPix && (
+                          <span className="text-[10px] font-mono font-semibold text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded">
+                            {entrega.bancoPix}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-mono font-black text-white truncate tracking-wide selection:bg-[#FFD600] selection:text-black">
+                            {entrega.chavePix || entrega.tel_motorista || entrega.cpf_motorista || 'Não informada (Lançar RPA)'}
+                          </p>
+                          <p className="text-[10px] font-sans text-zinc-400 truncate mt-0.5">
+                            Favorecido: <strong className="text-zinc-200">{entrega.favorecidoPix || entrega.motorista || 'N/A'}</strong>
+                          </p>
+                        </div>
+
+                        {(entrega.chavePix || entrega.tel_motorista || entrega.cpf_motorista) && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPix(entrega.chavePix || entrega.tel_motorista || entrega.cpf_motorista || '', entrega.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-black uppercase flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-md ${
+                              copiedPixId === entrega.id
+                                ? 'bg-emerald-500 text-black shadow-[0_0_12px_rgba(16,185,129,0.4)]'
+                                : 'bg-[#FFD600] hover:bg-yellow-300 text-black active:scale-95'
+                            }`}
+                            title="Copiar Chave PIX do Motorista"
+                          >
+                            {copiedPixId === entrega.id ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                <span>COPIADO!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>COPIAR PIX</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                 {/* 2. CORPO DO CARD — 2 MINI-BLOCOS LADO A LADO */}
@@ -809,7 +1293,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                     <div>
                       {valAdiantamento !== null ? (
                         <p className="text-base font-black text-white font-mono">
-                          R$ {valAdiantamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          {formatCurrencyVal(valAdiantamento)}
                         </p>
                       ) : (
                         <p className="text-xs font-black text-amber-400 font-mono italic animate-pulse">
@@ -859,7 +1343,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                     <div>
                       {valSaldo !== null ? (
                         <p className="text-base font-black text-white font-mono">
-                          R$ {valSaldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          {formatCurrencyVal(valSaldo)}
                         </p>
                       ) : (
                         <p className="text-xs font-black text-amber-400 font-mono italic animate-pulse">
@@ -1161,7 +1645,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
           </div>
         )}
       </div>
-      )}
+      ))}
 
       {/* ======================================================== */}
       {/* MODAL LANÇAR / ESCANEAR RPA (CARREGA INFORMAÇÕES CTA/RPA) */}

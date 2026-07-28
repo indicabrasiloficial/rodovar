@@ -13,6 +13,7 @@ export interface Entrega {
   id: string;
   created_at: string;
   data_coleta: string;
+  data?: string;
   vendedor: string;
   cliente: string;
   tel_cliente: string;

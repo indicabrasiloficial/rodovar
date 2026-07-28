@@ -76,6 +76,8 @@ export async function fetchFretesPainel(
     // Queries simultâneas filtradas no Firestore
     const qColetaIso = query(entregasRef, where('data_coleta', '==', targetDateIso), limit(100));
     const qColetaBR = query(entregasRef, where('data_coleta', '==', targetDateBR), limit(100));
+    const qDataIso = query(entregasRef, where('data', '==', targetDateIso), limit(100));
+    const qDataBR = query(entregasRef, where('data', '==', targetDateBR), limit(100));
     const qPrazoIso = query(entregasRef, where('prazo', '==', targetDateIso), limit(100));
     const qPrazoBR = query(entregasRef, where('prazo', '==', targetDateBR), limit(100));
 
@@ -85,9 +87,11 @@ export async function fetchFretesPainel(
     const qCreated = query(entregasRef, where('created_at', '>=', startOfDay), where('created_at', '<=', endOfDay), limit(100));
 
     // Executa as buscas em paralelo
-    const [snap1, snap2, snap3, snap4, snap5] = await Promise.all([
+    const [snap1, snap2, snap3, snap4, snap5, snap6, snap7] = await Promise.all([
       getDocs(qColetaIso).catch(() => ({ docs: [] })),
       getDocs(qColetaBR).catch(() => ({ docs: [] })),
+      getDocs(qDataIso).catch(() => ({ docs: [] })),
+      getDocs(qDataBR).catch(() => ({ docs: [] })),
       getDocs(qPrazoIso).catch(() => ({ docs: [] })),
       getDocs(qPrazoBR).catch(() => ({ docs: [] })),
       getDocs(qCreated).catch(() => ({ docs: [] }))
@@ -98,15 +102,10 @@ export async function fetchFretesPainel(
       ...snap2.docs,
       ...snap3.docs,
       ...snap4.docs,
-      ...snap5.docs
+      ...snap5.docs,
+      ...snap6.docs,
+      ...snap7.docs
     ];
-
-    // Fallback: Se não encontrar nada na data selecionada, busca os 50 fretes mais recentes do sistema
-    if (rawDocs.length === 0) {
-      const qRecent = query(entregasRef, orderBy('created_at', 'desc'), limit(50));
-      const snapRecent = await getDocs(qRecent);
-      rawDocs = snapRecent.docs;
-    }
 
     // Deduplicação por ID do documento
     const docMap = new Map<string, any>();

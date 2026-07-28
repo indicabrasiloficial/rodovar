@@ -456,6 +456,20 @@ export function sanitizeName(name: string | undefined | null): string {
   // Remove multiple spacing
   clean = clean.replace(/\s+/g, ' ');
 
+  // Unify ELINETE (ELINETE SANTOS, ELINETE 2, etc -> ELINETE)
+  if (clean.includes('ELINETE')) {
+    return 'ELINETE';
+  }
+
+  // Unify RAISA / RAISSA (RAISA CAETANO, RAISSA CAETANO, etc -> RAISA)
+  if (clean.includes('RAISA') || clean.includes('RAISSA')) {
+    return 'RAISA';
+  }
+
+  if (clean === 'MÔNICA') {
+    clean = 'MONICA';
+  }
+
   // Unify SUELLEN / SUELEM and ARANDA to ARANDA as they are the same person
   const isSuellen = ['SUELLEN', 'SUELEM', 'SUELE', 'SUELLENE', 'SULLEN', 'SUELEN'].includes(clean) || 
                     clean.includes('SUELLEN') || 
@@ -468,7 +482,7 @@ export function sanitizeName(name: string | undefined | null): string {
 
 // Write/Delete functions - Return Synchronously with Optimistic caching, syncing asynchronously in background
 export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entrega {
-  // Autocorrect and sanitize names to uppercase, removing special trailing chars (e.g. "ARANDA!" -> "ARANDA")
+  // Autocorrect and sanitize names to uppercase
   if (entrega.vendedor !== undefined) {
     entrega.vendedor = sanitizeName(entrega.vendedor);
   }
@@ -477,6 +491,12 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
   }
   if (entrega.cliente !== undefined) {
     entrega.cliente = sanitizeName(entrega.cliente);
+  }
+
+  // If data_coleta is ahead of the current date, set deadline (prazo) to the same date
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (entrega.data_coleta && entrega.data_coleta > todayStr) {
+    entrega.prazo = entrega.data_coleta;
   }
 
   const uid = auth.currentUser?.uid || 'system_operator';
