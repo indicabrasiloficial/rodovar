@@ -34,7 +34,7 @@ const cleanVendedorName = (name: string): string => {
   const parts = name.split(/[\/\-\\]/);
   let p = (parts[0] || '').trim().toUpperCase();
   if (p.includes('ELINETE')) return 'ELINETE';
-  if (p.includes('RAISA')) return 'RAISA';
+  if (p.includes('RAISA') || p.includes('RAISSA')) return 'RAISA';
   if (p === 'MÔNICA') p = 'MONICA';
   if (['SUELLEN', 'SUELEM', 'SUELE', 'SUELLENE', 'SULLEN', 'SUELEN'].includes(p) || p.includes('SUELLEN') || p.includes('SUELEM')) {
     p = 'ARANDA';

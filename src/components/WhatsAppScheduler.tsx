@@ -167,10 +167,14 @@ export default function WhatsAppScheduler() {
 
     if (isBulk) {
       const targetStatusList = selectedDeliveryId === 'BULK_COLETAS' 
-        ? ['coletando', 'parado'] 
-        : ['em_transito'];
+        ? ['coletando'] 
+        : ['em_transito', 'parado', 'descarregando'];
 
-      const targetDeliveries = entregas.filter(del => targetStatusList.includes(del.status) && !del.etapasOperador?.e13);
+      const targetDeliveries = entregas.filter(del => 
+        targetStatusList.includes(del.status) && 
+        del.status !== 'entregue' && 
+        !del.etapasOperador?.e13
+      );
       
       if (targetDeliveries.length === 0) {
         setFeedback({ 
@@ -326,11 +330,17 @@ export default function WhatsAppScheduler() {
                   <option value="BULK_TRANSITO">📢 [TODOS OS MOTORISTAS] - Categoria: Trânsito</option>
                 </optgroup>
                 <optgroup label="Cargas Individuais">
-                  {entregas.filter(e => e.status !== 'entregue' && !e.etapasOperador?.e13).map(e => (
-                    <option key={e.id} value={e.id}>
-                      {e.motorista} ➔ {e.destino} ({e.status === 'em_transito' ? 'Trânsito' : e.status === 'parado' ? 'Parado' : 'Coletando'})
-                    </option>
-                  ))}
+                  {entregas.filter(e => e.status !== 'entregue' && !e.etapasOperador?.e13).map(e => {
+                    let statusLabel = 'Coletando';
+                    if (e.status === 'em_transito') statusLabel = 'Trânsito';
+                    else if (e.status === 'parado') statusLabel = 'Parado';
+                    else if (e.status === 'descarregando') statusLabel = 'Descarregando';
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {e.motorista} ➔ {e.destino} ({statusLabel})
+                      </option>
+                    );
+                  })}
                 </optgroup>
               </select>
             </div>
@@ -622,7 +632,7 @@ export default function WhatsAppScheduler() {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-gray-200'
                     }`}
                   >
-                    📦 Coletas ({entregas.filter(e => e.status === 'coletando' || e.status === 'parado').length})
+                    📦 Coletas ({entregas.filter(e => e.status === 'coletando' && e.status !== 'entregue' && !e.etapasOperador?.e13).length})
                   </button>
                   <button
                     onClick={() => setCategoryTab('transito')}
@@ -632,7 +642,7 @@ export default function WhatsAppScheduler() {
                         : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-gray-200'
                     }`}
                   >
-                    🚚 Trânsito ({entregas.filter(e => e.status === 'em_transito' && !e.etapasOperador?.e13).length})
+                    🚚 Trânsito ({entregas.filter(e => ['em_transito', 'parado', 'descarregando'].includes(e.status) && e.status !== 'entregue' && !e.etapasOperador?.e13).length})
                   </button>
                 </div>
                 <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest hidden sm:inline">
@@ -697,7 +707,7 @@ export default function WhatsAppScheduler() {
               {/* Scrollable list of category drivers */}
               <div className="flex-1 overflow-y-auto max-h-[360px] space-y-2.5 min-h-[250px] pr-1">
                 {(() => {
-                  const targetStatus = categoryTab === 'coletas' ? ['coletando', 'parado'] : ['em_transito'];
+                  const targetStatus = categoryTab === 'coletas' ? ['coletando'] : ['em_transito', 'parado', 'descarregando'];
                   const filteredDrivers = entregas.filter(e => e.status !== 'entregue' && !e.etapasOperador?.e13 && targetStatus.includes(e.status));
 
                   if (filteredDrivers.length === 0) {

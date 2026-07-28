@@ -757,14 +757,14 @@ export default function App() {
             <button
               onClick={() => setIsToolsExpanded(!isToolsExpanded)}
               className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-[10px] uppercase font-mono font-bold transition-all ${
-                isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration'].includes(selectedView)
+                isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration', 'pagamentos'].includes(selectedView)
                   ? 'bg-zinc-900 border-zinc-850 text-[#FFD600]'
                   : 'bg-zinc-950/50 border-zinc-900 text-zinc-400 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-[#FFD600]" />
-                {['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration'].includes(selectedView)
+                {['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration', 'pagamentos'].includes(selectedView)
                   ? `Ferramenta: ${selectedView.toUpperCase()}`
                   : 'Mais Ferramentas & Suporte'}
               </span>
@@ -772,7 +772,7 @@ export default function App() {
             </button>
 
             <AnimatePresence>
-              {(isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration'].includes(selectedView)) && (
+              {(isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration', 'pagamentos'].includes(selectedView)) && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
@@ -781,6 +781,25 @@ export default function App() {
                   className="overflow-hidden mt-1.5 bg-zinc-950/90 border border-zinc-900 rounded-xl p-2.5"
                 >
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {/* Pagamentos */}
+                    {!userIsComercialOrExpedicao && (
+                      <button
+                        onClick={() => {
+                          setSelectedView('pagamentos');
+                          window.history.pushState({ path: '/pagamentos' }, '', '/pagamentos');
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          selectedView === 'pagamentos' 
+                          ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                        }`}
+                        id="nav-pagamentos-mobile"
+                      >
+                        <DollarSign className="w-3.5 h-3.5 shrink-0" />
+                        <span>Pagamentos</span>
+                      </button>
+                    )}
+
                     {/* Desempenho */}
                     <button
                       onClick={() => setSelectedView('statistics')}
@@ -1159,22 +1178,24 @@ export default function App() {
                   <span>Painel Comercial</span>
                 </button>
 
-                {/* Nav Pagamentos */}
-                <button
-                  onClick={() => {
-                    setSelectedView('pagamentos');
-                    window.history.pushState({ path: '/pagamentos' }, '', '/pagamentos');
-                  }}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
-                    selectedView === 'pagamentos'
-                    ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
-                    : 'bg-zinc-900/20 border-transparent text-zinc-350 hover:text-[#FFD600]'
-                  }`}
-                  id="desktop-nav-pagamentos"
-                >
-                  <DollarSign className="w-3.5 h-3.5 shrink-0 text-inherit" />
-                  <span>Pagamentos</span>
-                </button>
+                {/* Nav Pagamentos (Bloqueado para Comercial e Expedição) */}
+                {!userIsComercialOrExpedicao && (
+                  <button
+                    onClick={() => {
+                      setSelectedView('pagamentos');
+                      window.history.pushState({ path: '/pagamentos' }, '', '/pagamentos');
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      selectedView === 'pagamentos'
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                      : 'bg-zinc-900/20 border-transparent text-zinc-350 hover:text-[#FFD600]'
+                    }`}
+                    id="desktop-nav-pagamentos"
+                  >
+                    <DollarSign className="w-3.5 h-3.5 shrink-0 text-inherit" />
+                    <span>Pagamentos</span>
+                  </button>
+                )}
               </div>
             </div>
 

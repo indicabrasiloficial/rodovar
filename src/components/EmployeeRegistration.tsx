@@ -24,7 +24,7 @@ export interface Employee {
   id: string;
   name: string;
   username: string;
-  role: 'Operador' | 'Diretor Comercial' | 'Gerente' | 'Financeiro' | 'Diretor de Operações' | 'Visitante';
+  role: 'Operador' | 'Diretor Comercial' | 'Gerente' | 'Financeiro' | 'Diretor de Operações' | 'Comercial' | 'Expedição' | 'Visitante';
   passwordHash: string; // Stored securely/directly as text for simplicity
   created_at: string;
 }
@@ -36,58 +36,40 @@ const DEFAULT_PASSWORDS: Record<string, string> = {
   'vitor': 'rodovar2026',
   'ricardo': 'rodovar2026',
   'petronio': 'rodovar2026',
-  'petrônio': 'rodovar2026'
+  'petrônio': 'rodovar2026',
+  'jeise': 'rodovar2026',
+  'marival': 'rodovar2026',
+  'monica': 'rodovar2026',
+  'mariane': 'rodovar2026',
+  'raisa': 'rodovar2026',
+  'cesar': 'rodovar2026',
+  'ana': 'rodovar2026',
+  'eliete': 'rodovar2026',
+  'priscila': 'rodovar2026',
+  'juliane': 'rodovar2026'
 };
 
 const DEFAULT_EMPLOYEES: Employee[] = [
-  {
-    id: 'emp-jairo',
-    name: 'Jairo Bahia',
-    username: 'jairobahia',
-    role: 'Operador',
-    passwordHash: 'Danone01',
-    created_at: '2026-01-01'
-  },
-  {
-    id: 'emp-genivaldo',
-    name: 'Genivaldo',
-    username: 'genivaldo',
-    role: 'Gerente',
-    passwordHash: 'rodovar2026',
-    created_at: '2026-01-01'
-  },
-  {
-    id: 'emp-alexandre',
-    name: 'Alexandre',
-    username: 'alexandre',
-    role: 'Diretor Comercial',
-    passwordHash: 'rodovar2026',
-    created_at: '2026-01-01'
-  },
-  {
-    id: 'emp-vitor',
-    name: 'Vitor',
-    username: 'vitor',
-    role: 'Diretor de Operações',
-    passwordHash: 'rodovar2026',
-    created_at: '2026-01-01'
-  },
-  {
-    id: 'emp-ricardo',
-    name: 'Ricardo',
-    username: 'ricardo',
-    role: 'Diretor de Operações',
-    passwordHash: 'rodovar2026',
-    created_at: '2026-01-01'
-  },
-  {
-    id: 'emp-petronio',
-    name: 'Petrônio',
-    username: 'petronio',
-    role: 'Financeiro',
-    passwordHash: 'rodovar2026',
-    created_at: '2026-01-01'
-  }
+  { id: 'emp-jairo', name: 'Jairo Bahia', username: 'jairobahia', role: 'Operador', passwordHash: 'Danone01', created_at: '2026-01-01' },
+  { id: 'emp-genivaldo', name: 'Genivaldo', username: 'genivaldo', role: 'Gerente', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-alexandre', name: 'Alexandre', username: 'alexandre', role: 'Diretor Comercial', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-vitor', name: 'Vitor', username: 'vitor', role: 'Diretor de Operações', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-ricardo', name: 'Ricardo', username: 'ricardo', role: 'Diretor de Operações', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-petronio', name: 'Petrônio', username: 'petronio', role: 'Financeiro', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  
+  // Equipe Comercial
+  { id: 'emp-jeise', name: 'Jeise', username: 'jeise', role: 'Comercial', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-marival', name: 'Marival', username: 'marival', role: 'Comercial', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-monica', name: 'Mônica', username: 'monica', role: 'Comercial', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-mariane', name: 'Mariane', username: 'mariane', role: 'Comercial', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-raisa', name: 'Raisa', username: 'raisa', role: 'Comercial', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+
+  // Equipe Expedição
+  { id: 'emp-cesar', name: 'César', username: 'cesar', role: 'Expedição', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-ana', name: 'Ana', username: 'ana', role: 'Expedição', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-eliete', name: 'Eliete', username: 'eliete', role: 'Expedição', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-priscila', name: 'Priscila', username: 'priscila', role: 'Expedição', passwordHash: 'rodovar2026', created_at: '2026-01-01' },
+  { id: 'emp-juliane', name: 'Juliane', username: 'juliane', role: 'Expedição', passwordHash: 'rodovar2026', created_at: '2026-01-01' }
 ];
 
 export function getRegisteredEmployees(): Employee[] {
@@ -101,22 +83,15 @@ export function getRegisteredEmployees(): Employee[] {
     }
   }
 
-  // Guarantee Ricardo is present (Diretor de Operações)
-  const hasRicardo = list.some(emp => emp.username === 'ricardo');
-  if (!hasRicardo) {
-    list.push({
-      id: 'emp-ricardo',
-      name: 'Ricardo',
-      username: 'ricardo',
-      role: 'Diretor de Operações',
-      passwordHash: 'rodovar2026',
-      created_at: '2026-01-01'
-    });
-    localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
-  }
+  // Ensure all default employees exist in the list
+  DEFAULT_EMPLOYEES.forEach(defEmp => {
+    if (!list.some(emp => emp.username === defEmp.username)) {
+      list.push(defEmp);
+    }
+  });
 
-  // Filter out Priscila and Mateus from custom lists if they were already saved in local storage
-  list = list.filter(emp => emp.username !== 'mateus' && emp.username !== 'priscila');
+  // Save merged list
+  localStorage.setItem('rodovar_registered_employees_v2', JSON.stringify(list));
 
   // Guarantee master user is always filtered out and never listed
   return list.filter(emp => emp.username !== 'master');
