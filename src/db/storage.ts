@@ -347,15 +347,15 @@ fetchScheduledMessagesFromServer(false);
 fetchBlacklistFromServer(false);
 fetchBlacklistClientesFromServer(false);
 
-// Efficient 3-minute background visibility-aware polling to stay silently updated
+// Efficient background visibility-aware polling to stay silently updated (respects cache TTL)
 setInterval(() => {
   if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
     return; // Don't drain reads when tab is backgrounded
   }
-  fetchEntregasFromServer(true);
-  fetchScheduledMessagesFromServer(true);
-  fetchBlacklistFromServer(true);
-  fetchBlacklistClientesFromServer(true);
+  fetchEntregasFromServer(false);
+  fetchScheduledMessagesFromServer(false);
+  fetchBlacklistFromServer(false);
+  fetchBlacklistClientesFromServer(false);
 }, 3 * 60 * 1000);
 
 // Sync data retrievers
