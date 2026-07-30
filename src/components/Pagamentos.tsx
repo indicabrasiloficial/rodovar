@@ -380,20 +380,22 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   <title>Recibo RPA ${receiptNum} - Rodovar Transportes e Logística</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { background-color: #f4f4f5; padding: 24px; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+    @page { size: A4 portrait; margin: 6mm; }
+    body { background-color: #f4f4f5; padding: 16px; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; }
     @media print {
-      body { background-color: white; padding: 0; }
+      body { background-color: white; padding: 0; display: block; }
       .no-print { display: none !important; }
+      #recibo-impressao-container { border: 2px solid #000 !important; box-shadow: none !important; margin: 0 !important; max-width: 100% !important; }
     }
   </style>
 </head>
 <body>
-  <div class="no-print mb-6 flex gap-3">
-    <button onclick="window.print()" style="background:#000;color:#ffd600;padding:12px 24px;border-radius:10px;font-weight:bold;cursor:pointer;border:none;font-family:monospace;font-size:14px;display:flex;align-items:center;gap:8px;">
-      🖨️ IMPRIMIR / SALVAR COMO PDF
+  <div class="no-print mb-4 flex gap-3">
+    <button onclick="window.print()" style="background:#000;color:#ffd600;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;border:none;font-family:monospace;font-size:13px;display:flex;align-items:center;gap:8px;">
+      🖨️ IMPRIMIR / SALVAR COMO PDF (1 PÁGINA)
     </button>
   </div>
-  <div style="width:100%;max-width:800px;">
+  <div style="width:100%;max-width:760px;">
     ${element.outerHTML}
   </div>
 </body>
@@ -2549,10 +2551,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               {printReceiptEntrega ? (
                 <div
                   id="recibo-impressao-container"
-                  className="bg-white text-black p-6 sm:p-10 rounded-xl shadow-2xl border-4 border-double border-zinc-900 max-w-3xl mx-auto font-sans leading-relaxed text-left text-xs sm:text-sm"
+                  className="bg-white text-black p-4 sm:p-6 rounded-xl shadow-2xl border-4 border-double border-zinc-900 max-w-3xl mx-auto font-sans leading-relaxed text-left text-xs sm:text-sm"
                 >
                   {/* CABEÇALHO DA EMPRESA COM CNPJ */}
-                  <div className="border-b-2 border-zinc-900 pb-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="border-b-2 border-zinc-900 pb-2 mb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <div>
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 bg-black text-[#FFD600] font-black text-base flex items-center justify-center rounded font-mono">
@@ -2562,7 +2564,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                           {companyName}
                         </h1>
                       </div>
-                      <p className="text-[11px] font-mono font-bold text-zinc-800 mt-1">
+                      <p className="text-[11px] font-mono font-bold text-zinc-800 mt-0.5">
                         CNPJ: <span className="text-black font-extrabold">{companyCnpj}</span>
                       </p>
                       <p className="text-[10px] font-mono text-zinc-600">
@@ -2573,7 +2575,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                       </p>
                     </div>
 
-                    <div className="text-left sm:text-right font-mono bg-zinc-100 p-3 rounded-lg border border-zinc-300 w-full sm:w-auto">
+                    <div className="text-left sm:text-right font-mono bg-zinc-100 p-2 rounded-lg border border-zinc-300 w-full sm:w-auto">
                       <span className="block text-[10px] uppercase font-bold text-zinc-500">
                         NÚMERO DO RECIBO
                       </span>
@@ -2587,7 +2589,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   </div>
 
                   {/* TÍTULO DO RECIBO */}
-                  <div className="bg-zinc-900 text-white text-center py-2 px-4 font-mono font-black uppercase text-sm sm:text-base tracking-wider rounded mb-5 shadow-sm">
+                  <div className="bg-zinc-900 text-white text-center py-1.5 px-3 font-mono font-black uppercase text-xs sm:text-sm tracking-wider rounded mb-3 shadow-sm">
                     RECIBO DE PAGAMENTO DE FRETE A MOTORISTA (RPA)
                     <span className="block text-[10px] font-bold text-amber-300 tracking-normal mt-0.5">
                       {receiptType === 'integral'
@@ -2599,15 +2601,15 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   </div>
 
                   {/* SEÇÃO 1: DADOS DO MOTORISTA E VEÍCULO */}
-                  <div className="mb-5 border border-zinc-300 rounded-lg p-3 bg-zinc-50 font-mono text-xs">
-                    <h2 className="font-black text-zinc-900 uppercase text-[11px] border-b border-zinc-300 pb-1 mb-2 flex items-center justify-between">
+                  <div className="mb-3 border border-zinc-300 rounded-lg p-2.5 bg-zinc-50 font-mono text-xs">
+                    <h2 className="font-black text-zinc-900 uppercase text-[11px] border-b border-zinc-300 pb-1 mb-1.5 flex items-center justify-between">
                       <span>1. IDENTIFICAÇÃO DO MOTORISTA E CONTRATO DE CARGA</span>
                       <span className="text-[9px] text-zinc-500 font-normal">DOCUMENTO OFICIAL</span>
                     </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1.5 gap-x-4">
                       <div>
                         <span className="text-zinc-500 text-[10px] block font-bold">MOTORISTA CONTRATADO:</span>
-                        <span className="font-bold text-black text-sm uppercase">{printReceiptEntrega.motorista}</span>
+                        <span className="font-bold text-black text-xs uppercase">{printReceiptEntrega.motorista}</span>
                       </div>
                       <div>
                         <span className="text-zinc-500 text-[10px] block font-bold">CPF / CNPJ MOTORISTA:</span>
@@ -2633,55 +2635,55 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   </div>
 
                   {/* SEÇÃO 2: DEMONSTRATIVO FINANCEIRO DO FRETE */}
-                  <div className="mb-5 border border-zinc-300 rounded-lg overflow-hidden font-mono text-xs">
-                    <div className="bg-zinc-200 p-2 font-black text-zinc-900 uppercase text-[11px] border-b border-zinc-300">
+                  <div className="mb-3 border border-zinc-300 rounded-lg overflow-hidden font-mono text-xs">
+                    <div className="bg-zinc-200 p-1.5 font-black text-zinc-900 uppercase text-[10px] border-b border-zinc-300">
                       2. DEMONSTRATIVO FINANCEIRO DO FRETE
                     </div>
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="bg-zinc-100 text-[10px] text-zinc-600 uppercase border-b border-zinc-300">
-                          <th className="p-2 border-r border-zinc-300">DESCRIÇÃO DA PARCELA</th>
-                          <th className="p-2 border-r border-zinc-300 text-center">% PERC.</th>
-                          <th className="p-2 border-r border-zinc-300 text-center">DATA PAGO</th>
-                          <th className="p-2 border-r border-zinc-300 text-center">STATUS</th>
-                          <th className="p-2 text-right">VALOR (R$)</th>
+                        <tr className="bg-zinc-100 text-[9px] text-zinc-600 uppercase border-b border-zinc-300">
+                          <th className="p-1.5 border-r border-zinc-300">DESCRIÇÃO DA PARCELA</th>
+                          <th className="p-1.5 border-r border-zinc-300 text-center">% PERC.</th>
+                          <th className="p-1.5 border-r border-zinc-300 text-center">DATA PAGO</th>
+                          <th className="p-1.5 border-r border-zinc-300 text-center">STATUS</th>
+                          <th className="p-1.5 text-right">VALOR (R$)</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-zinc-200 text-xs">
+                      <tbody className="divide-y divide-zinc-200 text-[11px]">
                         <tr>
-                          <td className="p-2 border-r border-zinc-300 font-bold">FRETE BRUTO CONTRATADO</td>
-                          <td className="p-2 border-r border-zinc-300 text-center">100%</td>
-                          <td className="p-2 border-r border-zinc-300 text-center">-</td>
-                          <td className="p-2 border-r border-zinc-300 text-center font-bold">ACORDADO</td>
-                          <td className="p-2 text-right font-bold text-black">
+                          <td className="p-1.5 border-r border-zinc-300 font-bold">FRETE BRUTO CONTRATADO</td>
+                          <td className="p-1.5 border-r border-zinc-300 text-center">100%</td>
+                          <td className="p-1.5 border-r border-zinc-300 text-center">-</td>
+                          <td className="p-1.5 border-r border-zinc-300 text-center font-bold">ACORDADO</td>
+                          <td className="p-1.5 text-right font-bold text-black">
                             R$ {(Number(printReceiptEntrega.frete_motorista) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
                         <tr className={receiptType === 'adiantamento' ? 'bg-amber-50 font-bold' : ''}>
-                          <td className="p-2 border-r border-zinc-300">ADIANTAMENTO DE FRETE (PARCELA 01)</td>
-                          <td className="p-2 border-r border-zinc-300 text-center">70%</td>
-                          <td className="p-2 border-r border-zinc-300 text-center">
+                          <td className="p-1.5 border-r border-zinc-300">ADIANTAMENTO DE FRETE (PARCELA 01)</td>
+                          <td className="p-1.5 border-r border-zinc-300 text-center">70%</td>
+                          <td className="p-1.5 border-r border-zinc-300 text-center">
                             {printReceiptEntrega.dataPagoAdiantamento || new Date().toLocaleDateString('pt-BR')}
                           </td>
-                          <td className="p-2 border-r border-zinc-300 text-center font-bold text-emerald-800">
+                          <td className="p-1.5 border-r border-zinc-300 text-center font-bold text-emerald-800">
                             {printReceiptEntrega.statusPagamentoAdiantamento === 'pago' ? '✓ PAGO' : 'PENDENTE'}
                           </td>
-                          <td className="p-2 text-right font-black text-zinc-900">
+                          <td className="p-1.5 text-right font-black text-zinc-900">
                             R$ {((printReceiptEntrega.valorAdiantamento !== undefined && printReceiptEntrega.valorAdiantamento !== null)
                               ? Number(printReceiptEntrega.valorAdiantamento)
                               : (Number(printReceiptEntrega.frete_motorista) || 0) * 0.7).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
                         <tr className={receiptType === 'saldo' ? 'bg-purple-50 font-bold' : ''}>
-                          <td className="p-2 border-r border-zinc-300">SALDO FINAL DE FRETE (PARCELA 02)</td>
-                          <td className="p-2 border-r border-zinc-300 text-center">30%</td>
-                          <td className="p-2 border-r border-zinc-300 text-center">
+                          <td className="p-1.5 border-r border-zinc-300">SALDO FINAL DE FRETE (PARCELA 02)</td>
+                          <td className="p-1.5 border-r border-zinc-300 text-center">30%</td>
+                          <td className="p-1.5 border-r border-zinc-300 text-center">
                             {printReceiptEntrega.dataPagoSaldo || new Date().toLocaleDateString('pt-BR')}
                           </td>
-                          <td className="p-2 border-r border-zinc-300 text-center font-bold text-purple-900">
+                          <td className="p-1.5 border-r border-zinc-300 text-center font-bold text-purple-900">
                             {printReceiptEntrega.statusPagamentoSaldo === 'pago' ? '✓ PAGO' : 'PENDENTE'}
                           </td>
-                          <td className="p-2 text-right font-black text-zinc-900">
+                          <td className="p-1.5 text-right font-black text-zinc-900">
                             R$ {((printReceiptEntrega.valorSaldo !== undefined && printReceiptEntrega.valorSaldo !== null)
                               ? Number(printReceiptEntrega.valorSaldo)
                               : (Number(printReceiptEntrega.frete_motorista) || 0) * 0.3).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -2689,11 +2691,11 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                         </tr>
                       </tbody>
                       <tfoot>
-                        <tr className="bg-zinc-900 text-white font-black text-sm">
-                          <td colSpan={4} className="p-2.5 text-right uppercase tracking-wider">
+                        <tr className="bg-zinc-900 text-white font-black text-xs">
+                          <td colSpan={4} className="p-2 text-right uppercase tracking-wider">
                             VALOR TOTAL DESTE RECIBO ({receiptType.toUpperCase()}):
                           </td>
-                          <td className="p-2.5 text-right text-amber-300">
+                          <td className="p-2 text-right text-amber-300">
                             R$ {(receiptType === 'integral'
                               ? (Number(printReceiptEntrega.frete_motorista) || 0)
                               : receiptType === 'adiantamento'
@@ -2714,22 +2716,22 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   {(() => {
                     const pixInfo = resolveDriverPixInfo(printReceiptEntrega);
                     return (
-                      <div className="mb-5 border border-zinc-300 rounded-lg p-3 bg-zinc-50 font-mono text-xs">
-                        <h2 className="font-black text-zinc-900 uppercase text-[11px] border-b border-zinc-300 pb-1 mb-2">
+                      <div className="mb-3 border border-zinc-300 rounded-lg p-2.5 bg-zinc-50 font-mono text-xs">
+                        <h2 className="font-black text-zinc-900 uppercase text-[10px] border-b border-zinc-300 pb-1 mb-1.5">
                           3. DADOS DO PAGAMENTO BANCÁRIO (TRANSFERÊNCIA PIX)
                         </h2>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <div>
                             <span className="text-zinc-500 text-[10px] block font-bold">FAVORECIDO PIX:</span>
-                            <span className="font-bold text-black">{pixInfo.favorecidoPix || printReceiptEntrega.motorista}</span>
+                            <span className="font-bold text-black text-[11px]">{pixInfo.favorecidoPix || printReceiptEntrega.motorista}</span>
                           </div>
                           <div>
                             <span className="text-zinc-500 text-[10px] block font-bold">CHAVE PIX CADASTRADA:</span>
-                            <span className="font-bold text-black">{pixInfo.chavePix || 'S/N'}</span>
+                            <span className="font-bold text-black text-[11px]">{pixInfo.chavePix || 'S/N'}</span>
                           </div>
                           <div>
                             <span className="text-zinc-500 text-[10px] block font-bold">BANCO DE DESTINO:</span>
-                            <span className="font-bold text-black">{pixInfo.bancoPix || 'S/N'}</span>
+                            <span className="font-bold text-black text-[11px]">{pixInfo.bancoPix || 'S/N'}</span>
                           </div>
                         </div>
                       </div>
@@ -2737,30 +2739,30 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   })()}
 
                   {/* SEÇÃO 4: TERMO LEGAL DE RECEBIMENTO E QUITAÇÃO */}
-                  <div className="mb-8 p-3 border border-zinc-400 rounded-lg bg-zinc-50 font-mono text-xs leading-relaxed text-zinc-900 text-justify">
-                    <p className="font-bold mb-1">TERMO DE DECLARAÇÃO E QUITAÇÃO DE FRETE:</p>
+                  <div className="mb-4 p-2.5 border border-zinc-400 rounded-lg bg-zinc-50 font-mono text-[11px] leading-relaxed text-zinc-900 text-justify">
+                    <p className="font-bold mb-0.5">TERMO DE DECLARAÇÃO E QUITAÇÃO DE FRETE:</p>
                     <p>
                       Recebi(emos) da empresa <strong className="uppercase">{companyName}</strong> (CNPJ: {companyCnpj}) a quantia líquida descrita neste recibo, referente aos serviços de transporte rodoviário de cargas contratados sob o CTE/Contrato nº <strong>{resolveCteNumber(printReceiptEntrega)}</strong> na rota <strong>{printReceiptEntrega.origem} ➔ {printReceiptEntrega.destino}</strong>. Por ser expressão da verdade, dou(demos) à pagadora integral e irrevogável quitação da importância discriminada, nada mais tendo a pleitear.
                     </p>
                   </div>
 
                   {/* DATA E ASSINATURAS */}
-                  <div className="pt-4 border-t-2 border-zinc-900 font-mono text-xs">
-                    <p className="text-right font-bold text-zinc-900 mb-8 uppercase">
+                  <div className="pt-2 border-t-2 border-zinc-900 font-mono text-xs">
+                    <p className="text-right font-bold text-zinc-900 mb-4 uppercase text-[11px]">
                       SALVADOR / BA, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.
                     </p>
 
-                    <div className="grid grid-cols-2 gap-8 text-center mt-6">
+                    <div className="grid grid-cols-2 gap-4 text-center mt-3">
                       <div>
                         <div className="border-b-2 border-zinc-900 mb-1 mx-auto w-4/5"></div>
-                        <span className="font-black text-black block uppercase">{companyName}</span>
+                        <span className="font-black text-black block uppercase text-[11px]">{companyName}</span>
                         <span className="text-[10px] text-zinc-600 font-bold block">DEPARTAMENTO FINANCEIRO / EMISSOR</span>
                         <span className="text-[9px] text-zinc-500 block">CNPJ: {companyCnpj}</span>
                       </div>
 
                       <div>
                         <div className="border-b-2 border-zinc-900 mb-1 mx-auto w-4/5"></div>
-                        <span className="font-black text-black block uppercase">{printReceiptEntrega.motorista}</span>
+                        <span className="font-black text-black block uppercase text-[11px]">{printReceiptEntrega.motorista}</span>
                         <span className="text-[10px] text-zinc-600 font-bold block">MOTORISTA BENEFICIÁRIO</span>
                         <span className="text-[9px] text-zinc-500 block">CPF: {printReceiptEntrega.cpfMotorista || 'ASSINATURA DO MOTORISTA'}</span>
                       </div>
@@ -2768,7 +2770,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   </div>
 
                   {/* RODAPÉ DO RECIBO / CÓDIGO DE AUTENTICIDADE */}
-                  <div className="mt-8 pt-3 border-t border-zinc-300 flex justify-between items-center text-[9px] font-mono text-zinc-500">
+                  <div className="mt-4 pt-2 border-t border-zinc-300 flex justify-between items-center text-[9px] font-mono text-zinc-500">
                     <span>SISTEMA RODOVAR MONITORA — MÓDULO DE GESTÃO FINANCEIRA DE PAGAMENTOS</span>
                     <span>AUTENTICAÇÃO DIGITAL: {getReceiptNumber(printReceiptEntrega.id)}-{new Date().getFullYear()}</span>
                   </div>

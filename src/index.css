@@ -86,19 +86,32 @@ body {
 }
 
 /* Print Stylesheet for Official Recibo de Pagamento de Frete (RPA) */
+@page {
+  size: A4 portrait;
+  margin: 6mm;
+}
+
 @media print {
-  body {
+  html, body {
     background-color: #ffffff !important;
     color: #000000 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  
-  /* Hide all app chrome, sidebars, headers, floating buttons */
-  body > * {
+
+  /* Hide everything on page */
+  body * {
     visibility: hidden !important;
   }
 
-  /* Make receipt print container visible and fill page */
-  #recibo-impressao-container, #recibo-impressao-container * {
+  /* Make receipt print container and children visible */
+  #recibo-impressao-container,
+  #recibo-impressao-container * {
     visibility: visible !important;
   }
 
@@ -107,12 +120,16 @@ body {
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
     margin: 0 !important;
-    padding: 24px !important;
+    padding: 12px 16px !important;
     background: #ffffff !important;
     color: #000000 !important;
     box-shadow: none !important;
-    border: none !important;
+    border: 2px solid #000000 !important;
+    border-radius: 4px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   .no-print {
