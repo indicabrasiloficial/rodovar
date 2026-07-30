@@ -93,6 +93,12 @@ export interface Entrega {
   telEmergencia?: string;
   contatoEmergencia?: string;
   placaVeiculo?: string;
+  // Sinalizações Visuais Rápidas
+  locEntregaFeito?: boolean;
+  previsaoClienteFeita?: boolean;
+  // Timestamps de Controle de Pagamentos
+  dataPagoAdiantamentoTimestamp?: number;
+  dataPagoSaldoTimestamp?: number;
 }
 
 export interface AnexoPagamento {

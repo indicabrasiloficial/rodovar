@@ -43,10 +43,9 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { Entrega, AnexoPagamento } from '../types';
-import { getEntregas, updatePagamentoEntrega } from '../db/storage';
+import { getEntregas, updatePagamentoEntrega, updateEntregaField, fetchEntregasFromServer } from '../db/storage';
 import { processAndCompressFile } from '../utils/imageCompressor';
 import { formatDateBR, formatDateTimeBR } from '../utils/date';
-import { parseRapFile } from '../utils/rapParser';
 
 interface PagamentosProps {
   currentUser?: {
@@ -57,7 +56,7 @@ interface PagamentosProps {
   } | null;
 }
 
-type FilterPill = 'TODOS' | 'NO_PRAZO' | 'PAGO_HOJE' | 'ATRASADOS';
+type FilterPill = 'TODOS' | 'PENDENTE_ADIANTAMENTO' | 'PENDENTE_SALDO' | 'PAGO_TOTAL' | 'ATRASADOS';
 
 const extractFromObservacoes = (obs: string) => {
   if (!obs) return { favorecido: '', pix: '', banco: '' };
@@ -99,6 +98,60 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedFilterPill, setSelectedFilterPill] = useState<FilterPill>('TODOS');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  
+  // Real-time tick for 24h cronômetro
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Voice AI Alert Function (Sintetizador de Voz)
+  const speakPetronioVoiceAlert = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance("Petrônio, tem pagamento atrasado de motorista.");
+      utterance.lang = 'pt-BR';
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Helper for 24h Chronometer in Pendente de Saldo
+  const getSaldoTimerInfo = (entrega: Entrega, currentNow: number) => {
+    const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
+    const isSaldoPago = entrega.statusPagamentoSaldo === 'pago';
+
+    if (!isAdiantamentoPago || isSaldoPago) {
+      return { isPendingSaldo: false, hours: 0, minutes: 0, totalMinutes: 0, isOver24h: false, formatted: '' };
+    }
+
+    let startMs: number;
+    if (entrega.dataPagoAdiantamentoTimestamp) {
+      startMs = entrega.dataPagoAdiantamentoTimestamp;
+    } else if (entrega.updated_at) {
+      startMs = new Date(entrega.updated_at).getTime();
+    } else if (entrega.created_at) {
+      startMs = new Date(entrega.created_at).getTime();
+    } else if (entrega.data_coleta) {
+      startMs = new Date(entrega.data_coleta).getTime();
+    } else {
+      startMs = currentNow - (4 * 60 * 60 * 1000); // Default fallback 4h
+    }
+
+    const diffMs = Math.max(0, currentNow - startMs);
+    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const isOver24h = hours >= 24;
+
+    const formatted = `${hours}h ${String(minutes).padStart(2, '0')}m`;
+    return { isPendingSaldo: true, hours, minutes, totalMinutes, isOver24h, formatted };
+  };
   
   // Date selector defaulting to today in YYYY-MM-DD
   const todayIso = new Date().toISOString().split('T')[0];
@@ -263,8 +316,110 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     document.body.removeChild(link);
   };
 
+  // Modal Impressão de Recibo Profissional (RPA)
+  const [printReceiptModalOpen, setPrintReceiptModalOpen] = useState<boolean>(false);
+  const [printReceiptEntrega, setPrintReceiptEntrega] = useState<Entrega | null>(null);
+  const [receiptType, setReceiptType] = useState<'integral' | 'adiantamento' | 'saldo'>('integral');
+  const [companyCnpj] = useState<string>('49.908.710/0001-03');
+  const [companyName] = useState<string>('Rodovar Transportes e Logística');
+  const [companyAddress] = useState<string>('Travessa Acalanto, 531 Jardim das Margaridas, Salvador – BA');
+  const [companyPhone] = useState<string>('(71) 9 9920-2476');
+
+  // Fechar modal no ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && printReceiptModalOpen) {
+        setPrintReceiptModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [printReceiptModalOpen]);
+
+  // Helper para gerar número de recibo RDO + 3 números
+  const getReceiptNumber = (id: string) => {
+    if (!id) return 'RDO101';
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = (hash << 5) - hash + id.charCodeAt(i);
+      hash |= 0;
+    }
+    const num = Math.abs(hash % 900) + 100; // 3 dígitos (100 a 999)
+    return `RDO${num}`;
+  };
+
+  // Helper para resolver número do CTe (inclusive lendo anexos de CTE + numeração)
+  const resolveCteNumber = (e: Entrega) => {
+    if (e.cte && e.cte !== 'S/N' && e.cte.trim() !== '') return e.cte;
+    if (e.contratoNum && e.contratoNum !== 'S/N' && e.contratoNum.trim() !== '') return e.contratoNum;
+
+    const anexos = e.anexosPagamento || (e as any).anexos || [];
+    for (const anexo of anexos) {
+      const nome = anexo.nomeArquivo || anexo.nome || '';
+      const match = nome.match(/(?:cte|ct-e|ctrc)[-_\s]*(\d+)/i) || nome.match(/(\d{3,9})/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return 'S/N';
+  };
+
+  const handleDownloadReceipt = () => {
+    if (!printReceiptEntrega) return;
+    const element = document.getElementById('recibo-impressao-container');
+    if (!element) return;
+
+    const receiptNum = getReceiptNumber(printReceiptEntrega.id);
+    const driverName = (printReceiptEntrega.motorista || 'Motorista').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Recibo_RPA_${receiptNum}_${driverName}.html`;
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Recibo RPA ${receiptNum} - Rodovar Transportes e Logística</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #f4f4f5; padding: 24px; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+    @media print {
+      body { background-color: white; padding: 0; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print mb-6 flex gap-3">
+    <button onclick="window.print()" style="background:#000;color:#ffd600;padding:12px 24px;border-radius:10px;font-weight:bold;cursor:pointer;border:none;font-family:monospace;font-size:14px;display:flex;align-items:center;gap:8px;">
+      🖨️ IMPRIMIR / SALVAR COMO PDF
+    </button>
+  </div>
+  <div style="width:100%;max-width:800px;">
+    ${element.outerHTML}
+  </div>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handlePrint = () => {
-    window.print();
+    if (!printReceiptEntrega && entregas.length > 0) {
+      setPrintReceiptEntrega(entregas[0]);
+    }
+    setPrintReceiptModalOpen(true);
+  };
+
+  const openReceiptModalForEntrega = (entrega: Entrega) => {
+    setPrintReceiptEntrega(entrega);
+    setPrintReceiptModalOpen(true);
   };
 
   // Loading state for upload per file type per card
@@ -343,67 +498,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     }
   };
 
-  // RAP Upload & Auto-Read State
-  const [readingRapState, setReadingRapState] = useState<Record<string, boolean>>({});
-  const [dragOverCardId, setDragOverCardId] = useState<string | null>(null);
-
-  const handleRapFileUpload = async (entrega: Entrega, file: File) => {
-    if (!file) return;
-    setReadingRapState(prev => ({ ...prev, [entrega.id]: true }));
-
-    try {
-      // Compress/process file for storage/preview
-      const processed = await processAndCompressFile(file);
-
-      // Parse text & values from RAP document
-      const parsed = await parseRapFile(file);
-
-      const newAnexo: AnexoPagamento = {
-        id: `anexo_rap_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        tipo: 'rap',
-        url: processed.dataUrl,
-        nomeArquivo: file.name,
-        dataUpload: new Date().toISOString(),
-        tamanhoKb: Math.round(processed.dataUrl.length / 1024)
-      };
-
-      const existingAnexos = entrega.anexosPagamento || [];
-      const updatedAnexos = [...existingAnexos.filter(a => a.tipo !== 'rap'), newAnexo];
-
-      const valAdiantamento = parsed.valorAdiantamento !== undefined ? parsed.valorAdiantamento : (entrega.valorAdiantamento ?? 0);
-      const valSaldo = parsed.valorSaldo !== undefined ? parsed.valorSaldo : (entrega.valorSaldo ?? 0);
-      const freteTotal = parsed.freteTotal || (valAdiantamento + valSaldo > 0 ? valAdiantamento + valSaldo : entrega.frete_motorista || 0);
-      const contratoNum = parsed.contratoNum || entrega.cte || entrega.contratoNum || file.name.replace(/\.[^/.]+$/, "");
-      const favorecido = parsed.favorecidoPix || entrega.favorecidoPix || entrega.motorista;
-
-      await updatePagamentoEntrega(entrega.id, {
-        valorAdiantamento: valAdiantamento,
-        valorSaldo: valSaldo,
-        frete_motorista: freteTotal,
-        cte: contratoNum,
-        contratoNum: contratoNum,
-        favorecidoPix: favorecido,
-        rpaLido: true,
-        rpaNomeArquivo: file.name,
-        anexosPagamento: updatedAnexos
-      });
-
-      const data = getEntregas();
-      setEntregas([...data]);
-
-      alert(`✅ ARQUIVO RAP LIDO E DADOS ATUALIZADOS!\n\n` +
-            `• Contrato/CTRC: ${contratoNum}\n` +
-            `• Adiantamento: R$ ${valAdiantamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-            `• Saldo: R$ ${valSaldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n` +
-            `Os scripts de pagamento foram atualizados com segurança.`);
-    } catch (err) {
-      console.error('Erro ao ler arquivo RAP:', err);
-      alert('Erro ao ler arquivo RAP. Verifique o formato e tente novamente.');
-    } finally {
-      setReadingRapState(prev => ({ ...prev, [entrega.id]: false }));
-    }
-  };
-
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -469,24 +563,27 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
         }
       }
 
+      const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
+      const isSaldoPago = entrega.statusPagamentoSaldo === 'pago';
+      const timerInfo = getSaldoTimerInfo(entrega, nowMs);
+
       // Pill Filter Match
-      const status = getPaymentCalculatedStatus(entrega);
-      if (selectedFilterPill === 'NO_PRAZO') {
-        return status === 'NO_PRAZO';
+      if (selectedFilterPill === 'PENDENTE_ADIANTAMENTO') {
+        return !isAdiantamentoPago;
+      }
+      if (selectedFilterPill === 'PENDENTE_SALDO') {
+        return isAdiantamentoPago && !isSaldoPago;
+      }
+      if (selectedFilterPill === 'PAGO_TOTAL') {
+        return isAdiantamentoPago && isSaldoPago;
       }
       if (selectedFilterPill === 'ATRASADOS') {
-        return status === 'ATRASADO';
-      }
-      if (selectedFilterPill === 'PAGO_HOJE') {
-        const isPaidAd = entrega.statusPagamentoAdiantamento === 'pago';
-        const isPaidSal = entrega.statusPagamentoSaldo === 'pago';
-        const isPaidToday = (entrega.dataPagoAdiantamento === formatDateBR(todayIso) || entrega.dataPagoSaldo === formatDateBR(todayIso) || isPaidAd || isPaidSal);
-        return isPaidToday;
+        return (timerInfo.isPendingSaldo && timerInfo.isOver24h) || getPaymentCalculatedStatus(entrega) === 'ATRASADO';
       }
 
       return true; // TODOS
     });
-  }, [entregas, selectedDate, searchTerm, selectedFilterPill, todayIso]);
+  }, [entregas, selectedDate, searchTerm, selectedFilterPill, todayIso, nowMs]);
 
   // Pagination calculations (20 motoristas por vez para otimizar cota)
   const totalPages = Math.max(1, Math.ceil(filteredEntregas.length / ITEMS_PER_PAGE));
@@ -498,8 +595,9 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   // Dynamic Pill Counters
   const counters = useMemo(() => {
     let todos = 0;
-    let noPrazo = 0;
-    let pagoHoje = 0;
+    let pendenteAdiantamento = 0;
+    let pendenteSaldo = 0;
+    let pagoTotal = 0;
     let atrasados = 0;
 
     entregas.forEach(entrega => {
@@ -517,16 +615,27 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
       }
 
       todos++;
-      const st = getPaymentCalculatedStatus(entrega);
-      if (st === 'NO_PRAZO') noPrazo++;
-      if (st === 'ATRASADO') atrasados++;
-      if (entrega.statusPagamentoAdiantamento === 'pago' || entrega.statusPagamentoSaldo === 'pago') {
-        pagoHoje++;
+      const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
+      const isSaldoPago = entrega.statusPagamentoSaldo === 'pago';
+      const timerInfo = getSaldoTimerInfo(entrega, nowMs);
+
+      if (!isAdiantamentoPago) {
+        pendenteAdiantamento++;
+      } else if (!isSaldoPago) {
+        pendenteSaldo++;
+      }
+
+      if (isAdiantamentoPago && isSaldoPago) {
+        pagoTotal++;
+      }
+
+      if ((timerInfo.isPendingSaldo && timerInfo.isOver24h) || getPaymentCalculatedStatus(entrega) === 'ATRASADO') {
+        atrasados++;
       }
     });
 
-    return { todos, noPrazo, pagoHoje, atrasados };
-  }, [entregas, selectedDate, searchTerm, todayIso]);
+    return { todos, pendenteAdiantamento, pendenteSaldo, pagoTotal, atrasados };
+  }, [entregas, selectedDate, searchTerm, todayIso, nowMs]);
 
   // Toggle card attachments accordion
   const toggleCardAccordion = (id: string) => {
@@ -605,26 +714,32 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     if (opcao === 'adiantamento') {
       payload = {
         statusPagamentoAdiantamento: 'pago',
-        dataPagoAdiantamento: dataHojeBR
+        dataPagoAdiantamento: dataHojeBR,
+        dataPagoAdiantamentoTimestamp: Date.now()
       };
     } else if (opcao === 'saldo') {
       payload = {
         statusPagamentoSaldo: 'pago',
-        dataPagoSaldo: dataHojeBR
+        dataPagoSaldo: dataHojeBR,
+        dataPagoSaldoTimestamp: Date.now()
       };
     } else if (opcao === 'ambos') {
       payload = {
         statusPagamentoAdiantamento: 'pago',
         statusPagamentoSaldo: 'pago',
         dataPagoAdiantamento: dataHojeBR,
-        dataPagoSaldo: dataHojeBR
+        dataPagoSaldo: dataHojeBR,
+        dataPagoAdiantamentoTimestamp: Date.now(),
+        dataPagoSaldoTimestamp: Date.now()
       };
     } else if (opcao === 'reset') {
       payload = {
         statusPagamentoAdiantamento: 'pendente',
         statusPagamentoSaldo: 'pendente',
         dataPagoAdiantamento: null,
-        dataPagoSaldo: null
+        dataPagoSaldo: null,
+        dataPagoAdiantamentoTimestamp: null,
+        dataPagoSaldoTimestamp: null
       };
     }
 
@@ -788,6 +903,22 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               <span className="hidden md:inline">{hideValues ? 'Valores Ocultos' : 'Valores Visíveis'}</span>
             </button>
 
+            {/* Quota Protection & Manual Sync */}
+            <button
+              type="button"
+              onClick={async () => {
+                setLoading(true);
+                await fetchEntregasFromServer(true);
+                setEntregas([...getEntregas()]);
+                setLoading(false);
+              }}
+              title="Proteção de Cota Ativa: Atualizar dados diretamente do Firebase"
+              className="p-2 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-700/60 text-cyan-300 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-mono font-bold shadow-md"
+            >
+              <Zap className="w-4 h-4 text-cyan-400" />
+              <span className="hidden xl:inline">Sincronizar Cota</span>
+            </button>
+
             {/* Export Excel */}
             <button
               type="button"
@@ -797,17 +928,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
               <span className="hidden xl:inline">Excel</span>
-            </button>
-
-            {/* Print */}
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-mono font-bold shadow-md"
-              title="Imprimir relatório"
-            >
-              <Printer className="w-4 h-4 text-[#FFD600]" />
-              <span className="hidden xl:inline">Imprimir</span>
             </button>
 
             {/* Refresh */}
@@ -847,59 +967,96 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               </span>
             </button>
 
-            {/* NO PRAZO */}
+            {/* PENDENTE DE ADIANTAMENTO */}
             <button
-              onClick={() => setSelectedFilterPill('NO_PRAZO')}
+              onClick={() => setSelectedFilterPill('PENDENTE_ADIANTAMENTO')}
               className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-2 border ${
-                selectedFilterPill === 'NO_PRAZO'
+                selectedFilterPill === 'PENDENTE_ADIANTAMENTO'
                   ? 'bg-amber-500 text-zinc-950 border-amber-400 font-extrabold shadow-[0_0_15px_rgba(245,158,11,0.3)]'
                   : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-amber-400 hover:border-amber-900/50'
               }`}
             >
-              <Clock className="w-3.5 h-3.5" />
-              <span>NO PRAZO</span>
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <span>PENDENTE ADIANTAMENTO</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                selectedFilterPill === 'NO_PRAZO' ? 'bg-zinc-950 text-amber-400' : 'bg-zinc-800 text-amber-400'
+                selectedFilterPill === 'PENDENTE_ADIANTAMENTO' ? 'bg-zinc-950 text-amber-400' : 'bg-zinc-800 text-amber-400'
               }`}>
-                {counters.noPrazo}
+                {counters.pendenteAdiantamento}
               </span>
             </button>
 
-            {/* PAGO HOJE */}
+            {/* PENDENTE DE SALDO */}
             <button
-              onClick={() => setSelectedFilterPill('PAGO_HOJE')}
+              onClick={() => setSelectedFilterPill('PENDENTE_SALDO')}
               className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-2 border ${
-                selectedFilterPill === 'PAGO_HOJE'
+                selectedFilterPill === 'PENDENTE_SALDO'
+                  ? 'bg-purple-600 text-white border-purple-400 font-extrabold shadow-[0_0_15px_rgba(168,85,247,0.3)]'
+                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-purple-300 hover:border-purple-900/50'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-purple-300" />
+              <span>PENDENTE DE SALDO</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                selectedFilterPill === 'PENDENTE_SALDO' ? 'bg-zinc-950 text-purple-300' : 'bg-zinc-800 text-purple-300'
+              }`}>
+                {counters.pendenteSaldo}
+              </span>
+            </button>
+
+            {/* PAGO TOTAL */}
+            <button
+              onClick={() => setSelectedFilterPill('PAGO_TOTAL')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-2 border ${
+                selectedFilterPill === 'PAGO_TOTAL'
                   ? 'bg-emerald-500 text-zinc-950 border-emerald-400 font-extrabold shadow-[0_0_15px_rgba(16,185,129,0.3)]'
                   : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-900/50'
               }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>PAGO HOJE</span>
+              <span>PAGO TOTAL</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                selectedFilterPill === 'PAGO_HOJE' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-emerald-400'
+                selectedFilterPill === 'PAGO_TOTAL' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-emerald-400'
               }`}>
-                {counters.pagoHoje}
+                {counters.pagoTotal}
               </span>
             </button>
 
-            {/* ATRASADOS */}
+            {/* ATRASADOS (>24H) */}
             <button
-              onClick={() => setSelectedFilterPill('ATRASADOS')}
+              onClick={() => {
+                setSelectedFilterPill('ATRASADOS');
+                if (counters.atrasados > 0) {
+                  speakPetronioVoiceAlert();
+                }
+              }}
               className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-2 border ${
                 selectedFilterPill === 'ATRASADOS'
-                  ? 'bg-red-600 text-white border-red-500 font-extrabold shadow-[0_0_15px_rgba(220,38,38,0.3)]'
+                  ? 'bg-red-600 text-white border-red-500 font-extrabold shadow-[0_0_15px_rgba(220,38,38,0.3)] animate-pulse'
+                  : counters.atrasados > 0
+                  ? 'bg-red-950/40 border-red-800/80 text-red-400 hover:bg-red-900/50'
                   : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-red-400 hover:border-red-900/50'
               }`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
-              <span>ATRASADOS</span>
+              <span>ATRASADOS (&gt;24H)</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                 selectedFilterPill === 'ATRASADOS' ? 'bg-zinc-950 text-red-400' : 'bg-zinc-800 text-red-400'
               }`}>
                 {counters.atrasados}
               </span>
             </button>
+
+            {/* BOTÃO ALERTA DE VOZ IA */}
+            {counters.atrasados > 0 && (
+              <button
+                type="button"
+                onClick={speakPetronioVoiceAlert}
+                className="px-3 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-mono font-black text-xs uppercase rounded-xl shadow-[0_0_12px_rgba(239,68,68,0.4)] flex items-center gap-1.5 cursor-pointer animate-pulse"
+                title="Ouvir Alerta de Voz IA: Petrônio, tem pagamento atrasado de motorista."
+              >
+                <span>🔊 ALERTA IA</span>
+              </button>
+            )}
 
           </div>
 
@@ -1192,12 +1349,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               const overallStatus = getPaymentCalculatedStatus(entrega);
               const isAccordionOpen = !!expandedCardIds[entrega.id];
               const pixInfo = resolveDriverPixInfo(entrega);
+              const timerInfo = getSaldoTimerInfo(entrega, nowMs);
 
               // Check if CTA / RPA has been loaded
               const hasRpa = !!entrega.cte || (Number(entrega.frete_motorista) > 0 && !!pixInfo.favorecidoPix);
-
-              // Check if RAP file has been loaded & parsed
-              const isRapLoaded = !!entrega.rpaLido || (entrega.anexosPagamento && entrega.anexosPagamento.some(a => a.tipo === 'rap'));
 
               // Values calculation: Prioritize manually entered or read values, fallback to 70%/30% estimation of total freight
               const totalMot = Number(entrega.frete_motorista) || 0;
@@ -1228,7 +1383,11 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                 <div
                   key={entrega.id}
                   className={`bg-zinc-950 border rounded-2xl p-5 shadow-xl hover:border-zinc-800 transition-all space-y-4 flex flex-col justify-between relative ${
-                    !hasRpa || !isRapLoaded ? 'border-amber-900/80 shadow-[0_0_15px_rgba(245,158,11,0.12)]' : 'border-zinc-900'
+                    timerInfo.isOver24h
+                      ? 'border-red-600/90 shadow-[0_0_25px_rgba(239,68,68,0.4)] ring-2 ring-red-600/60 bg-red-950/10'
+                      : !hasRpa
+                      ? 'border-amber-900/80 shadow-[0_0_15px_rgba(245,158,11,0.12)]'
+                      : 'border-zinc-900'
                   }`}
                 >
                   
@@ -1261,9 +1420,9 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>PAGO</span>
                           </span>
-                        ) : overallStatus === 'ATRASADO' ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-red-950/90 text-red-400 border border-red-700/80 shadow-[0_0_10px_rgba(239,68,68,0.2)]">
-                            <AlertTriangle className="w-3.5 h-3.5 animate-pulse" />
+                        ) : timerInfo.isOver24h || overallStatus === 'ATRASADO' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-red-950/90 text-red-400 border border-red-700/80 shadow-[0_0_10px_rgba(239,68,68,0.4)] animate-pulse">
+                            <AlertTriangle className="w-3.5 h-3.5 animate-spin text-red-400" />
                             <span>ATRASADO</span>
                           </span>
                         ) : (
@@ -1275,71 +1434,60 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                       </div>
                     </div>
 
-                    {/* ÁREA DE CARREGAMENTO DO ARQUIVO RAP NO CARD */}
-                    <div 
-                      onDragOver={(e) => { e.preventDefault(); setDragOverCardId(entrega.id); }}
-                      onDragLeave={() => setDragOverCardId(null)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDragOverCardId(null);
-                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                          handleRapFileUpload(entrega, e.dataTransfer.files[0]);
-                        }
-                      }}
-                      className={`border-2 border-dashed rounded-xl p-2.5 text-center transition-all relative ${
-                        dragOverCardId === entrega.id
-                          ? 'border-[#FFD600] bg-[#FFD600]/20 text-white shadow-[0_0_15px_rgba(255,214,0,0.3)]'
-                          : !isRapLoaded
-                          ? 'border-amber-500/70 bg-amber-950/30 hover:border-[#FFD600] hover:bg-amber-950/50 text-amber-300'
-                          : 'border-emerald-800/60 bg-emerald-950/20 hover:border-emerald-500 text-emerald-300'
-                      }`}
-                    >
-                      <label className="cursor-pointer block">
-                        <input
-                          type="file"
-                          accept="application/pdf,image/*,.pdf,.doc,.docx"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              handleRapFileUpload(entrega, e.target.files[0]);
-                            }
-                          }}
-                          disabled={readingRapState[entrega.id]}
-                          className="hidden"
-                        />
-                        {readingRapState[entrega.id] ? (
-                          <div className="flex items-center justify-center gap-2 py-1">
-                            <RefreshCw className="w-4 h-4 animate-spin text-[#FFD600]" />
-                            <span className="text-[11px] font-mono font-bold text-white uppercase">
-                              LENDO ARQUIVO RAP E ATUALIZANDO DADOS...
+                    {/* BLOCO TEMPORIZADOR 24H E STATUS DE ADIANTAMENTO/SALDO */}
+                    {timerInfo.isPendingSaldo ? (
+                      <div className={`p-3 rounded-xl border font-mono text-xs flex items-center justify-between gap-2 shadow-lg transition-all ${
+                        timerInfo.isOver24h
+                          ? 'bg-red-950/90 border-red-500 text-red-200 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.4)] ring-2 ring-red-500/50'
+                          : 'bg-purple-950/40 border-purple-500/60 text-purple-200'
+                      }`}>
+                        <div className="flex items-center gap-2 font-black">
+                          {timerInfo.isOver24h ? (
+                            <AlertTriangle className="w-5 h-5 text-red-400 animate-spin shrink-0" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-purple-400 shrink-0" />
+                          )}
+                          <div className="flex flex-col">
+                            <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold">
+                              {timerInfo.isOver24h ? '🚨 SALDO ATRASADO (>24H)' : '⏱️ PENDENTE DE SALDO'}
+                            </span>
+                            <span className={`text-sm font-black tracking-tight ${timerInfo.isOver24h ? 'text-red-400' : 'text-purple-300'}`}>
+                              {timerInfo.formatted} {timerInfo.isOver24h && '• ALERTA CRÍTICO'}
                             </span>
                           </div>
-                        ) : !isRapLoaded ? (
-                          <div className="flex items-center justify-between gap-2 px-1">
-                            <div className="flex items-center gap-2 truncate">
-                              <FileUp className="w-4.5 h-4.5 text-[#FFD600] animate-bounce shrink-0" />
-                              <span className="text-[11px] font-mono font-black uppercase text-[#FFD600] tracking-wider truncate">
-                                JOGAR ARQUIVO RAP AQUI (RAP-*.PDF)
-                              </span>
-                            </div>
-                            <span className="px-2 py-0.5 bg-[#FFD600] text-black font-black text-[9px] uppercase rounded-md shrink-0 shadow-md">
-                              CARREGAR
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between gap-2 px-1">
-                            <div className="flex items-center gap-2 truncate">
-                              <FileCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                              <span className="text-[11px] font-mono font-bold text-emerald-300 truncate">
-                                RAP LIDO: {entrega.rpaNomeArquivo || 'RAP.pdf'}
-                              </span>
-                            </div>
-                            <span className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[9px] uppercase font-bold rounded-md shrink-0">
-                              TROCAR RAP
-                            </span>
-                          </div>
+                        </div>
+                        {timerInfo.isOver24h && (
+                          <button
+                            type="button"
+                            onClick={speakPetronioVoiceAlert}
+                            className="px-2.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer shrink-0 shadow-md"
+                            title="Ouvir Alerta de Voz IA: Petrônio, tem pagamento atrasado de motorista."
+                          >
+                            <span>🔊 VOZ IA</span>
+                          </button>
                         )}
-                      </label>
-                    </div>
+                      </div>
+                    ) : !isAdiantamentoPago ? (
+                      <div className="bg-amber-950/30 border border-amber-600/40 rounded-xl p-2.5 text-center flex items-center justify-between px-3">
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold text-amber-300">
+                          <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>PENDENTE DE ADIANTAMENTO</span>
+                        </div>
+                        <span className="text-[10px] font-mono bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-bold">
+                          AGUARDANDO 70%
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="bg-emerald-950/30 border border-emerald-600/40 rounded-xl p-2.5 text-center flex items-center justify-between px-3">
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold text-emerald-300">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>PAGAMENTOS CONCLUÍDOS</span>
+                        </div>
+                        <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-bold">
+                          100% PAGO
+                        </span>
+                      </div>
+                    )}
 
                     {/* Rota Resumida: Origem ➔ Destino */}
                     <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 text-xs font-mono flex items-center justify-between gap-2 text-zinc-300">
@@ -1712,17 +1860,29 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
 
                 </div>
 
-                {/* 4. RODAPÉ DO CARD — DOIS BOTÕES GRANDES LADO A LADO */}
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-900">
+                {/* RODAPÉ DO CARD — TRES BOTÕES LADO A LADO */}
+                <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-zinc-900">
                   
                   {/* Botão GERAR SCRIPT */}
                   <button
                     type="button"
                     onClick={() => setScriptModalEntrega(entrega)}
-                    className="px-3 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] text-zinc-200 hover:text-[#FFD600] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    className="px-2 py-2.5 rounded-xl text-[11px] font-mono font-bold uppercase tracking-wider bg-zinc-900 border border-zinc-800 hover:border-[#FFD600] text-zinc-200 hover:text-[#FFD600] transition-all cursor-pointer flex items-center justify-center gap-1"
+                    title="Gerar script de pagamento WhatsApp"
                   >
-                    <FileCode className="w-4 h-4 text-[#FFD600]" />
-                    <span>Gerar Script</span>
+                    <FileCode className="w-3.5 h-3.5 text-[#FFD600]" />
+                    <span>Script</span>
+                  </button>
+
+                  {/* Botão IMPRIMIR RECIBO (RPA) */}
+                  <button
+                    type="button"
+                    onClick={() => openReceiptModalForEntrega(entrega)}
+                    className="px-2 py-2.5 rounded-xl text-[11px] font-mono font-bold uppercase tracking-wider bg-zinc-900 border border-zinc-800 hover:border-cyan-400 text-zinc-200 hover:text-cyan-300 transition-all cursor-pointer flex items-center justify-center gap-1"
+                    title="Imprimir recibo oficial de pagamento RPA"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Recibo</span>
                   </button>
 
                   {/* Botão MARCAR COMO PAGO (COM DROPDOWN) */}
@@ -1730,11 +1890,11 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                     <button
                       type="button"
                       onClick={() => setPagoDropdownOpenId(pagoDropdownOpenId === entrega.id ? null : entrega.id)}
-                      className="w-full px-3 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider bg-emerald-950 border border-emerald-600 hover:bg-emerald-900 text-emerald-300 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_10px_rgba(16,185,129,0.15)]"
+                      className="w-full px-2 py-2.5 rounded-xl text-[11px] font-mono font-bold uppercase tracking-wider bg-emerald-950 border border-emerald-600 hover:bg-emerald-900 text-emerald-300 transition-all cursor-pointer flex items-center justify-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.15)]"
                     >
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>Marcar Pago</span>
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Pago</span>
+                      <ChevronDown className="w-3 h-3" />
                     </button>
 
                     {/* Dropdown Menu */}
@@ -2246,6 +2406,412 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL IMPRESSÃO DE RECIBO PROFISSIONAL (RPA / FRETE)    */}
+      {/* ======================================================== */}
+      {printReceiptModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPrintReceiptModalOpen(false);
+          }}
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-[120] flex items-center justify-center p-2 sm:p-6 overflow-y-auto no-print"
+        >
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn my-auto">
+            {/* HEADER DO MODAL */}
+            <div className="p-4 sm:p-5 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between gap-3 no-print">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-xl">
+                  <Printer className="w-6 h-6 text-[#FFD600]" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-mono font-black text-white uppercase tracking-tight flex items-center gap-2">
+                    EMISSÃO DE RECIBO PROFISSIONAL (RPA)
+                  </h3>
+                  <p className="text-xs font-mono text-zinc-400">
+                    Gerador oficial de Recibo de Pagamento de Frete a Motorista com CNPJ RODOVAR
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPrintReceiptModalOpen(false)}
+                  className="px-3 py-1.5 bg-red-950/80 border border-red-700/80 hover:bg-red-900 text-red-200 text-xs font-mono font-bold uppercase rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <X className="w-4 h-4 text-red-400" />
+                  <span>FECHAR</span>
+                </button>
+              </div>
+            </div>
+
+            {/* PAINEL DE CONTROLE / SELEÇÃO */}
+            <div className="p-4 bg-zinc-900/80 border-b border-zinc-800 grid grid-cols-1 md:grid-cols-3 gap-3 no-print font-mono text-xs">
+              {/* SELETOR DE FRETE / MOTORISTA */}
+              <div>
+                <label className="block text-zinc-400 text-[10px] uppercase font-bold mb-1">
+                  Selecione o Motorista / Carga:
+                </label>
+                <select
+                  value={printReceiptEntrega?.id || ''}
+                  onChange={(e) => {
+                    const selected = entregas.find(ent => ent.id === e.target.value);
+                    if (selected) setPrintReceiptEntrega(selected);
+                  }}
+                  className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-lg p-2 focus:border-[#FFD600] outline-none truncate"
+                >
+                  {entregas.map((ent) => (
+                    <option key={ent.id} value={ent.id}>
+                      {ent.motorista} • CTe: {resolveCteNumber(ent)} ({ent.origem} ➔ {ent.destino})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* TIPO DE RECIBO */}
+              <div>
+                <label className="block text-zinc-400 text-[10px] uppercase font-bold mb-1">
+                  Modalidade do Recibo:
+                </label>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setReceiptType('integral')}
+                    className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase transition-all border ${
+                      receiptType === 'integral'
+                        ? 'bg-emerald-500 text-zinc-950 border-emerald-400 font-extrabold shadow-md'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    100% Total
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReceiptType('adiantamento')}
+                    className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase transition-all border ${
+                      receiptType === 'adiantamento'
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400 font-extrabold shadow-md'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    70% Adiant.
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReceiptType('saldo')}
+                    className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase transition-all border ${
+                      receiptType === 'saldo'
+                        ? 'bg-purple-600 text-white border-purple-400 font-extrabold shadow-md'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    30% Saldo
+                  </button>
+                </div>
+              </div>
+
+              {/* BOTÕES IMPRIMIR, DOWNLOAD E FECHAR */}
+              <div className="flex items-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-[#FFD600] to-amber-500 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(255,214,0,0.3)] flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                >
+                  <Printer className="w-4 h-4 text-black" />
+                  <span>IMPRIMIR</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadReceipt}
+                  className="flex-1 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                >
+                  <Download className="w-4 h-4 text-black" />
+                  <span>BAIXAR RECIBO</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPrintReceiptModalOpen(false)}
+                  className="py-2.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs uppercase tracking-wider rounded-xl border border-zinc-700 transition-all cursor-pointer"
+                >
+                  SAIR
+                </button>
+              </div>
+            </div>
+
+            {/* ÁREA DE RECIBO FORMATADA PARA IMPRESSÃO E PREVIEW */}
+            <div className="p-4 sm:p-8 overflow-y-auto bg-zinc-900/60 flex-1">
+              {printReceiptEntrega ? (
+                <div
+                  id="recibo-impressao-container"
+                  className="bg-white text-black p-6 sm:p-10 rounded-xl shadow-2xl border-4 border-double border-zinc-900 max-w-3xl mx-auto font-sans leading-relaxed text-left text-xs sm:text-sm"
+                >
+                  {/* CABEÇALHO DA EMPRESA COM CNPJ */}
+                  <div className="border-b-2 border-zinc-900 pb-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-black text-[#FFD600] font-black text-base flex items-center justify-center rounded font-mono">
+                          R
+                        </div>
+                        <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-zinc-900 font-mono">
+                          {companyName}
+                        </h1>
+                      </div>
+                      <p className="text-[11px] font-mono font-bold text-zinc-800 mt-1">
+                        CNPJ: <span className="text-black font-extrabold">{companyCnpj}</span>
+                      </p>
+                      <p className="text-[10px] font-mono text-zinc-600">
+                        {companyAddress}
+                      </p>
+                      <p className="text-[10px] font-mono text-zinc-600 font-semibold mt-0.5">
+                        Tel: {companyPhone}
+                      </p>
+                    </div>
+
+                    <div className="text-left sm:text-right font-mono bg-zinc-100 p-3 rounded-lg border border-zinc-300 w-full sm:w-auto">
+                      <span className="block text-[10px] uppercase font-bold text-zinc-500">
+                        NÚMERO DO RECIBO
+                      </span>
+                      <span className="text-base font-black text-black">
+                        {getReceiptNumber(printReceiptEntrega.id)}
+                      </span>
+                      <span className="block text-[9px] text-zinc-600 font-semibold mt-0.5">
+                        EMISSÃO: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* TÍTULO DO RECIBO */}
+                  <div className="bg-zinc-900 text-white text-center py-2 px-4 font-mono font-black uppercase text-sm sm:text-base tracking-wider rounded mb-5 shadow-sm">
+                    RECIBO DE PAGAMENTO DE FRETE A MOTORISTA (RPA)
+                    <span className="block text-[10px] font-bold text-amber-300 tracking-normal mt-0.5">
+                      {receiptType === 'integral'
+                        ? 'QUITAÇÃO INTEGRAL (100% DO FRETE)'
+                        : receiptType === 'adiantamento'
+                        ? 'PARCELA 01/02 - ADIANTAMENTO DE FRETE (70%)'
+                        : 'PARCELA 02/02 - QUITAÇÃO DE SALDO DE FRETE (30%)'}
+                    </span>
+                  </div>
+
+                  {/* SEÇÃO 1: DADOS DO MOTORISTA E VEÍCULO */}
+                  <div className="mb-5 border border-zinc-300 rounded-lg p-3 bg-zinc-50 font-mono text-xs">
+                    <h2 className="font-black text-zinc-900 uppercase text-[11px] border-b border-zinc-300 pb-1 mb-2 flex items-center justify-between">
+                      <span>1. IDENTIFICAÇÃO DO MOTORISTA E CONTRATO DE CARGA</span>
+                      <span className="text-[9px] text-zinc-500 font-normal">DOCUMENTO OFICIAL</span>
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
+                      <div>
+                        <span className="text-zinc-500 text-[10px] block font-bold">MOTORISTA CONTRATADO:</span>
+                        <span className="font-bold text-black text-sm uppercase">{printReceiptEntrega.motorista}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-[10px] block font-bold">CPF / CNPJ MOTORISTA:</span>
+                        <span className="font-bold text-black">{printReceiptEntrega.cpfMotorista || 'CADASTRADO NO CONTRATO'}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-[10px] block font-bold">VEÍCULO / PLACA:</span>
+                        <span className="font-bold text-black">{printReceiptEntrega.placaVeiculo || 'VEÍCULO RODOVIÁRIO DE CARGA'}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-[10px] block font-bold">Nº CTE / CONTRATO / NFE:</span>
+                        <span className="font-black text-blue-900">{resolveCteNumber(printReceiptEntrega)}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-[10px] block font-bold">CLIENTE EMBARCADOR:</span>
+                        <span className="font-bold text-black">{printReceiptEntrega.cliente}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-[10px] block font-bold">ROTA DE TRANSPORTE:</span>
+                        <span className="font-bold text-black">{printReceiptEntrega.origem} ➔ {printReceiptEntrega.destino}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SEÇÃO 2: DEMONSTRATIVO FINANCEIRO DO FRETE */}
+                  <div className="mb-5 border border-zinc-300 rounded-lg overflow-hidden font-mono text-xs">
+                    <div className="bg-zinc-200 p-2 font-black text-zinc-900 uppercase text-[11px] border-b border-zinc-300">
+                      2. DEMONSTRATIVO FINANCEIRO DO FRETE
+                    </div>
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-zinc-100 text-[10px] text-zinc-600 uppercase border-b border-zinc-300">
+                          <th className="p-2 border-r border-zinc-300">DESCRIÇÃO DA PARCELA</th>
+                          <th className="p-2 border-r border-zinc-300 text-center">% PERC.</th>
+                          <th className="p-2 border-r border-zinc-300 text-center">DATA PAGO</th>
+                          <th className="p-2 border-r border-zinc-300 text-center">STATUS</th>
+                          <th className="p-2 text-right">VALOR (R$)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 text-xs">
+                        <tr>
+                          <td className="p-2 border-r border-zinc-300 font-bold">FRETE BRUTO CONTRATADO</td>
+                          <td className="p-2 border-r border-zinc-300 text-center">100%</td>
+                          <td className="p-2 border-r border-zinc-300 text-center">-</td>
+                          <td className="p-2 border-r border-zinc-300 text-center font-bold">ACORDADO</td>
+                          <td className="p-2 text-right font-bold text-black">
+                            R$ {(Number(printReceiptEntrega.frete_motorista) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                        <tr className={receiptType === 'adiantamento' ? 'bg-amber-50 font-bold' : ''}>
+                          <td className="p-2 border-r border-zinc-300">ADIANTAMENTO DE FRETE (PARCELA 01)</td>
+                          <td className="p-2 border-r border-zinc-300 text-center">70%</td>
+                          <td className="p-2 border-r border-zinc-300 text-center">
+                            {printReceiptEntrega.dataPagoAdiantamento || new Date().toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="p-2 border-r border-zinc-300 text-center font-bold text-emerald-800">
+                            {printReceiptEntrega.statusPagamentoAdiantamento === 'pago' ? '✓ PAGO' : 'PENDENTE'}
+                          </td>
+                          <td className="p-2 text-right font-black text-zinc-900">
+                            R$ {((printReceiptEntrega.valorAdiantamento !== undefined && printReceiptEntrega.valorAdiantamento !== null)
+                              ? Number(printReceiptEntrega.valorAdiantamento)
+                              : (Number(printReceiptEntrega.frete_motorista) || 0) * 0.7).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                        <tr className={receiptType === 'saldo' ? 'bg-purple-50 font-bold' : ''}>
+                          <td className="p-2 border-r border-zinc-300">SALDO FINAL DE FRETE (PARCELA 02)</td>
+                          <td className="p-2 border-r border-zinc-300 text-center">30%</td>
+                          <td className="p-2 border-r border-zinc-300 text-center">
+                            {printReceiptEntrega.dataPagoSaldo || new Date().toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="p-2 border-r border-zinc-300 text-center font-bold text-purple-900">
+                            {printReceiptEntrega.statusPagamentoSaldo === 'pago' ? '✓ PAGO' : 'PENDENTE'}
+                          </td>
+                          <td className="p-2 text-right font-black text-zinc-900">
+                            R$ {((printReceiptEntrega.valorSaldo !== undefined && printReceiptEntrega.valorSaldo !== null)
+                              ? Number(printReceiptEntrega.valorSaldo)
+                              : (Number(printReceiptEntrega.frete_motorista) || 0) * 0.3).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-zinc-900 text-white font-black text-sm">
+                          <td colSpan={4} className="p-2.5 text-right uppercase tracking-wider">
+                            VALOR TOTAL DESTE RECIBO ({receiptType.toUpperCase()}):
+                          </td>
+                          <td className="p-2.5 text-right text-amber-300">
+                            R$ {(receiptType === 'integral'
+                              ? (Number(printReceiptEntrega.frete_motorista) || 0)
+                              : receiptType === 'adiantamento'
+                              ? ((printReceiptEntrega.valorAdiantamento !== undefined && printReceiptEntrega.valorAdiantamento !== null)
+                                  ? Number(printReceiptEntrega.valorAdiantamento)
+                                  : (Number(printReceiptEntrega.frete_motorista) || 0) * 0.7)
+                              : ((printReceiptEntrega.valorSaldo !== undefined && printReceiptEntrega.valorSaldo !== null)
+                                  ? Number(printReceiptEntrega.valorSaldo)
+                                  : (Number(printReceiptEntrega.frete_motorista) || 0) * 0.3)
+                            ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* SEÇÃO 3: FORMA DE PAGAMENTO & CHAVE PIX */}
+                  {(() => {
+                    const pixInfo = resolveDriverPixInfo(printReceiptEntrega);
+                    return (
+                      <div className="mb-5 border border-zinc-300 rounded-lg p-3 bg-zinc-50 font-mono text-xs">
+                        <h2 className="font-black text-zinc-900 uppercase text-[11px] border-b border-zinc-300 pb-1 mb-2">
+                          3. DADOS DO PAGAMENTO BANCÁRIO (TRANSFERÊNCIA PIX)
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div>
+                            <span className="text-zinc-500 text-[10px] block font-bold">FAVORECIDO PIX:</span>
+                            <span className="font-bold text-black">{pixInfo.favorecidoPix || printReceiptEntrega.motorista}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500 text-[10px] block font-bold">CHAVE PIX CADASTRADA:</span>
+                            <span className="font-bold text-black">{pixInfo.chavePix || 'S/N'}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500 text-[10px] block font-bold">BANCO DE DESTINO:</span>
+                            <span className="font-bold text-black">{pixInfo.bancoPix || 'S/N'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* SEÇÃO 4: TERMO LEGAL DE RECEBIMENTO E QUITAÇÃO */}
+                  <div className="mb-8 p-3 border border-zinc-400 rounded-lg bg-zinc-50 font-mono text-xs leading-relaxed text-zinc-900 text-justify">
+                    <p className="font-bold mb-1">TERMO DE DECLARAÇÃO E QUITAÇÃO DE FRETE:</p>
+                    <p>
+                      Recebi(emos) da empresa <strong className="uppercase">{companyName}</strong> (CNPJ: {companyCnpj}) a quantia líquida descrita neste recibo, referente aos serviços de transporte rodoviário de cargas contratados sob o CTE/Contrato nº <strong>{resolveCteNumber(printReceiptEntrega)}</strong> na rota <strong>{printReceiptEntrega.origem} ➔ {printReceiptEntrega.destino}</strong>. Por ser expressão da verdade, dou(demos) à pagadora integral e irrevogável quitação da importância discriminada, nada mais tendo a pleitear.
+                    </p>
+                  </div>
+
+                  {/* DATA E ASSINATURAS */}
+                  <div className="pt-4 border-t-2 border-zinc-900 font-mono text-xs">
+                    <p className="text-right font-bold text-zinc-900 mb-8 uppercase">
+                      SALVADOR / BA, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-8 text-center mt-6">
+                      <div>
+                        <div className="border-b-2 border-zinc-900 mb-1 mx-auto w-4/5"></div>
+                        <span className="font-black text-black block uppercase">{companyName}</span>
+                        <span className="text-[10px] text-zinc-600 font-bold block">DEPARTAMENTO FINANCEIRO / EMISSOR</span>
+                        <span className="text-[9px] text-zinc-500 block">CNPJ: {companyCnpj}</span>
+                      </div>
+
+                      <div>
+                        <div className="border-b-2 border-zinc-900 mb-1 mx-auto w-4/5"></div>
+                        <span className="font-black text-black block uppercase">{printReceiptEntrega.motorista}</span>
+                        <span className="text-[10px] text-zinc-600 font-bold block">MOTORISTA BENEFICIÁRIO</span>
+                        <span className="text-[9px] text-zinc-500 block">CPF: {printReceiptEntrega.cpfMotorista || 'ASSINATURA DO MOTORISTA'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* RODAPÉ DO RECIBO / CÓDIGO DE AUTENTICIDADE */}
+                  <div className="mt-8 pt-3 border-t border-zinc-300 flex justify-between items-center text-[9px] font-mono text-zinc-500">
+                    <span>SISTEMA RODOVAR MONITORA — MÓDULO DE GESTÃO FINANCEIRA DE PAGAMENTOS</span>
+                    <span>AUTENTICAÇÃO DIGITAL: {getReceiptNumber(printReceiptEntrega.id)}-{new Date().getFullYear()}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-zinc-500 font-mono">
+                  Nenhum frete selecionado para impressão de recibo.
+                </div>
+              )}
+            </div>
+
+            {/* RODAPÉ DO MODAL COM BOTÕES DE AÇÃO E FECHAR */}
+            <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2 no-print font-mono text-xs">
+              <span className="text-zinc-500 text-[11px] font-mono hidden sm:inline">
+                SISTEMA RODOVAR MONITORA • RECIBO DIGITAL RPA
+              </span>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleDownloadReceipt}
+                  className="px-4 py-2 bg-cyan-950 border border-cyan-700/80 hover:bg-cyan-900 text-cyan-300 font-bold text-xs uppercase rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md"
+                >
+                  <Download className="w-4 h-4 text-cyan-400" />
+                  <span>BAIXAR RECIBO</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-amber-500/20 border border-amber-500/50 hover:bg-amber-500/30 text-amber-300 font-bold text-xs uppercase rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md"
+                >
+                  <Printer className="w-4 h-4 text-amber-400" />
+                  <span>IMPRIMIR</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintReceiptModalOpen(false)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold text-xs uppercase rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <X className="w-4 h-4 text-zinc-400" />
+                  <span>FECHAR</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

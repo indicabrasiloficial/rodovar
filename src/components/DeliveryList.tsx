@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
-import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores } from '../db/storage';
+import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores, updateEntregaField } from '../db/storage';
 import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR, formatRegistrationTime } from '../utils/date';
@@ -25,7 +25,8 @@ import {
   Trash2,
   Lock,
   Truck,
-  Printer
+  Printer,
+  Check
 } from 'lucide-react';
 
 const cleanVendedorName = (name: string): string => {
@@ -1979,6 +1980,36 @@ Tenha uma ótima e segura viagem!`;
                           Cli
                         </button>
 
+                        {/* Sinalização 1: LOCALIZAÇÃO DE ENTREGA */}
+                        <button
+                          onClick={() => updateEntregaField(e.id, { locEntregaFeito: !e.locEntregaFeito })}
+                          className={`p-1 px-2 rounded flex items-center gap-1 text-[10px] font-mono transition-all cursor-pointer ${
+                            e.locEntregaFeito
+                              ? 'bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-bold shadow-[0_0_8px_rgba(6,182,212,0.4)]'
+                              : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:border-cyan-500/70 hover:text-cyan-300'
+                          }`}
+                          id={`list-action-signal-loc-mobile-${e.id}`}
+                          title={e.locEntregaFeito ? 'Localização de Entrega: CONCLUÍDA' : 'Marcar Localização de Entrega'}
+                        >
+                          <MapPin className={`w-2.5 h-2.5 ${e.locEntregaFeito ? 'text-cyan-300 animate-pulse' : 'text-zinc-500'}`} />
+                          <span>{e.locEntregaFeito ? '✓ Loc. Entrega' : 'Loc. Entrega'}</span>
+                        </button>
+
+                        {/* Sinalização 2: PREVISÃO AO CLIENTE */}
+                        <button
+                          onClick={() => updateEntregaField(e.id, { previsaoClienteFeita: !e.previsaoClienteFeita })}
+                          className={`p-1 px-2 rounded flex items-center gap-1 text-[10px] font-mono transition-all cursor-pointer ${
+                            e.previsaoClienteFeita
+                              ? 'bg-purple-950/90 border border-purple-400 text-purple-200 font-bold shadow-[0_0_8px_rgba(168,85,247,0.4)]'
+                              : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:border-purple-500/70 hover:text-purple-300'
+                          }`}
+                          id={`list-action-signal-prev-mobile-${e.id}`}
+                          title={e.previsaoClienteFeita ? 'Previsão ao Cliente: ENVIADA' : 'Marcar Previsão ao Cliente'}
+                        >
+                          <Clock className={`w-2.5 h-2.5 ${e.previsaoClienteFeita ? 'text-purple-300 animate-pulse' : 'text-zinc-500'}`} />
+                          <span>{e.previsaoClienteFeita ? '✓ Prev. Cliente' : 'Prev. Cliente'}</span>
+                        </button>
+
                         {/* Individual Delete Button */}
                         <button
                           onClick={() => setIndividualDeleteTarget(e)}
@@ -2229,6 +2260,36 @@ Tenha uma ótima e segura viagem!`;
                             >
                               <Phone className="w-2.5 h-2.5" />
                               Cli
+                            </button>
+
+                            {/* Sinalização 1: LOCALIZAÇÃO DE ENTREGA */}
+                            <button
+                              onClick={() => updateEntregaField(e.id, { locEntregaFeito: !e.locEntregaFeito })}
+                              className={`p-1 px-1.5 rounded flex items-center gap-1 text-[10px] font-mono transition-all cursor-pointer ${
+                                e.locEntregaFeito
+                                  ? 'bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-bold shadow-[0_0_8px_rgba(6,182,212,0.4)]'
+                                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:border-cyan-500/70 hover:text-cyan-300'
+                              }`}
+                              title={e.locEntregaFeito ? 'Localização de Entrega: CONCLUÍDA' : 'Marcar Localização de Entrega'}
+                              id={`list-action-signal-loc-${e.id}`}
+                            >
+                              <MapPin className={`w-2.5 h-2.5 ${e.locEntregaFeito ? 'text-cyan-300 animate-pulse' : 'text-zinc-500'}`} />
+                              <span>{e.locEntregaFeito ? '✓ Loc. Entrega' : 'Loc. Entrega'}</span>
+                            </button>
+
+                            {/* Sinalização 2: PREVISÃO AO CLIENTE */}
+                            <button
+                              onClick={() => updateEntregaField(e.id, { previsaoClienteFeita: !e.previsaoClienteFeita })}
+                              className={`p-1 px-1.5 rounded flex items-center gap-1 text-[10px] font-mono transition-all cursor-pointer ${
+                                e.previsaoClienteFeita
+                                  ? 'bg-purple-950/90 border border-purple-400 text-purple-200 font-bold shadow-[0_0_8px_rgba(168,85,247,0.4)]'
+                                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:border-purple-500/70 hover:text-purple-300'
+                              }`}
+                              title={e.previsaoClienteFeita ? 'Previsão ao Cliente: ENVIADA' : 'Marcar Previsão ao Cliente'}
+                              id={`list-action-signal-prev-${e.id}`}
+                            >
+                              <Clock className={`w-2.5 h-2.5 ${e.previsaoClienteFeita ? 'text-purple-300 animate-pulse' : 'text-zinc-500'}`} />
+                              <span>{e.previsaoClienteFeita ? '✓ Prev. Cliente' : 'Prev. Cliente'}</span>
                             </button>
 
                             {/* Individual Delete Button */}
