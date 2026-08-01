@@ -838,7 +838,6 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
                           <th className="py-3 px-4 text-right">REPASSE MOTORISTA</th>
                           <th className="py-3 px-4 text-right">MARGEM (R$)</th>
                           <th className="py-3 px-4 text-center">MARGEM %</th>
-                          <th className="py-3 px-4 text-right">TICKET MÉDIO</th>
                           <th className="py-3 px-4 text-center">AÇÃO</th>
                         </tr>
                       </thead>
@@ -895,9 +894,6 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
                                 <span className="px-2 py-0.5 bg-purple-950/60 border border-purple-500/40 text-purple-300 rounded font-bold text-[10px]">
                                   {item.percentMargem.toFixed(1)}%
                                 </span>
-                              </td>
-                              <td className="py-3.5 px-4 text-right font-bold text-zinc-200">
-                                R$ {item.ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </td>
                               <td className="py-3.5 px-4 text-center">
                                 <button className="px-3 py-1 bg-zinc-800 group-hover:bg-[#FFD600] group-hover:text-black text-zinc-300 rounded-lg text-[10px] font-bold uppercase transition-all cursor-pointer">
@@ -1017,16 +1013,16 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
                         </span>
                       </div>
 
-                      {/* Card 4: Ticket Médio */}
-                      <div className="bg-zinc-950 border border-[#FFD600]/40 p-4 rounded-xl space-y-1 shadow-sm">
-                        <span className="text-[10px] font-mono uppercase text-[#FFD600] font-bold flex items-center gap-1">
-                          <Percent className="w-3.5 h-3.5 text-[#FFD600]" />
-                          Ticket Médio por Carga
+                      {/* Card 4: Total Cargas */}
+                      <div className="bg-zinc-950 border border-blue-900/50 p-4 rounded-xl space-y-1 shadow-sm">
+                        <span className="text-[10px] font-mono uppercase text-blue-400 font-bold flex items-center gap-1">
+                          <Package className="w-3.5 h-3.5 text-blue-400" />
+                          Volume de Cargas Operadas
                         </span>
-                        <span className="text-2xl font-black font-mono text-[#FFD600] block tracking-tight">
-                          R$ {individualStats.ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        <span className="text-2xl font-black font-mono text-blue-400 block tracking-tight">
+                          {individualStats.totalCargas} <span className="text-xs font-normal text-zinc-500">cargas</span>
                         </span>
-                        <span className="text-[9px] font-mono text-zinc-500 block">Média por romaneio contratado</span>
+                        <span className="text-[9px] font-mono text-zinc-500 block">Total de romaneios no período</span>
                       </div>
                     </div>
 
