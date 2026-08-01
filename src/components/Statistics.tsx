@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Entrega } from '../types';
 import { getDeliveryKm } from '../utils/distance';
+import { getNormalizedAtendente } from '../db/storage';
 import { 
   BarChart, 
   Bar, 
@@ -54,22 +55,50 @@ function parseEntregaDate(entrega: Entrega): Date | null {
   const dateStr = entrega.data_coleta || entrega.created_at || entrega.data;
   if (!dateStr) return null;
 
-  if (dateStr.includes('T')) {
-    const d = new Date(dateStr);
+  const currentYear = new Date().getFullYear();
+  const str = String(dateStr).trim();
+
+  // 1. ISO format or includes T
+  if (str.includes('T')) {
+    const d = new Date(str);
     if (!isNaN(d.getTime())) return d;
   }
 
-  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-    const [y, m, d] = dateStr.substring(0, 10).split('-').map(Number);
+  // 2. YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const [y, m, d] = str.substring(0, 10).split('-').map(Number);
     return new Date(y, m - 1, d);
   }
 
-  if (/^\d{2}\/\d{2}\/\d{4}/.test(dateStr)) {
-    const [d, m, y] = dateStr.substring(0, 10).split('/').map(Number);
+  // 3. DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(str)) {
+    const [d, m, y] = str.substring(0, 10).split('/').map(Number);
     return new Date(y, m - 1, d);
   }
 
-  const timestamp = Date.parse(dateStr);
+  // 4. MM/DD/YYYY or DD/MM/YYYY flex
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(str)) {
+    const parts = str.substring(0, 10).split('/').map(Number);
+    if (parts[0] > 12) {
+      return new Date(parts[2], parts[1] - 1, parts[0]);
+    } else {
+      return new Date(parts[2], parts[0] - 1, parts[1]);
+    }
+  }
+
+  // 5. MM-DD or DD-MM format without year (e.g. "07-28" or "08-01")
+  if (/^\d{2}[-\/]\d{2}$/.test(str)) {
+    const [p1, p2] = str.split(/[-\/]/).map(Number);
+    let month = p1;
+    let day = p2;
+    if (p1 > 12 && p2 <= 12) {
+      day = p1;
+      month = p2;
+    }
+    return new Date(currentYear, month - 1, day);
+  }
+
+  const timestamp = Date.parse(str);
   if (!isNaN(timestamp)) return new Date(timestamp);
   return null;
 }
@@ -113,7 +142,6 @@ function isEntregaInPeriod(entrega: Entrega, period: PeriodoFilter): boolean {
 
 export default function Statistics({ entregas, currentUser }: StatisticsProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodoFilter>('tudo');
-  const [rankingPeriod, setRankingPeriod] = useState<'semana' | 'mes' | 'ano' | 'tudo'>('tudo');
   const [selectedMetric, setSelectedMetric] = useState<MetricFilter>('faturamento');
   const [selectedAtendente, setSelectedAtendente] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'ranking' | 'individual'>('ranking');
@@ -216,20 +244,19 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
   const atendentesList = useMemo(() => {
     const set = new Set<string>();
     entregas.forEach(e => {
-      const name = (e.vendedor || '').trim();
-      if (name) set.add(name);
+      const norm = getNormalizedAtendente(e.vendedor);
+      if (norm) set.add(norm);
     });
     const result = Array.from(set).sort();
-    if (result.length > 0 && !selectedAtendente) {
+    if (result.length > 0 && (!selectedAtendente || !result.includes(selectedAtendente))) {
       setSelectedAtendente(result[0]);
     }
     return result;
-  }, [entregas]);
+  }, [entregas, selectedAtendente]);
 
-  // 4. Calculate Ranking and Atendente performance stats across selected period / ranking period
+  // 4. Calculate Ranking and Atendente performance stats across selected period
   const atendenteRankingData = useMemo(() => {
-    const targetPeriod = activeTab === 'ranking' ? rankingPeriod : selectedPeriod;
-    const filteredEntregas = entregas.filter(e => isEntregaInPeriod(e, targetPeriod as PeriodoFilter));
+    const filteredEntregas = entregas.filter(e => isEntregaInPeriod(e, selectedPeriod));
 
     const map: Record<string, {
       name: string;
@@ -243,7 +270,9 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
     }> = {};
 
     filteredEntregas.forEach(e => {
-      const name = (e.vendedor || 'Indefinido').trim();
+      const name = getNormalizedAtendente(e.vendedor);
+      if (!name) return; // Skip removed ones (Aranda, Suellen)
+
       if (!map[name]) {
         map[name] = {
           name,
@@ -299,14 +328,15 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
       totalEmpresaAll,
       totalCargasAll: filteredEntregas.length
     };
-  }, [entregas, selectedPeriod, rankingPeriod, selectedMetric, activeTab]);
+  }, [entregas, selectedPeriod, selectedMetric]);
 
   // 5. Individual Atendente Deep Dive Calculations
   const individualStats = useMemo(() => {
     if (!selectedAtendente) return null;
 
     const filteredEntregas = entregas.filter(e => {
-      const matchName = (e.vendedor || '').trim().toLowerCase() === selectedAtendente.trim().toLowerCase();
+      const norm = getNormalizedAtendente(e.vendedor);
+      const matchName = norm === selectedAtendente;
       return matchName && isEntregaInPeriod(e, selectedPeriod);
     });
 
@@ -590,18 +620,25 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-950/90 p-3 rounded-xl border border-zinc-850">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono text-zinc-400 uppercase font-bold">Filtrar Ranking por:</span>
-                    <div className="flex items-center gap-1">
-                      {(['semana', 'mes', 'ano', 'tudo'] as const).map(p => (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {([
+                        { id: 'hoje', label: 'Hoje' },
+                        { id: 'semana', label: 'Semanal (7d)' },
+                        { id: 'quinzena', label: '15 Dias' },
+                        { id: 'mes', label: 'Mensal' },
+                        { id: 'ano', label: 'Anual' },
+                        { id: 'tudo', label: 'Geral (Todos)' }
+                      ] as const).map(p => (
                         <button
-                          key={p}
-                          onClick={() => setRankingPeriod(p)}
+                          key={p.id}
+                          onClick={() => setSelectedPeriod(p.id)}
                           className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
-                            rankingPeriod === p
-                              ? 'bg-[#FFD600]/20 text-[#FFD600] border border-[#FFD600]/50'
+                            selectedPeriod === p.id
+                              ? 'bg-[#FFD600]/20 text-[#FFD600] border border-[#FFD600]/50 font-black'
                               : 'bg-zinc-900 text-zinc-400 hover:text-white'
                           }`}
                         >
-                          {p === 'semana' ? 'Semanal (7d)' : p === 'mes' ? 'Mensal' : p === 'ano' ? 'Anual' : 'Geral (Todos)'}
+                          {p.label}
                         </button>
                       ))}
                     </div>

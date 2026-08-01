@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
-import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores, updateEntregaField } from '../db/storage';
+import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores, updateEntregaField, getNormalizedAtendente } from '../db/storage';
 import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR, formatRegistrationTime } from '../utils/date';
@@ -30,17 +30,7 @@ import {
 } from 'lucide-react';
 
 const cleanVendedorName = (name: string): string => {
-  if (!name) return '';
-  // Split by slashes, backslashes, or dashes to keep only the first name
-  const parts = name.split(/[\/\-\\]/);
-  let p = (parts[0] || '').trim().toUpperCase();
-  if (p.includes('ELINETE')) return 'ELINETE';
-  if (p.includes('RAISA') || p.includes('RAISSA')) return 'RAISA';
-  if (p === 'MÔNICA') p = 'MONICA';
-  if (['SUELLEN', 'SUELEM', 'SUELE', 'SUELLENE', 'SULLEN', 'SUELEN'].includes(p) || p.includes('SUELLEN') || p.includes('SUELEM')) {
-    p = 'ARANDA';
-  }
-  return p;
+  return getNormalizedAtendente(name) || '';
 };
 
 interface DeliveryListProps {

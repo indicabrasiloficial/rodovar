@@ -448,21 +448,28 @@ function getSimilarity(s1: string, s2: string): number {
   return 0;
 }
 
-export function sanitizeName(name: string | undefined | null): string {
-  if (!name) return '';
-  let clean = name.trim().toUpperCase();
-  // Remove trailing punctuation (e.g. ARANDA! -> ARANDA)
+export function getNormalizedAtendente(name: string | undefined | null): string | null {
+  if (!name) return null;
+  const parts = name.split(/[\/\-\\]/);
+  let clean = (parts[0] || '').trim().toUpperCase();
   clean = clean.replace(/[!?.\-,;:]+$/, '').trim();
-  // Remove multiple spacing
   clean = clean.replace(/\s+/g, ' ');
 
-  // Unify ELINETE (ELINETE SANTOS, ELINETE 2, etc -> ELINETE)
-  if (clean.includes('ELINETE')) {
-    return 'ELINETE';
+  if (!clean || clean === 'INDEFINIDO' || clean === 'S/D' || clean === 'OUTROS' || clean === 'SEM REGISTRO') {
+    return null;
   }
 
-  // Unify RAISA / RAISSA (RAISA CAETANO, RAISSA CAETANO, etc -> RAISA)
-  if (clean.includes('RAISA') || clean.includes('RAISSA')) {
+  // Removals requested: ARANDA and SUELLEN
+  const isSuellenOrAranda = clean.includes('ARANDA') || 
+                            clean.includes('SUELLEN') || 
+                            clean.includes('SUELEM') || 
+                            ['SUELLEN', 'SUELEM', 'SUELE', 'SUELLENE', 'SULLEN', 'SUELEN', 'ARANDA'].includes(clean);
+  if (isSuellenOrAranda) {
+    return null;
+  }
+
+  // Unification: RAISA + RAISA CAETANO + RAISSA + ELINETE + ELINITE + ELINETE SANTOS + VITOR = RAISA
+  if (clean.includes('RAISA') || clean.includes('RAISSA') || clean.includes('ELINETE') || clean.includes('ELINITE') || clean.includes('VITOR')) {
     return 'RAISA';
   }
 
@@ -470,13 +477,16 @@ export function sanitizeName(name: string | undefined | null): string {
     clean = 'MONICA';
   }
 
-  // Unify SUELLEN / SUELEM and ARANDA to ARANDA as they are the same person
-  const isSuellen = ['SUELLEN', 'SUELEM', 'SUELE', 'SUELLENE', 'SULLEN', 'SUELEN'].includes(clean) || 
-                    clean.includes('SUELLEN') || 
-                    clean.includes('SUELEM');
-  if (isSuellen) {
-    return 'ARANDA';
-  }
+  return clean;
+}
+
+export function sanitizeName(name: string | undefined | null): string {
+  if (!name) return '';
+  const norm = getNormalizedAtendente(name);
+  if (norm) return norm;
+  let clean = name.trim().toUpperCase();
+  clean = clean.replace(/[!?.\-,;:]+$/, '').trim();
+  clean = clean.replace(/\s+/g, ' ');
   return clean;
 }
 
@@ -1024,16 +1034,12 @@ export function subscribeToScheduledRealtime(callback: (payload: { action: strin
 
 // Helpers for Auto-complete
 export function getUniqueVendedores(): string[] {
-  const list = cachedEntregas
-    .map(e => {
-      if (!e.vendedor) return '';
-      const parts = e.vendedor.split(/[\/\-\\]/);
-      let p = (parts[0] || '').trim().toUpperCase();
-      if (p === 'MÔNICA') p = 'MONICA';
-      return sanitizeName(p);
-    })
-    .filter(Boolean);
-  return Array.from(new Set(list));
+  const set = new Set<string>();
+  cachedEntregas.forEach(e => {
+    const norm = getNormalizedAtendente(e.vendedor);
+    if (norm) set.add(norm);
+  });
+  return Array.from(set).sort();
 }
 
 export function getUniqueClientes(): { nome: string; tel: string }[] {
