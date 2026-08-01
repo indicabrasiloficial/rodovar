@@ -437,7 +437,7 @@ export default function App() {
         );
       case 'statistics':
         return (
-          <Statistics entregas={entregas} />
+          <Statistics entregas={entregas} currentUser={user} />
         );
       case 'whatsapp':
         return (
