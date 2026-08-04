@@ -24,9 +24,21 @@ const removeAccents = (str: string): string => {
 
 export const normalizeDateStr = (val?: string): string => {
   if (!val) return '';
-  const clean = val.trim().split('T')[0];
-  // If DD/MM/YYYY or DD-MM-YYYY
-  const brMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  // Extract first clean token before any space, T, or comma
+  const cleanToken = val.trim().split(/[T\s,]+/)[0];
+  if (!cleanToken) return '';
+
+  // ISO YYYY-MM-DD or YYYY/MM/DD
+  const isoMatch = cleanToken.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const month = isoMatch[2].padStart(2, '0');
+    const day = isoMatch[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Brazilian DD/MM/YYYY or DD-MM-YYYY
+  const brMatch = cleanToken.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (brMatch) {
     const day = brMatch[1].padStart(2, '0');
     const month = brMatch[2].padStart(2, '0');
@@ -34,29 +46,32 @@ export const normalizeDateStr = (val?: string): string => {
     if (year.length === 2) year = '20' + year;
     return `${year}-${month}-${day}`;
   }
-  // If DD/MM or DD-MM
-  const shortMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+
+  // Short DD/MM or DD-MM
+  const shortMatch = cleanToken.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
   if (shortMatch) {
     const day = shortMatch[1].padStart(2, '0');
     const month = shortMatch[2].padStart(2, '0');
     const year = new Date().getFullYear();
     return `${year}-${month}-${day}`;
   }
-  return clean;
+
+  return cleanToken;
 };
 
 export function matchDelivery(e: Entrega, filters: PaginatedFilters): boolean {
-  // Status filter
+  // 1. Status filter
   if (filters.status && filters.status !== 'all') {
     if (e.status !== filters.status) return false;
   }
-  // Collection date filter
-  if (filters.dataColeta) {
+
+  // 2. Collection / Delivery Date filter
+  if (filters.dataColeta && filters.dataColeta.trim()) {
     const filterIso = normalizeDateStr(filters.dataColeta);
     const eColetaIso = normalizeDateStr(e.data_coleta);
     const eDataIso = normalizeDateStr(e.data);
     const ePrazoIso = normalizeDateStr(e.prazo);
-    const eCreatedIso = e.created_at ? e.created_at.split('T')[0] : '';
+    const eCreatedIso = e.created_at ? normalizeDateStr(e.created_at) : '';
 
     if (
       eColetaIso !== filterIso && 
@@ -67,31 +82,60 @@ export function matchDelivery(e: Entrega, filters: PaginatedFilters): boolean {
       return false;
     }
   }
-  // Vendedor filter
+
+  // 3. Vendedor filter
   if (filters.vendedor?.trim()) {
     const v = removeAccents(getCleanedVendedorName(filters.vendedor));
     const ev = removeAccents(getCleanedVendedorName(e.vendedor || ''));
     if (ev !== v && !ev.includes(v)) return false;
   }
-  // Origin filter
-  if (filters.origem.trim()) {
+
+  // 4. Origin filter
+  if (filters.origem?.trim()) {
     const o = removeAccents(filters.origem);
     if (!removeAccents(e.origem || '').includes(o)) return false;
   }
-  // Destino filter
-  if (filters.destino.trim()) {
+
+  // 5. Destino filter
+  if (filters.destino?.trim()) {
     const d = removeAccents(filters.destino);
     if (!removeAccents(e.destino || '').includes(d)) return false;
   }
-  // Cliente filter
-  if (filters.cliente.trim()) {
+
+  // 6. Cliente filter
+  if (filters.cliente?.trim()) {
     const c = removeAccents(filters.cliente);
     if (!removeAccents(e.cliente || '').includes(c)) return false;
   }
-  // General text search (motorista, vendedor, cliente, origem, destino, observacoes, id)
-  if (filters.search.trim()) {
+
+  // 7. General text & phone search
+  if (filters.search && filters.search.trim()) {
     const s = removeAccents(filters.search);
-    return (
+    const digitsSearch = filters.search.replace(/\D/g, '');
+
+    // Phone numbers (cliente or motorista)
+    const telClienteClean = (e.tel_cliente || '').replace(/\D/g, '');
+    const telMotoristaClean = (e.tel_motorista || '').replace(/\D/g, '');
+
+    const matchTelClient = (
+      (e.tel_cliente && removeAccents(e.tel_cliente).includes(s)) ||
+      (digitsSearch.length >= 3 && telClienteClean.includes(digitsSearch))
+    );
+
+    const matchTelMot = (
+      (e.tel_motorista && removeAccents(e.tel_motorista).includes(s)) ||
+      (digitsSearch.length >= 3 && telMotoristaClean.includes(digitsSearch))
+    );
+
+    // Dates in text search
+    const matchDates = (
+      (e.data_coleta && removeAccents(e.data_coleta).includes(s)) ||
+      (e.data && removeAccents(e.data).includes(s)) ||
+      (e.prazo && removeAccents(e.prazo).includes(s))
+    );
+
+    // General fields
+    const matchGeneralText = (
       removeAccents(e.motorista || '').includes(s) ||
       removeAccents(e.vendedor || '').includes(s) ||
       removeAccents(e.cliente || '').includes(s) ||
@@ -100,7 +144,12 @@ export function matchDelivery(e: Entrega, filters: PaginatedFilters): boolean {
       removeAccents(e.observacoes || '').includes(s) ||
       removeAccents(e.id || '').includes(s)
     );
+
+    if (!matchTelClient && !matchTelMot && !matchDates && !matchGeneralText) {
+      return false;
+    }
   }
+
   return true;
 }
 

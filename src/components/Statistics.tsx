@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Entrega } from '../types';
 import { getDeliveryKm } from '../utils/distance';
 import { getNormalizedAtendente } from '../db/storage';
+import { formatDateBR } from '../utils/date';
 import { 
   BarChart, 
   Bar, 
@@ -48,8 +49,13 @@ interface StatisticsProps {
   currentUser?: any;
 }
 
-type PeriodoFilter = 'hoje' | 'semana' | 'quinzena' | 'mes' | 'ano' | 'tudo';
-type MetricFilter = 'faturamento' | 'cargas' | 'margem';
+export type PeriodoFilter = 'hoje' | 'semana' | 'quinzena' | 'mes' | 'ano' | 'mes_especifico' | 'custom_range' | 'tudo';
+export type MetricFilter = 'faturamento' | 'cargas' | 'margem';
+
+export const MESES_NOMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
 
 function parseEntregaDate(entrega: Entrega): Date | null {
   const dateStr = entrega.data_coleta || entrega.created_at || entrega.data;
@@ -103,14 +109,21 @@ function parseEntregaDate(entrega: Entrega): Date | null {
   return null;
 }
 
-function isEntregaInPeriod(entrega: Entrega, period: PeriodoFilter): boolean {
+function isEntregaInPeriod(
+  entrega: Entrega, 
+  period: PeriodoFilter,
+  selectedMonth?: number,
+  selectedYear?: number,
+  customStartDate?: string,
+  customEndDate?: string
+): boolean {
   if (period === 'tudo') return true;
 
   const date = parseEntregaDate(entrega);
   if (!date) return true;
 
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 
   if (period === 'hoje') {
     return date >= startOfToday;
@@ -128,13 +141,28 @@ function isEntregaInPeriod(entrega: Entrega, period: PeriodoFilter): boolean {
 
   if (period === 'mes') {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thirtyDaysAgo = new Date(startOfToday.getTime() - 30 * 24 * 60 * 60 * 1000);
-    return date >= thirtyDaysAgo || date >= startOfMonth;
+    return date >= startOfMonth;
   }
 
   if (period === 'ano') {
     const startOfYear = new Date(now.getFullYear(), 0, 1);
     return date >= startOfYear;
+  }
+
+  if (period === 'mes_especifico' && selectedMonth !== undefined && selectedYear !== undefined) {
+    return date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
+  }
+
+  if (period === 'custom_range') {
+    if (customStartDate) {
+      const start = new Date(customStartDate + 'T00:00:00');
+      if (date < start) return false;
+    }
+    if (customEndDate) {
+      const end = new Date(customEndDate + 'T23:59:59');
+      if (date > end) return false;
+    }
+    return true;
   }
 
   return true;
@@ -145,6 +173,30 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricFilter>('faturamento');
   const [selectedAtendente, setSelectedAtendente] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'ranking' | 'individual'>('ranking');
+
+  // Specific month/year selection
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
+  // Custom date range
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<number>();
+    const currentY = new Date().getFullYear();
+    yearsSet.add(currentY);
+    yearsSet.add(currentY - 1);
+    entregas.forEach(e => {
+      const d = parseEntregaDate(e);
+      if (d) yearsSet.add(d.getFullYear());
+    });
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [entregas]);
+
+  const periodFilteredEntregas = useMemo(() => {
+    return entregas.filter(e => isEntregaInPeriod(e, selectedPeriod, selectedMonth, selectedYear, customStartDate, customEndDate));
+  }, [entregas, selectedPeriod, selectedMonth, selectedYear, customStartDate, customEndDate]);
 
   const getActiveUserFullName = (): string => {
     if (currentUser && currentUser.displayName) return currentUser.displayName;
@@ -179,7 +231,7 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
 
   // 1. Operational Overview Calculations
   const statsSummary = useMemo(() => {
-    const count = entregas.length;
+    const count = periodFilteredEntregas.length;
     if (count === 0) {
       return { 
         totalCargas: 0, 
@@ -194,15 +246,15 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
       };
     }
 
-    const entregues = entregas.filter(e => e.status === 'entregue').length;
+    const entregues = periodFilteredEntregas.filter(e => e.status === 'entregue').length;
     const successRate = (entregues / count) * 100;
-    const pendingCanhoto = entregas.filter(e => !e.canhoto_solicitado).length;
+    const pendingCanhoto = periodFilteredEntregas.filter(e => !e.canhoto_solicitado).length;
 
     let totalKm = 0;
     let totalFreteEmpresa = 0;
     let totalFreteMotorista = 0;
 
-    entregas.forEach(e => {
+    periodFilteredEntregas.forEach(e => {
       totalKm += getDeliveryKm(e);
       totalFreteEmpresa += Number(e.frete_empresa) || 0;
       totalFreteMotorista += Number(e.frete_motorista) || 0;
@@ -222,12 +274,12 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
       totalFreteMotorista,
       totalMargem
     };
-  }, [entregas]);
+  }, [periodFilteredEntregas]);
 
   // 2. Collection Volume Timeline Chart (Chronological)
   const cronologiaData = useMemo(() => {
     const map: Record<string, number> = {};
-    const sorted = [...entregas].sort((a, b) => (a.data_coleta || '').localeCompare(b.data_coleta || ''));
+    const sorted = [...periodFilteredEntregas].sort((a, b) => (a.data_coleta || '').localeCompare(b.data_coleta || ''));
 
     sorted.forEach(e => {
       const date = e.data_coleta || 'Indefinido';
@@ -238,7 +290,7 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
       date: date.length > 5 ? date.substring(5) : date,
       'Cargas Coletadas': val
     }));
-  }, [entregas]);
+  }, [periodFilteredEntregas]);
 
   // 3. Extract list of all unique Atendentes (vendedores)
   const atendentesList = useMemo(() => {
@@ -256,7 +308,7 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
 
   // 4. Calculate Ranking and Atendente performance stats across selected period
   const atendenteRankingData = useMemo(() => {
-    const filteredEntregas = entregas.filter(e => isEntregaInPeriod(e, selectedPeriod));
+    const filteredEntregas = periodFilteredEntregas;
 
     const map: Record<string, {
       name: string;
@@ -271,7 +323,7 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
 
     filteredEntregas.forEach(e => {
       const name = getNormalizedAtendente(e.vendedor);
-      if (!name) return; // Skip removed ones (Aranda, Suellen)
+      if (!name) return; // Skip removed ones
 
       if (!map[name]) {
         map[name] = {
@@ -328,16 +380,15 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
       totalEmpresaAll,
       totalCargasAll: filteredEntregas.length
     };
-  }, [entregas, selectedPeriod, selectedMetric]);
+  }, [periodFilteredEntregas, selectedMetric]);
 
   // 5. Individual Atendente Deep Dive Calculations
   const individualStats = useMemo(() => {
     if (!selectedAtendente) return null;
 
-    const filteredEntregas = entregas.filter(e => {
+    const filteredEntregas = periodFilteredEntregas.filter(e => {
       const norm = getNormalizedAtendente(e.vendedor);
-      const matchName = norm === selectedAtendente;
-      return matchName && isEntregaInPeriod(e, selectedPeriod);
+      return norm === selectedAtendente;
     });
 
     let totalFreteEmpresa = 0;
@@ -404,7 +455,7 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
       timelineChartData,
       cargasList: filteredEntregas
     };
-  }, [entregas, selectedAtendente, selectedPeriod, atendenteRankingData]);
+  }, [periodFilteredEntregas, selectedAtendente, atendenteRankingData]);
 
   // Existing standard analytics lists for lower charts
   const rotasData = useMemo(() => {
@@ -490,7 +541,11 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
             Faturamento Bruto
           </span>
           <span className="text-xl sm:text-2xl font-black font-mono text-emerald-400 block tracking-tight">
-            R$ {(statsSummary.totalFreteEmpresa / 1000).toFixed(1)}k
+            {statsSummary.totalFreteEmpresa >= 1000 ? (
+              `R$ ${(statsSummary.totalFreteEmpresa / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Mil`
+            ) : (
+              `R$ ${statsSummary.totalFreteEmpresa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+            )}
           </span>
           <span className="text-[9px] font-mono text-gray-400 block">Frete Empresa total</span>
         </div>
@@ -502,7 +557,11 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
             Resultado / Margem
           </span>
           <span className="text-xl sm:text-2xl font-black font-mono text-purple-300 block tracking-tight">
-            R$ {(statsSummary.totalMargem / 1000).toFixed(1)}k
+            {Math.abs(statsSummary.totalMargem) >= 1000 ? (
+              `R$ ${(statsSummary.totalMargem / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Mil`
+            ) : (
+              `R$ ${statsSummary.totalMargem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+            )}
           </span>
           <span className="text-[9px] font-mono text-gray-400 block">
             {statsSummary.totalFreteEmpresa > 0 
@@ -583,56 +642,183 @@ export default function Statistics({ entregas, currentUser }: StatisticsProps) {
                   </button>
                 </div>
 
-                {/* Period Selector Filter */}
-                <div className="bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex items-center gap-1 overflow-x-auto text-[11px] font-mono">
+                {/* Period Selector Filter Buttons */}
+                <div className="bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex items-center gap-1 overflow-x-auto text-[11px] font-mono scrollbar-thin">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase px-2 hidden xl:inline">Período:</span>
-                  {(['hoje', 'semana', 'quinzena', 'mes', 'ano', 'tudo'] as PeriodoFilter[]).map((period) => {
-                    const labelMap: Record<PeriodoFilter, string> = {
-                      hoje: 'Hoje',
-                      semana: '7 Dias',
-                      quinzena: '15 Dias',
-                      mes: 'Mês',
-                      ano: 'Ano',
-                      tudo: 'Início até Hoje'
-                    };
-                    return (
-                      <button
-                        key={period}
-                        onClick={() => setSelectedPeriod(period)}
-                        className={`px-2.5 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer whitespace-nowrap ${
-                          selectedPeriod === period
-                            ? 'bg-zinc-800 text-[#FFD600] border border-[#FFD600]/40'
-                            : 'text-zinc-400 hover:text-zinc-200'
-                        }`}
-                      >
-                        {labelMap[period]}
-                      </button>
-                    );
-                  })}
+                  {[
+                    { id: 'hoje', label: 'Hoje' },
+                    { id: 'semana', label: '7 Dias' },
+                    { id: 'quinzena', label: '15 Dias' },
+                    { id: 'mes', label: 'Mês Atual' },
+                    { id: 'mes_especifico', label: '🗓️ Por Mês/Ano' },
+                    { id: 'custom_range', label: '📅 Do dia X até Y' },
+                    { id: 'ano', label: 'Ano' },
+                    { id: 'tudo', label: 'Início até Hoje' }
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedPeriod(p.id as PeriodoFilter)}
+                      className={`px-2.5 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer whitespace-nowrap ${
+                        selectedPeriod === p.id
+                          ? 'bg-[#FFD600] text-black shadow-md font-extrabold'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
+
+            {/* EXPANDED FILTER PANEL: SPECIFIC MONTH & YEAR */}
+            {selectedPeriod === 'mes_especifico' && (
+              <div className="bg-zinc-950/90 p-3.5 rounded-xl border border-[#FFD600]/40 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in shadow-xl">
+                <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
+                  <span className="text-xs font-mono font-bold text-[#FFD600] uppercase flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-[#FFD600]" /> Seleção de Mês e Ano:
+                  </span>
+                  
+                  <div className="flex items-center gap-2">
+                    {/* Month Dropdown */}
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                      className="bg-zinc-900 border border-zinc-700 text-white font-mono text-xs rounded-lg px-3 py-1.5 focus:border-[#FFD600] focus:outline-none cursor-pointer font-bold"
+                    >
+                      {MESES_NOMES.map((nome, idx) => (
+                        <option key={idx} value={idx}>{nome.toUpperCase()}</option>
+                      ))}
+                    </select>
+
+                    {/* Year Dropdown */}
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      className="bg-zinc-900 border border-zinc-700 text-white font-mono text-xs rounded-lg px-3 py-1.5 focus:border-[#FFD600] focus:outline-none cursor-pointer font-bold"
+                    >
+                      {availableYears.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Previous / Next Month quick buttons */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        if (selectedMonth === 0) {
+                          setSelectedMonth(11);
+                          setSelectedYear(prev => prev - 1);
+                        } else {
+                          setSelectedMonth(prev => prev - 1);
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded-lg font-mono font-bold cursor-pointer transition-all border border-zinc-700"
+                      title="Mês Anterior"
+                    >
+                      ◀ Mês Anterior
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedMonth === 11) {
+                          setSelectedMonth(0);
+                          setSelectedYear(prev => prev + 1);
+                        } else {
+                          setSelectedMonth(prev => prev + 1);
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded-lg font-mono font-bold cursor-pointer transition-all border border-zinc-700"
+                      title="Próximo Mês"
+                    >
+                      Próximo Mês ▶
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-right text-xs font-mono text-zinc-400">
+                  Período Ativo: <strong className="text-[#FFD600] uppercase font-mono">{MESES_NOMES[selectedMonth]} de {selectedYear}</strong> ({periodFilteredEntregas.length} frete(s) localizado(s))
+                </div>
+              </div>
+            )}
+
+            {/* EXPANDED FILTER PANEL: CUSTOM DATE RANGE (DO DIA X ATÉ DIA Y) */}
+            {selectedPeriod === 'custom_range' && (
+              <div className="bg-zinc-950/90 p-3.5 rounded-xl border border-cyan-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in shadow-xl">
+                <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
+                  <span className="text-xs font-mono font-bold text-cyan-400 uppercase flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-cyan-400" /> Intervalo Personalizado de Datas:
+                  </span>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-700">
+                      <span className="text-[10px] font-mono text-zinc-400 uppercase font-bold">Do Dia:</span>
+                      <input
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                        className="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer font-bold"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-700">
+                      <span className="text-[10px] font-mono text-zinc-400 uppercase font-bold">Até o Dia:</span>
+                      <input
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                        className="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer font-bold"
+                      />
+                    </div>
+
+                    {(customStartDate || customEndDate) && (
+                      <button
+                        onClick={() => {
+                          setCustomStartDate('');
+                          setCustomEndDate('');
+                        }}
+                        className="px-2.5 py-1.5 bg-red-950/80 hover:bg-red-900 text-red-300 text-xs rounded-lg border border-red-800/60 font-mono font-bold cursor-pointer transition-all"
+                      >
+                        Limpar Datas
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-right text-xs font-mono text-zinc-400">
+                  {customStartDate || customEndDate ? (
+                    <>
+                      Pesquisa: <strong className="text-cyan-400 font-bold">{customStartDate ? formatDateBR(customStartDate) : 'Início'} até {customEndDate ? formatDateBR(customEndDate) : 'Hoje'}</strong> ({periodFilteredEntregas.length} frete(s) localizado(s))
+                    </>
+                  ) : (
+                    <span className="text-zinc-500 italic">Escolha as datas inicial e final para filtrar os registros</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* TAB 1: RANKING GERAL DOS ATENDENTES */}
             {activeTab === 'ranking' && (
               <div className="space-y-6">
                 {/* Ranking Period & Metric Toolbar */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-950/90 p-3 rounded-xl border border-zinc-850">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-zinc-400 uppercase font-bold">Filtrar Ranking por:</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono text-zinc-400 uppercase font-bold">Atalho de Período:</span>
                     <div className="flex items-center gap-1 flex-wrap">
-                      {([
+                      {[
                         { id: 'hoje', label: 'Hoje' },
-                        { id: 'semana', label: 'Semanal (7d)' },
-                        { id: 'quinzena', label: '15 Dias' },
-                        { id: 'mes', label: 'Mensal' },
+                        { id: 'semana', label: '7d' },
+                        { id: 'quinzena', label: '15d' },
+                        { id: 'mes', label: 'Mês' },
+                        { id: 'mes_especifico', label: '🗓️ Mês/Ano' },
+                        { id: 'custom_range', label: '📅 Do Dia X-Y' },
                         { id: 'ano', label: 'Anual' },
                         { id: 'tudo', label: 'Geral (Todos)' }
-                      ] as const).map(p => (
+                      ].map(p => (
                         <button
                           key={p.id}
-                          onClick={() => setSelectedPeriod(p.id)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
+                          onClick={() => setSelectedPeriod(p.id as PeriodoFilter)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
                             selectedPeriod === p.id
                               ? 'bg-[#FFD600]/20 text-[#FFD600] border border-[#FFD600]/50 font-black'
                               : 'bg-zinc-900 text-zinc-400 hover:text-white'

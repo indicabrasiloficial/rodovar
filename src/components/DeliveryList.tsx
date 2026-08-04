@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Entrega, DeliveryStatus } from '../types';
 import { saveEntrega, deleteEntregasBulk, deleteEntrega, getUniqueVendedores, updateEntregaField, getNormalizedAtendente } from '../db/storage';
-import { usePaginatedEntregas } from '../hooks/usePaginatedEntregas';
+import { usePaginatedEntregas, normalizeDateStr } from '../hooks/usePaginatedEntregas';
 import { getDeliveryKm } from '../utils/distance';
-import { formatDateBR, formatRegistrationTime } from '../utils/date';
+import { formatDateBR, formatRegistrationTime, isBrasiliaAfter19h, getTodayBrasiliaIso } from '../utils/date';
 import { generateTrackerLink } from '../utils/generateTrackerLink';
 import AcompanharBadge from './AcompanharBadge';
 import { motion, AnimatePresence } from 'motion/react';
@@ -75,6 +75,16 @@ const statusBadgeStyle: Record<string, { bg: string; text: string; label: string
     label: 'Entregue ✅',
     icon: CheckCircle 
   }
+};
+
+export const isDeliveryAlerta19h = (e: Entrega): boolean => {
+  if (e.status === 'entregue') return false; // Concluded deliveries do not need driver status updates
+  if (!isBrasiliaAfter19h()) return false; // Only triggers after 19:00 BRT
+
+  const todayIso = getTodayBrasiliaIso();
+  const prazoIso = normalizeDateStr(e.prazo);
+
+  return prazoIso === todayIso;
 };
 
 // Extremely smart parser that supports both spreadsheet rows (tab-separated) and multi-line vertical blocks
@@ -1274,6 +1284,12 @@ export default function DeliveryList({
   // Filter Logic grounded on high performance secure cursor paginated lists
   const filteredEntregas = loadedEntregas;
 
+  // Calculate count of deliveries triggering the 19:00 BRT driver update alert
+  const alerta19hCount = useMemo(() => {
+    if (!isBrasiliaAfter19h()) return 0;
+    return loadedEntregas.filter(e => isDeliveryAlerta19h(e)).length;
+  }, [loadedEntregas]);
+
   // States for Print Routes Modal
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printSelectedIds, setPrintSelectedIds] = useState<string[]>([]);
@@ -1495,6 +1511,26 @@ Tenha uma ótima e segura viagem!`;
         </div>
       </div>
 
+      {/* Notice Banner for 19:00 BRT driver response alert */}
+      {alerta19hCount > 0 && (
+        <div className="bg-gradient-to-r from-red-950/90 via-red-900/70 to-zinc-950 border-2 border-red-500/90 p-3.5 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-red-200 shadow-[0_0_20px_rgba(239,68,68,0.25)] animate-pulse" id="banner-alerta-19h">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-red-600 text-white rounded-xl shadow-lg shadow-red-900/60 shrink-0">
+              <AlertTriangle className="w-5 h-5 text-yellow-300 animate-bounce" />
+            </div>
+            <div>
+              <div className="text-xs font-black uppercase tracking-wider font-mono text-white flex items-center gap-2">
+                <span>ALERTA DE ATUALIZAÇÃO PÓS-19:00 (HORÁRIO DE BRASÍLIA)</span>
+                <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-[10px] font-black">{alerta19hCount} PENDENTE(S)</span>
+              </div>
+              <p className="text-[11px] text-red-300 font-sans mt-0.5 m-0 leading-relaxed">
+                Horário limite atingido (após 19:00 BRT). {alerta19hCount === 1 ? '1 carga com PRAZO para hoje ainda não teve status atualizado pelo motorista.' : `${alerta19hCount} cargas com PRAZO para hoje ainda não tiveram status atualizado pelos motoristas.`}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tabs and Comercial Team filter combined */}
       <div className="border-b border-zinc-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pb-1 md:pb-0">
         <div className="flex overflow-x-auto whitespace-nowrap scrollbar-thin">
@@ -1593,7 +1629,7 @@ Tenha uma ótima e segura viagem!`;
             <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-500" />
             <input
               type="text"
-              placeholder="Buscar por motorista, atendente, etc..."
+              placeholder="Buscar por motorista, fone, atendente, cliente..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className="w-full bg-zinc-900/50 border border-zinc-800 text-xs text-white rounded-lg pl-9 pr-3 py-2 focus:border-[#FFD600] focus:ring-0 focus:outline-none placeholder-gray-500 font-mono"
@@ -1791,12 +1827,25 @@ Tenha uma ótima e segura viagem!`;
                 {loadedEntregas.map(e => {
                   const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
                   const BadgeIcon = badge.icon;
+                  const hasAlerta19h = isDeliveryAlerta19h(e);
 
                   return (
                     <div 
                       key={e.id} 
-                      className="p-4 space-y-3 hover:bg-zinc-900/10 transition-colors animate-fade-in"
+                      className={`p-4 space-y-3 transition-colors animate-fade-in ${
+                        hasAlerta19h 
+                          ? 'bg-gradient-to-r from-red-950/40 via-zinc-950 to-amber-950/20 border-2 border-red-500/90 shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
+                          : 'hover:bg-zinc-900/10'
+                      }`}
                     >
+                    {/* Alerta 19h Top Badge if active */}
+                    {hasAlerta19h && (
+                      <div className="bg-red-600/90 border border-red-400 text-white px-2.5 py-1 rounded-lg text-[10px] font-mono font-black uppercase flex items-center gap-1.5 animate-pulse shadow-md shadow-red-900/50">
+                        <AlertTriangle className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+                        <span>🚨 ALERTA 19H+: MOTORISTA SEM RETORNO (ATUALIZAR STATUS)</span>
+                      </div>
+                    )}
+
                     {/* Header Row: Checkbox, Route, Status Badge */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2.5">
@@ -2056,14 +2105,17 @@ Tenha uma ótima e segura viagem!`;
                   {loadedEntregas.map(e => {
                     const badge = statusBadgeStyle[e.status] || { bg: 'bg-zinc-900', text: 'text-gray-400', label: e.status, icon: Clock };
                     const BadgeIcon = badge.icon;
+                    const hasAlerta19h = isDeliveryAlerta19h(e);
 
                     return (
                       <tr 
                         key={e.id} 
                         className={`hover:bg-zinc-900/70 transition-all cursor-pointer border-l-4 group ${
-                          e.status === 'em_transito' ? 'border-[#FFD600]' :
-                          e.status === 'parado' ? 'border-red-500' :
-                          e.status === 'coletando' ? 'border-blue-500' : 'border-emerald-500'
+                          hasAlerta19h
+                            ? 'border-l-red-500 bg-red-950/25 shadow-[inset_0_0_12px_rgba(239,68,68,0.2)]'
+                            : e.status === 'em_transito' ? 'border-[#FFD600]' :
+                            e.status === 'parado' ? 'border-red-500' :
+                            e.status === 'coletando' ? 'border-blue-500' : 'border-emerald-500'
                         }`}
                         id={`list-row-${e.id}`}
                       >
@@ -2186,19 +2238,28 @@ Tenha uma ótima e segura viagem!`;
 
                         {/* status Badge */}
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${badge.bg} ${badge.text}`} onClick={() => onSelectDelivery(e.id)}>
-                              <BadgeIcon className="w-3 h-3" />
-                              {badge.label}
-                            </span>
+                          <div className="flex flex-col items-center justify-center gap-1.5">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${badge.bg} ${badge.text}`} onClick={() => onSelectDelivery(e.id)}>
+                                <BadgeIcon className="w-3 h-3" />
+                                {badge.label}
+                              </span>
 
-                            {/* Inserir <AcompanharBadge /> aqui, logo após o badge de status */}
-                            <AcompanharBadge
-                              freteId={e.id}
-                              operadorId={currentOperadorId}
-                              operadorNome={currentOperadorNome}
-                              acompanhando={e.acompanhando}
-                            />
+                              {/* Inserir <AcompanharBadge /> aqui, logo após o badge de status */}
+                              <AcompanharBadge
+                                freteId={e.id}
+                                operadorId={currentOperadorId}
+                                operadorNome={currentOperadorNome}
+                                acompanhando={e.acompanhando}
+                              />
+                            </div>
+
+                            {hasAlerta19h && (
+                              <span className="px-2 py-0.5 rounded bg-red-600 text-white font-mono text-[9px] font-black uppercase flex items-center gap-1 animate-pulse shadow-sm shadow-red-900/50" title="Motorista sem retorno/atualização após 19:00 BRT">
+                                <AlertTriangle className="w-2.5 h-2.5 text-yellow-300 shrink-0" />
+                                <span>🚨 SEM RETORNO 19H+</span>
+                              </span>
+                            )}
                           </div>
                         </td>
 

@@ -59,3 +59,36 @@ export const formatRegistrationTime = (createdAtStr: string | null | undefined):
     return '';
   }
 };
+
+/**
+ * Checks if current time in Brasília timezone (America_Sao_Paulo / UTC-3) is past 19:00 (19h or later)
+ */
+export const isBrasiliaAfter19h = (): boolean => {
+  try {
+    const optionsHour = { timeZone: 'America_Sao_Paulo', hour: '2-digit', hour12: false };
+    const formatterHour = new Intl.DateTimeFormat('pt-BR', optionsHour as any);
+    const hourStr = formatterHour.format(new Date());
+    const hour = parseInt(hourStr, 10);
+    return hour >= 19;
+  } catch (e) {
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    const brtHour = (utcHour - 3 + 24) % 24;
+    return brtHour >= 19;
+  }
+};
+
+/**
+ * Returns today's date ISO (YYYY-MM-DD) in Brasília timezone
+ */
+export const getTodayBrasiliaIso = (): string => {
+  try {
+    const optionsDate = { timeZone: 'America_Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
+    const formatterDate = new Intl.DateTimeFormat('en-CA', optionsDate as any); // YYYY-MM-DD
+    return formatterDate.format(new Date());
+  } catch (e) {
+    const now = new Date();
+    now.setHours(now.getHours() - 3);
+    return now.toISOString().split('T')[0];
+  }
+};
