@@ -3,6 +3,7 @@ import { Entrega, DeliveryStatus } from '../types';
 import { updateEntregaField, getEntregas, fetchEntregasFromServer } from '../db/storage';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR } from '../utils/date';
+import { ColetaAutomationModal } from './ColetaAutomationModal';
 import { 
   CheckSquare, 
   RefreshCw, 
@@ -50,6 +51,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
   const [activeTab, setActiveTab] = useState<'ativos' | 'etapas_concluidas'>('ativos');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCargaId, setSelectedCargaId] = useState<string | null>(null);
+  const [isColetaModalOpen, setIsColetaModalOpen] = useState(false);
   
   // Local notes edit state for debounce
   const [notepadContent, setNotepadContent] = useState<Record<string, string>>({});
@@ -723,16 +725,25 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
           </div>
         </div>
 
-        <div className="flex items-center gap-3 self-end md:self-center font-mono">
-          <div className="bg-zinc-900 border border-zinc-800/80 rounded-lg px-3.5 py-1.5 text-[10px] text-zinc-400 flex items-center gap-1.5">
+        <div className="flex items-center gap-2 flex-wrap self-end md:self-center font-mono">
+          <button
+            type="button"
+            onClick={() => setIsColetaModalOpen(true)}
+            className="flex items-center gap-1.5 bg-[#FFD600] hover:bg-[#ffe23b] text-black rounded-lg px-3.5 py-2 text-xs font-black uppercase tracking-wider cursor-pointer font-sans shadow-lg active:scale-95 transition-all border border-yellow-400"
+          >
+            <Sparkles className="w-4 h-4 fill-current" />
+            ⚡ Disparo de Coletas
+          </button>
+
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-lg px-3 py-1.5 text-[10px] text-zinc-400 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
-            Leituras nesta sessão: <strong className="text-white font-extrabold">{readsThisSession}</strong>
+            Leituras: <strong className="text-white font-extrabold">{readsThisSession}</strong>
           </div>
           
           <button
             onClick={() => carregarCargas(true)}
             disabled={carregando}
-            className="flex items-center gap-2 bg-[#FFD600] hover:bg-[#ffe23b] text-black rounded-lg px-3.5 py-2 text-xs font-black uppercase tracking-wider cursor-pointer font-sans shadow-md active:scale-95 transition-all"
+            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg px-3 py-2 text-xs font-black uppercase tracking-wider cursor-pointer font-sans shadow-md active:scale-95 transition-all border border-zinc-700"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${carregando ? 'animate-spin' : ''}`} />
             {carregando ? '...' : 'Atualizar'}
@@ -746,7 +757,7 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
                 setActiveRouteCalcSelected(cargasUltimos3Dias[0]);
               }
             }}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-3.5 py-2 text-xs font-black uppercase tracking-wider cursor-pointer font-sans shadow-md active:scale-95 transition-all border border-emerald-500/30"
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-3 py-2 text-xs font-black uppercase tracking-wider cursor-pointer font-sans shadow-md active:scale-95 transition-all border border-emerald-500/30"
           >
             <span>🛣️</span> Rotas & Previsão (3d)
           </button>
@@ -1526,6 +1537,13 @@ export default function OperatorPanel({ user, onBackToList }: OperatorPanelProps
           </div>
         </div>
       )}
+
+      {/* MODAL DE AUTOMAÇÃO DE COLETAS PARA OPERADORES */}
+      <ColetaAutomationModal
+        isOpen={isColetaModalOpen}
+        onClose={() => setIsColetaModalOpen(false)}
+        entregas={cargas}
+      />
 
     </div>
   );

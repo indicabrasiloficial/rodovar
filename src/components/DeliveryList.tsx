@@ -5,6 +5,7 @@ import { usePaginatedEntregas, normalizeDateStr } from '../hooks/usePaginatedEnt
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR, formatRegistrationTime, isBrasiliaAfter19h, getTodayBrasiliaIso } from '../utils/date';
 import { generateTrackerLink } from '../utils/generateTrackerLink';
+import { ColetaAutomationModal } from './ColetaAutomationModal';
 import AcompanharBadge from './AcompanharBadge';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -26,7 +27,8 @@ import {
   Lock,
   Truck,
   Printer,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react';
 
 const cleanVendedorName = (name: string): string => {
@@ -1023,6 +1025,7 @@ export default function DeliveryList({
 
   const currentOperadorNome = getActiveUserFullName();
   const currentOperadorId = getActiveUserId();
+  const [isColetaModalOpen, setIsColetaModalOpen] = useState(false);
   
   const [origemFilter, setOrigemFilter] = useState('');
   const [destinoFilter, setDestinoFilter] = useState('');
@@ -1479,14 +1482,25 @@ Tenha uma ótima e segura viagem!`;
           </div>
         </div>
         
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {getActiveUserRole() !== 'Visitante' && (
+            <button
+              onClick={() => setIsColetaModalOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#FFD600] hover:bg-[#ffe23b] text-black uppercase text-xs font-mono font-black tracking-wider rounded-lg transition-all cursor-pointer shadow-md active:scale-95"
+              id="list-automa-coletas-btn"
+            >
+              <Sparkles className="w-3.5 h-3.5 fill-current" />
+              ⚡ Automação Coletas
+            </button>
+          )}
+
           {onAddDelivery && getActiveUserRole() !== 'Visitante' && (
             <button
               onClick={onAddDelivery}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#FFD600] hover:bg-[#ffe23b] text-black uppercase text-xs font-mono font-black tracking-wider rounded-lg transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 uppercase text-xs font-mono font-black tracking-wider rounded-lg transition-all cursor-pointer"
               id="list-add-delivery-btn"
             >
-              <Truck className="w-3.5 h-3.5 text-black shrink-0" />
+              <Truck className="w-3.5 h-3.5 text-[#FFD600] shrink-0" />
               Cadastrar Carga
             </button>
           )}
@@ -2883,6 +2897,13 @@ Tenha uma ótima e segura viagem!`;
           </motion.div>
         </div>
       )}
+
+      {/* MODAL DE AUTOMAÇÃO DE COLETAS */}
+      <ColetaAutomationModal
+        isOpen={isColetaModalOpen}
+        onClose={() => setIsColetaModalOpen(false)}
+        entregas={entregas}
+      />
     </div>
   );
 }

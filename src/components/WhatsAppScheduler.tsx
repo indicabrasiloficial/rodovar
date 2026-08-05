@@ -17,14 +17,18 @@ import {
   Check,
   Smartphone,
   ExternalLink,
-  Users
+  Users,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDateBR } from '../utils/date';
+import { ColetaAutomationModal } from './ColetaAutomationModal';
+import { getSaopauloGreeting, getLoggedOperatorName } from '../utils/coletaMessages';
 
 export default function WhatsAppScheduler() {
   const [scheduledList, setScheduledList] = useState<ScheduledMessage[]>([]);
   const [entregas, setEntregas] = useState<Entrega[]>([]);
+  const [isColetaModalOpen, setIsColetaModalOpen] = useState(false);
   
   // New States for Categories Broadcast Panel
   const [activeRightTab, setActiveRightTab] = useState<'agenda' | 'categorias'>('agenda');
@@ -480,7 +484,16 @@ export default function WhatsAppScheduler() {
               <h3 className="font-bold text-sm uppercase tracking-wider font-sans">Controles de Envio Zap</h3>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setIsColetaModalOpen(true)}
+                className="px-3 py-1.5 text-[11px] font-black font-mono tracking-wider rounded-lg border border-[#FFD600]/60 bg-[#FFD600] hover:bg-[#ffe033] text-black transition-all flex items-center gap-1.5 cursor-pointer uppercase shadow-md active:scale-95"
+              >
+                <Sparkles className="w-3.5 h-3.5 fill-current" />
+                Disparo de Coletas (SP)
+              </button>
+
               <button
                 type="button"
                 onClick={() => setActiveRightTab('agenda')}
@@ -851,6 +864,13 @@ export default function WhatsAppScheduler() {
           </motion.div>
         </div>
       )}
+
+      {/* MODAL DE AUTOMAÇÃO DE COLETAS PARA MOTORISTAS E CLIENTES */}
+      <ColetaAutomationModal
+        isOpen={isColetaModalOpen}
+        onClose={() => setIsColetaModalOpen(false)}
+        entregas={entregas}
+      />
 
     </div>
   );
