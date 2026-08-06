@@ -592,6 +592,7 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
 
   // Merge previous fields cleanly to support safe partial updates (e.g. status-only or location-link-only updates)
   const basePayload = {
+    ...existingDelivery,
     id: cleanId,
     created_at: existingDelivery?.created_at || new Date().toISOString(),
     data_coleta: existingDelivery?.data_coleta || new Date().toISOString().split('T')[0],
