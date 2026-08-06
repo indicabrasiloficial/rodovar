@@ -100,6 +100,8 @@ export interface Entrega {
   dataPagoAdiantamentoTimestamp?: number;
   dataPagoSaldoTimestamp?: number;
   solicitadoPagamento?: boolean;
+  solicitadoPagamentoSaldo?: boolean;
+  solicitadoPagamentoData?: string;
   data_entrega?: string;
 }
 

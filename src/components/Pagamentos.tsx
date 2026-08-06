@@ -43,7 +43,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { Entrega, AnexoPagamento } from '../types';
-import { getEntregas, updatePagamentoEntrega, updateEntregaField, fetchEntregasFromServer } from '../db/storage';
+import { getEntregas, updatePagamentoEntrega, updateEntregaField, fetchEntregasFromServer, parseSafeNumber } from '../db/storage';
 import { processAndCompressFile } from '../utils/imageCompressor';
 import { formatDateBR, formatDateTimeBR } from '../utils/date';
 
@@ -172,10 +172,25 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     }
   };
   const [solicitacoesDate, setSolicitacoesDate] = useState<string>(getTodayBr());
+  const [showAllDatesSolicitacoes, setShowAllDatesSolicitacoes] = useState<boolean>(false);
+  const [subFilterSolicitacao, setSubFilterSolicitacao] = useState<'todos' | 'pendentes' | 'solicitados' | 'pagos'>('todos');
+  const [searchSolicitacao, setSearchSolicitacao] = useState<string>('');
+
+  // Helper to retrieve valor da carga safely across multiple potential property names
+  const getValorCarga = (e: Entrega | any): number => {
+    if (!e) return 0;
+    const raw = e.valor_carga ?? e.valor_mercadoria ?? e.valorCarga ?? e.valorTotalCarga ?? e.valor_total ?? e.vlr_carga ?? e.val_valor_carga;
+    return parseSafeNumber(raw);
+  };
 
   const handleToggleSolicitadoPagamento = async (entregaId: string, currentVal: boolean) => {
     try {
-      await updatePagamentoEntrega(entregaId, { solicitadoPagamento: !currentVal });
+      const newVal = !currentVal;
+      await updatePagamentoEntrega(entregaId, {
+        solicitadoPagamentoSaldo: newVal,
+        solicitadoPagamento: newVal,
+        solicitadoPagamentoData: newVal ? new Date().toISOString() : undefined
+      });
     } catch (err) {
       console.error('Erro ao alternar solicitação de pagamento:', err);
     }
@@ -1359,51 +1374,72 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
         </div>
       ) : viewTab === 'solicitacoes' ? (
         /* ======================================================== */
-        /* ABA DE SOLICITAÇÃO DE PAGAMENTO DIÁRIA                  */
+        /* ABA DE SOLICITAÇÃO DE PAGAMENTO DE SALDO (ENCERRADOS)   */
         /* ======================================================== */
         <div className="space-y-6 animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 shadow-2xl space-y-5">
+            {/* Cabeçalho da Aba e Controles de Data */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
               <div>
                 <h2 className="text-lg font-black font-sans uppercase tracking-wider text-white flex items-center gap-2">
                   <UserCheck className="w-5 h-5 text-[#FFD600]" />
-                  Solicitações de Pagamento do Dia (Finalizados)
+                  Controle de Solicitação de Pagamento de Saldo
                 </h2>
                 <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                  Relação de motoristas com viagem concluída para controle e solicitação de pagamento.
+                  Relação de viagens encerradas para acompanhamento, marcação e solicitação de pagamento de saldo aos motoristas.
                 </p>
               </div>
 
-              {/* Calendário/Datepicker exclusivo da aba */}
-              <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 self-start sm:self-auto">
-                <Calendar className="w-4 h-4 text-[#FFD600] shrink-0" />
-                <span className="text-xs font-mono text-zinc-400">Filtrar Data:</span>
-                <input
-                  type="date"
-                  value={solicitacoesDate}
-                  onChange={(e) => setSolicitacoesDate(e.target.value)}
-                  className="bg-transparent text-xs font-mono text-zinc-200 focus:outline-none cursor-pointer"
-                />
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Botão Ver Todos vs Filtrar Data */}
                 <button
-                  onClick={() => setSolicitacoesDate(getTodayBr())}
-                  className="text-[10px] font-mono text-[#FFD600] hover:underline ml-1"
-                  title="Voltar para o dia atual"
+                  type="button"
+                  onClick={() => setShowAllDatesSolicitacoes(!showAllDatesSolicitacoes)}
+                  className={`px-3 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all cursor-pointer border flex items-center gap-1.5 ${
+                    showAllDatesSolicitacoes
+                      ? 'bg-[#FFD600] text-black border-[#FFD600]'
+                      : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:text-white hover:border-zinc-700'
+                  }`}
                 >
-                  Hoje
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>{showAllDatesSolicitacoes ? 'Exibindo Todos Encerrados' : 'Filtrar Por Data'}</span>
                 </button>
+
+                {!showAllDatesSolicitacoes && (
+                  <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2">
+                    <Calendar className="w-4 h-4 text-[#FFD600] shrink-0" />
+                    <span className="text-xs font-mono text-zinc-400">Data:</span>
+                    <input
+                      type="date"
+                      value={solicitacoesDate}
+                      onChange={(e) => setSolicitacoesDate(e.target.value)}
+                      className="bg-transparent text-xs font-mono text-zinc-200 focus:outline-none cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSolicitacoesDate(getTodayBr())}
+                      className="text-[10px] font-mono text-[#FFD600] hover:underline ml-1"
+                      title="Voltar para o dia atual"
+                    >
+                      Hoje
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Listagem de Viagens Finalizadas */}
+            {/* Renderização dos Dados da Tabela e KPIs */}
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 space-y-3">
                 <RefreshCw className="w-8 h-8 animate-spin text-[#FFD600]" />
-                <p className="text-xs font-mono text-zinc-400">Carregando solicitações...</p>
+                <p className="text-xs font-mono text-zinc-400">Carregando solicitações de pagamento...</p>
               </div>
             ) : (() => {
-              // Filtrar somente entregas com status 'entregue' finalizadas na data selecionada
-              const solicitacoesFiltradas = entregas.filter(e => {
+              // 1. Filtrar entregas encerradas (status 'entregue')
+              const baseEncerradas = entregas.filter(e => {
                 if (e.status !== 'entregue') return false;
+                if (showAllDatesSolicitacoes) return true;
+
                 const completionDate = e.data_entrega || 
                                        (e.updated_at ? e.updated_at.slice(0, 10) : '') || 
                                        e.data_coleta || 
@@ -1411,76 +1447,308 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                 return completionDate === solicitacoesDate;
               });
 
-              if (solicitacoesFiltradas.length === 0) {
-                return (
-                  <div className="py-12 text-center space-y-3 bg-zinc-900/40 rounded-xl border border-zinc-900/60">
-                    <UserCheck className="w-12 h-12 text-zinc-700 mx-auto" />
-                    <h3 className="text-base font-bold text-zinc-300">Nenhum motorista finalizou nesta data</h3>
-                    <p className="text-xs text-zinc-500 font-mono">
-                      Não há registro de entregas concluídas em {formatDateBR(solicitacoesDate)}.
-                    </p>
-                  </div>
-                );
-              }
+              // Métricas calculadas para os encerrados
+              let totalEncerrados = baseEncerradas.length;
+              let totalSaldoEncerrados = 0;
+
+              let countSolicitados = 0;
+              let valorSolicitados = 0;
+
+              let countPendentesSolicitacao = 0;
+              let valorPendentesSolicitacao = 0;
+
+              let countPagosSaldo = 0;
+              let valorPagosSaldo = 0;
+
+              baseEncerradas.forEach(e => {
+                const freteMot = parseSafeNumber(e.frete_motorista);
+                const valSal = e.valorSaldo !== undefined && e.valorSaldo !== null
+                  ? parseSafeNumber(e.valorSaldo)
+                  : Math.round(freteMot * 0.3);
+
+                totalSaldoEncerrados += valSal;
+
+                const isSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
+                const isPago = e.statusPagamentoSaldo === 'pago';
+
+                if (isPago) {
+                  countPagosSaldo += 1;
+                  valorPagosSaldo += valSal;
+                }
+
+                if (isSolicitado) {
+                  countSolicitados += 1;
+                  valorSolicitados += valSal;
+                } else {
+                  countPendentesSolicitacao += 1;
+                  valorPendentesSolicitacao += valSal;
+                }
+              });
+
+              // 2. Aplicar filtro secundário e busca por texto
+              const listFiltered = baseEncerradas.filter(e => {
+                const isSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
+                const isPago = e.statusPagamentoSaldo === 'pago';
+
+                if (subFilterSolicitacao === 'pendentes' && isSolicitado) return false;
+                if (subFilterSolicitacao === 'solicitados' && !isSolicitado) return false;
+                if (subFilterSolicitacao === 'pagos' && !isPago) return false;
+
+                if (searchSolicitacao.trim()) {
+                  const q = searchSolicitacao.toLowerCase().trim();
+                  const driverMatch = (e.motorista || '').toLowerCase().includes(q);
+                  const clientMatch = (e.cliente || '').toLowerCase().includes(q);
+                  const cpfMatch = (e.cpf_motorista || '').toLowerCase().includes(q);
+                  const ctrcMatch = (e.cte || e.contratoNum || '').toLowerCase().includes(q);
+                  const pixMatch = (e.chavePix || '').toLowerCase().includes(q);
+                  if (!driverMatch && !clientMatch && !cpfMatch && !ctrcMatch && !pixMatch) {
+                    return false;
+                  }
+                }
+
+                return true;
+              });
 
               return (
-                <div className="space-y-4">
-                  {/* Quota Limit indicator / explanation of view limit as requested */}
-                  <div className="flex items-center justify-between text-xs font-mono text-zinc-400 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-900">
-                    <span>📋 Exibindo {solicitacoesFiltradas.length} motorista(s) que concluíram viagens</span>
-                    <span className="text-[10px] text-cyan-400">⚡ Proteção de Cota Ativa: Filtro em cache local</span>
+                <div className="space-y-5">
+                  {/* Cards de Métricas / KPIs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3.5 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-zinc-400 text-[11px] font-mono">
+                        <span>FRETE ENCERRADOS</span>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div className="mt-2">
+                        <span className="text-xl font-extrabold text-white font-mono">{totalEncerrados}</span>
+                        <span className="text-xs text-zinc-400 font-mono ml-2">({formatCurrencyVal(totalSaldoEncerrados)})</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-900/80 border border-emerald-900/40 rounded-xl p-3.5 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-mono">
+                        <span>SOLICITADO SALDO (SIM)</span>
+                        <UserCheck className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div className="mt-2">
+                        <span className="text-xl font-extrabold text-emerald-400 font-mono">{countSolicitados}</span>
+                        <span className="text-xs text-emerald-500/80 font-mono ml-2">({formatCurrencyVal(valorSolicitados)})</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-900/80 border border-red-900/40 rounded-xl p-3.5 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-red-400 text-[11px] font-mono">
+                        <span>PENDENTE SOLICITAÇÃO (NÃO)</span>
+                        <AlertTriangle className="w-4 h-4 text-red-400" />
+                      </div>
+                      <div className="mt-2">
+                        <span className="text-xl font-extrabold text-red-400 font-mono">{countPendentesSolicitacao}</span>
+                        <span className="text-xs text-red-500/80 font-mono ml-2">({formatCurrencyVal(valorPendentesSolicitacao)})</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-900/80 border border-blue-900/40 rounded-xl p-3.5 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-blue-400 text-[11px] font-mono">
+                        <span>SALDO PAGO (FINANCEIRO)</span>
+                        <DollarSign className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div className="mt-2">
+                        <span className="text-xl font-extrabold text-blue-400 font-mono">{countPagosSaldo}</span>
+                        <span className="text-xs text-blue-500/80 font-mono ml-2">({formatCurrencyVal(valorPagosSaldo)})</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-zinc-900 bg-zinc-950">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[11px] tracking-wider">
-                          <th className="p-3">Nome Completo (Motorista)</th>
-                          <th className="p-3">Cliente</th>
-                          <th className="p-3 text-right">Frete Motorista</th>
-                          <th className="p-3 text-right">Valor da Carga</th>
-                          <th className="p-3 text-center w-[200px]">Solicitado o Pagamento?</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-900 font-sans text-xs">
-                        {solicitacoesFiltradas.map(e => {
-                          const isSolicitado = !!e.solicitadoPagamento;
-                          return (
-                            <tr key={e.id} className="hover:bg-zinc-900/30 transition-colors">
-                              <td className="p-3 text-white font-bold">
-                                <div>{e.motorista || 'NÃO INFORMADO'}</div>
-                                <div className="text-[10px] text-zinc-500 font-mono font-normal">
-                                  CPF: {e.cpf_motorista || 'S/N'}
-                                </div>
-                              </td>
-                              <td className="p-3 text-zinc-300 font-bold uppercase">
-                                {e.cliente || 'NÃO INFORMADO'}
-                              </td>
-                              <td className="p-3 text-right font-mono text-white font-bold">
-                                {formatCurrencyVal(e.frete_motorista)}
-                              </td>
-                              <td className="p-3 text-right font-mono text-amber-400 font-bold">
-                                {formatCurrencyVal(e.valor_carga)}
-                              </td>
-                              <td className="p-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleSolicitadoPagamento(e.id, isSolicitado)}
-                                  className={`px-4 py-1.5 rounded-xl text-xs font-mono font-black tracking-wide uppercase transition-all duration-200 cursor-pointer border ${
-                                    isSolicitado
-                                      ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
-                                      : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30'
-                                  }`}
-                                >
-                                  {isSolicitado ? '✅ SIM' : '❌ NÃO'}
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  {/* Barra de Filtros Rápidos e Busca */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-900">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSubFilterSolicitacao('todos')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                          subFilterSolicitacao === 'todos'
+                            ? 'bg-[#FFD600] text-black shadow-sm'
+                            : 'text-zinc-400 hover:text-white bg-zinc-900'
+                        }`}
+                      >
+                        Todos ({totalEncerrados})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSubFilterSolicitacao('pendentes')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                          subFilterSolicitacao === 'pendentes'
+                            ? 'bg-red-500 text-white shadow-sm'
+                            : 'text-red-400 hover:text-red-300 bg-zinc-900'
+                        }`}
+                      >
+                        ❌ Não Solicitados ({countPendentesSolicitacao})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSubFilterSolicitacao('solicitados')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                          subFilterSolicitacao === 'solicitados'
+                            ? 'bg-emerald-500 text-black shadow-sm'
+                            : 'text-emerald-400 hover:text-emerald-300 bg-zinc-900'
+                        }`}
+                      >
+                        ✅ Solicitados ({countSolicitados})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSubFilterSolicitacao('pagos')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                          subFilterSolicitacao === 'pagos'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-blue-400 hover:text-blue-300 bg-zinc-900'
+                        }`}
+                      >
+                        💰 Já Pagos ({countPagosSaldo})
+                      </button>
+                    </div>
+
+                    <div className="relative flex-1 sm:max-w-xs">
+                      <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Buscar motorista, cliente, PIX..."
+                        value={searchSolicitacao}
+                        onChange={(e) => setSearchSolicitacao(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#FFD600]"
+                      />
+                    </div>
                   </div>
+
+                  {/* Tabela de Solicitações */}
+                  {listFiltered.length === 0 ? (
+                    <div className="py-12 text-center space-y-3 bg-zinc-900/40 rounded-xl border border-zinc-900/60">
+                      <UserCheck className="w-12 h-12 text-zinc-700 mx-auto" />
+                      <h3 className="text-base font-bold text-zinc-300">Nenhum registro localizado com os filtros aplicados</h3>
+                      <p className="text-xs text-zinc-500 font-mono">
+                        Tente alterar a data ({formatDateBR(solicitacoesDate)}) ou limpar o termo de busca.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-zinc-900 bg-zinc-950">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[11px] tracking-wider">
+                            <th className="p-3">Motorista & Dados PIX</th>
+                            <th className="p-3">Cliente / CTRC</th>
+                            <th className="p-3 text-right">Valor Carga</th>
+                            <th className="p-3 text-right">Frete Motorista</th>
+                            <th className="p-3 text-right text-blue-400">Saldo A Pagar (30%)</th>
+                            <th className="p-3 text-center">Status Financeiro</th>
+                            <th className="p-3 text-center min-w-[220px]">Solicitado Pagamento?</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-900 font-sans text-xs">
+                          {listFiltered.map(e => {
+                            const isSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
+                            const isSalPago = e.statusPagamentoSaldo === 'pago';
+
+                            const freteMot = parseSafeNumber(e.frete_motorista);
+                            const valSal = e.valorSaldo !== undefined && e.valorSaldo !== null
+                              ? parseSafeNumber(e.valorSaldo)
+                              : Math.round(freteMot * 0.3);
+
+                            const valCargaCalculado = getValorCarga(e);
+
+                            // Lookup PIX details safely from resolveDriverPixInfo helper
+                            const pixInfo = resolveDriverPixInfo(e);
+                            const pixKey = pixInfo.chavePix;
+                            const pixFav = pixInfo.favorecidoPix;
+
+                            return (
+                              <tr key={e.id} className="hover:bg-zinc-900/40 transition-colors">
+                                {/* Motorista e Dados PIX */}
+                                <td className="p-3 text-white font-bold">
+                                  <div className="flex items-center gap-1.5">
+                                    <span>{e.motorista || 'NÃO INFORMADO'}</span>
+                                    {pixKey && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyPix(pixKey, e.id)}
+                                        className="text-zinc-500 hover:text-[#FFD600] transition-colors p-1"
+                                        title={`Copiar PIX: ${pixKey}`}
+                                      >
+                                        {copiedPixId === e.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-zinc-500 font-mono font-normal mt-0.5">
+                                    CPF: {e.cpf_motorista || 'S/N'}
+                                    {pixKey && <span className="ml-2 text-zinc-400">| PIX: {pixKey} {pixFav ? `(${pixFav})` : ''}</span>}
+                                  </div>
+                                </td>
+
+                                {/* Cliente e CTRC */}
+                                <td className="p-3 text-zinc-300 uppercase">
+                                  <div className="font-bold">{e.cliente || 'NÃO INFORMADO'}</div>
+                                  <div className="text-[10px] text-zinc-500 font-mono">
+                                    CTRC: {e.cte || e.contratoNum || 'S/N'}
+                                  </div>
+                                </td>
+
+                                {/* Valor da Carga (Puxado do backend com segurança) */}
+                                <td className="p-3 text-right font-mono text-amber-400 font-bold">
+                                  {valCargaCalculado > 0 ? formatCurrencyVal(valCargaCalculado) : (
+                                    <span className="text-zinc-600 text-[11px] font-normal">S/ Valor</span>
+                                  )}
+                                </td>
+
+                                {/* Frete Motorista */}
+                                <td className="p-3 text-right font-mono text-white font-bold">
+                                  {formatCurrencyVal(freteMot)}
+                                </td>
+
+                                {/* Saldo a Pagar (30%) */}
+                                <td className="p-3 text-right font-mono text-blue-400 font-extrabold text-sm">
+                                  {formatCurrencyVal(valSal)}
+                                </td>
+
+                                {/* Status Financeiro do Saldo */}
+                                <td className="p-3 text-center">
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
+                                    isSalPago
+                                      ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                                      : 'bg-amber-950/80 text-amber-400 border border-amber-800'
+                                  }`}>
+                                    {isSalPago ? '✅ PAGO' : '⏳ PENDENTE'}
+                                  </span>
+                                </td>
+
+                                {/* Controle de Solicitação de Pagamento de Saldo (Ação SIM / NÃO) */}
+                                <td className="p-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSolicitadoPagamento(e.id, isSolicitado)}
+                                    className={`w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-mono font-black tracking-wide uppercase transition-all duration-200 cursor-pointer border flex items-center justify-center gap-1.5 shadow-md ${
+                                      isSolicitado
+                                        ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                                        : 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border-red-500/40'
+                                    }`}
+                                  >
+                                    {isSolicitado ? (
+                                      <>
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                        <span>SOLICITADO (SIM)</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <X className="w-4 h-4 text-red-400" />
+                                        <span>NÃO SOLICITADO</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               );
             })()}

@@ -16,6 +16,27 @@ import {
   updateDoc
 } from 'firebase/firestore';
 
+export function parseSafeNumber(val: any): number {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[^\d.,-]/g, '');
+    if (cleaned.includes(',') && cleaned.includes('.')) {
+      const normalized = cleaned.replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(normalized);
+      return isNaN(num) ? 0 : num;
+    } else if (cleaned.includes(',')) {
+      const normalized = cleaned.replace(',', '.');
+      const num = parseFloat(normalized);
+      return isNaN(num) ? 0 : num;
+    } else {
+      const num = parseFloat(cleaned);
+      return isNaN(num) ? 0 : num;
+    }
+  }
+  return 0;
+}
+
 const ENTREGAS_COLLECTION = 'entregas';
 const MESSAGES_COLLECTION = 'scheduled_messages';
 const BLACKLIST_COLLECTION = 'blacklist_motoristas';
@@ -146,9 +167,10 @@ export async function fetchEntregasFromServer(force = false): Promise<void> {
         }
       }
 
-      let freteEmp = data.frete_empresa !== undefined ? Number(data.frete_empresa) : 0;
-      let freteMot = data.frete_motorista !== undefined ? Number(data.frete_motorista) : 0;
-      let valCarga = data.valor_carga !== undefined ? Number(data.valor_carga) : 0;
+      let freteEmp = parseSafeNumber(data.frete_empresa);
+      let freteMot = parseSafeNumber(data.frete_motorista);
+      const rawValCarga = data.valor_carga ?? data.valor_mercadoria ?? data.valorCarga ?? data.valorTotalCarga ?? data.valor_total ?? data.vlr_carga ?? data.val_valor_carga;
+      let valCarga = parseSafeNumber(rawValCarga);
 
       newEntregas.push({
         id: docSnap.id,

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { db, OperationType, handleFirestoreError } from '../db/firebase';
 import { Entrega, DeliveryStatus } from '../types';
 import { calculateRealisticDistanceKm, findCityCoords } from '../utils/distance';
-import { getEntregas, subscribeToRealtime, fetchEntregasFromServer } from '../db/storage';
+import { getEntregas, subscribeToRealtime, fetchEntregasFromServer, parseSafeNumber } from '../db/storage';
 
 const PAGE_SIZE = 20;
 
@@ -170,9 +170,10 @@ export function parseFirestoreDocToEntrega(docSnap: any): Entrega {
     lngVal = cityCoords.lng;
   }
 
-  let freteEmp = data.frete_empresa !== undefined ? Number(data.frete_empresa) : 0;
-  let freteMot = data.frete_motorista !== undefined ? Number(data.frete_motorista) : 0;
-  let valCarga = data.valor_carga !== undefined ? Number(data.valor_carga) : 0;
+  let freteEmp = parseSafeNumber(data.frete_empresa);
+  let freteMot = parseSafeNumber(data.frete_motorista);
+  const rawValCarga = data.valor_carga ?? data.valor_mercadoria ?? data.valorCarga ?? data.valorTotalCarga ?? data.valor_total ?? data.vlr_carga ?? data.val_valor_carga;
+  let valCarga = parseSafeNumber(rawValCarga);
 
   return {
     id: docSnap.id,
