@@ -1635,8 +1635,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                           <tr className="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[11px] tracking-wider">
                             <th className="p-3">Motorista & Dados PIX</th>
                             <th className="p-3">Cliente / CTRC</th>
-                            <th className="p-3 text-right">Valor Carga</th>
-                            <th className="p-3 text-right">Frete Motorista</th>
+                            <th className="p-3 text-right text-amber-400">Adiantamento (70%)</th>
                             <th className="p-3 text-right text-blue-400">Saldo A Pagar (30%)</th>
                             <th className="p-3 text-center">Status Financeiro</th>
                             <th className="p-3 text-center min-w-[220px]">Solicitado Pagamento?</th>
@@ -1648,6 +1647,9 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             const isSalPago = e.statusPagamentoSaldo === 'pago';
 
                             const freteMot = parseSafeNumber(e.frete_motorista);
+                            const valAd = e.valorAdiantamento !== undefined && e.valorAdiantamento !== null
+                              ? parseSafeNumber(e.valorAdiantamento)
+                              : Math.round(freteMot * 0.7);
                             const valSal = e.valorSaldo !== undefined && e.valorSaldo !== null
                               ? parseSafeNumber(e.valorSaldo)
                               : Math.round(freteMot * 0.3);
@@ -1690,16 +1692,9 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                                   </div>
                                 </td>
 
-                                {/* Valor da Carga (Puxado do backend com segurança) */}
+                                {/* Adiantamento (70%) */}
                                 <td className="p-3 text-right font-mono text-amber-400 font-bold">
-                                  {valCargaCalculado > 0 ? formatCurrencyVal(valCargaCalculado) : (
-                                    <span className="text-zinc-600 text-[11px] font-normal">S/ Valor</span>
-                                  )}
-                                </td>
-
-                                {/* Frete Motorista */}
-                                <td className="p-3 text-right font-mono text-white font-bold">
-                                  {formatCurrencyVal(freteMot)}
+                                  {formatCurrencyVal(valAd)}
                                 </td>
 
                                 {/* Saldo a Pagar (30%) */}
