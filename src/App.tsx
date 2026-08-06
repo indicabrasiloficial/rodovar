@@ -694,7 +694,10 @@ export default function App() {
           <div className="grid grid-cols-4 gap-1 w-full bg-zinc-950/80 p-1.5 rounded-xl border border-zinc-900">
             {/* Cargas */}
             <button
-              onClick={() => setSelectedView('list')}
+              onClick={() => {
+                setSelectedView('list');
+                setIsToolsExpanded(false);
+              }}
               className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                 selectedView === 'list' || selectedView === 'details'
                 ? 'bg-[#FFD600] text-black shadow-md font-extrabold' 
@@ -708,7 +711,10 @@ export default function App() {
 
             {/* Colaborador */}
             <button
-              onClick={() => setSelectedView('rastrear')}
+              onClick={() => {
+                setSelectedView('rastrear');
+                setIsToolsExpanded(false);
+              }}
               className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                 selectedView === 'rastrear'
                 ? 'bg-[#FFD600] text-black shadow-md font-extrabold' 
@@ -722,7 +728,10 @@ export default function App() {
 
             {/* Painel */}
             <button
-              onClick={() => setSelectedView('dashboard')}
+              onClick={() => {
+                setSelectedView('dashboard');
+                setIsToolsExpanded(false);
+              }}
               className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                 selectedView === 'dashboard'
                 ? 'bg-[#FFD600] text-black shadow-md font-extrabold' 
@@ -739,6 +748,7 @@ export default function App() {
               onClick={() => {
                 setSelectedView('agenda');
                 window.history.pushState({ path: '/agenda' }, '', '/agenda');
+                setIsToolsExpanded(false);
               }}
               className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                 selectedView === 'agenda'
@@ -772,7 +782,7 @@ export default function App() {
             </button>
 
             <AnimatePresence>
-              {(isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration', 'pagamentos'].includes(selectedView)) && (
+              {isToolsExpanded && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
@@ -787,6 +797,7 @@ export default function App() {
                         onClick={() => {
                           setSelectedView('pagamentos');
                           window.history.pushState({ path: '/pagamentos' }, '', '/pagamentos');
+                          setIsToolsExpanded(false);
                         }}
                         className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                           selectedView === 'pagamentos' 
@@ -802,7 +813,10 @@ export default function App() {
 
                     {/* Desempenho */}
                     <button
-                      onClick={() => setSelectedView('statistics')}
+                      onClick={() => {
+                        setSelectedView('statistics');
+                        setIsToolsExpanded(false);
+                      }}
                       className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                         selectedView === 'statistics' 
                         ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -816,7 +830,10 @@ export default function App() {
 
                     {/* AgenteZAP */}
                     <button
-                      onClick={() => setSelectedView('whatsapp')}
+                      onClick={() => {
+                        setSelectedView('whatsapp');
+                        setIsToolsExpanded(false);
+                      }}
                       className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                         selectedView === 'whatsapp' 
                         ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -830,7 +847,10 @@ export default function App() {
 
                     {/* Gerente Genivaldo */}
                     <button
-                      onClick={() => setSelectedView('manager')}
+                      onClick={() => {
+                        setSelectedView('manager');
+                        setIsToolsExpanded(false);
+                      }}
                       className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                         selectedView === 'manager' 
                         ? 'bg-red-950/30 text-red-400 border-red-900/40 font-black' 
@@ -844,7 +864,10 @@ export default function App() {
 
                     {/* Lista Negra */}
                     <button
-                      onClick={() => setSelectedView('blacklist')}
+                      onClick={() => {
+                        setSelectedView('blacklist');
+                        setIsToolsExpanded(false);
+                      }}
                       className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                         selectedView === 'blacklist' 
                         ? 'bg-red-950/30 text-red-400 border-red-900/40 font-black' 
@@ -858,7 +881,10 @@ export default function App() {
 
                     {/* Manual Agente */}
                     <button
-                      onClick={() => setSelectedView('manual')}
+                      onClick={() => {
+                        setSelectedView('manual');
+                        setIsToolsExpanded(false);
+                      }}
                       className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                         selectedView === 'manual' 
                         ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -873,7 +899,10 @@ export default function App() {
                     {/* Backup Central (Admin-only) */}
                     {user && (user.username === 'master' || user.role === 'Master') && (
                       <button
-                        onClick={() => setSelectedView('backup')}
+                        onClick={() => {
+                          setSelectedView('backup');
+                          setIsToolsExpanded(false);
+                        }}
                         className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                           selectedView === 'backup' 
                           ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -889,7 +918,10 @@ export default function App() {
                     {/* Cadastro (Admin-only) */}
                     {user && (user.username === 'master' || user.role === 'Master') && (
                       <button
-                        onClick={() => setSelectedView('registration')}
+                        onClick={() => {
+                          setSelectedView('registration');
+                          setIsToolsExpanded(false);
+                        }}
                         className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                           selectedView === 'registration' 
                           ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -905,7 +937,10 @@ export default function App() {
                     {/* Integração API (Admin-only) */}
                     {user && (user.username === 'master' || user.role === 'Master') && (
                       <button
-                        onClick={() => setSelectedView('api_integration')}
+                        onClick={() => {
+                          setSelectedView('api_integration');
+                          setIsToolsExpanded(false);
+                        }}
                         className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                           selectedView === 'api_integration' 
                           ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -921,7 +956,10 @@ export default function App() {
                     {/* Integração Telegram (Admin-only) */}
                     {user && (user.username === 'master' || user.role === 'Master') && (
                       <button
-                        onClick={() => setSelectedView('telegram_integration')}
+                        onClick={() => {
+                          setSelectedView('telegram_integration');
+                          setIsToolsExpanded(false);
+                        }}
                         className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                           selectedView === 'telegram_integration' 
                           ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -937,7 +975,10 @@ export default function App() {
                     {/* Auditoria Logs (Admin-only) */}
                     {user && (user.username === 'master' || user.role === 'Master') && (
                       <button
-                        onClick={() => setSelectedView('logs')}
+                        onClick={() => {
+                          setSelectedView('logs');
+                          setIsToolsExpanded(false);
+                        }}
                         className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                           selectedView === 'logs' 
                           ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -953,7 +994,10 @@ export default function App() {
                     {/* Migração (Admin-only) */}
                     {user && (user.username === 'master' || user.role === 'Master') && (
                       <button
-                        onClick={() => setSelectedView('migration')}
+                        onClick={() => {
+                          setSelectedView('migration');
+                          setIsToolsExpanded(false);
+                        }}
                         className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
                           selectedView === 'migration' 
                           ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
@@ -974,7 +1018,7 @@ export default function App() {
           {/* Row 4: Tracking frequency (Sinc. Nuvem) & Cadastrar Carga Button */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full items-stretch border-t border-zinc-900 pt-3">
             {/* Left Col: Tracking frequency selector */}
-            <div className="w-full flex justify-center">
+            <div className="hidden sm:flex w-full justify-center">
               <TrackingModeSelector />
             </div>
 
