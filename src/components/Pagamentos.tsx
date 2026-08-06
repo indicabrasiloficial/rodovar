@@ -160,8 +160,26 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   // Master toggle: Hide/Show values (Default: hidden as requested)
   const [hideValues, setHideValues] = useState<boolean>(true);
 
-  // View mode tab: 'cards' vs 'estatisticas'
-  const [viewTab, setViewTab] = useState<'cards' | 'estatisticas'>('cards');
+  // View mode tab: 'cards' vs 'estatisticas' vs 'solicitacoes'
+  const [viewTab, setViewTab] = useState<'cards' | 'estatisticas' | 'solicitacoes'>('cards');
+
+  // Daily payment request date filter in Sao Paulo timezone
+  const getTodayBr = () => {
+    try {
+      return new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/').reverse().join('-');
+    } catch {
+      return new Date().toISOString().split('T')[0];
+    }
+  };
+  const [solicitacoesDate, setSolicitacoesDate] = useState<string>(getTodayBr());
+
+  const handleToggleSolicitadoPagamento = async (entregaId: string, currentVal: boolean) => {
+    try {
+      await updatePagamentoEntrega(entregaId, { solicitadoPagamento: !currentVal });
+    } catch (err) {
+      console.error('Erro ao alternar solicitação de pagamento:', err);
+    }
+  };
 
   // Timeframe filter for statistics ('semanal' | 'mensal' | 'anual' | 'todos')
   const [statsTimeframe, setStatsTimeframe] = useState<'semanal' | 'mensal' | 'anual' | 'todos'>('semanal');
@@ -888,6 +906,19 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                 <BarChart3 className="w-3.5 h-3.5" />
                 <span>Estatísticas</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setViewTab('solicitacoes')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewTab === 'solicitacoes'
+                    ? 'bg-[#FFD600] text-black shadow-md'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Solicitação de Pagamento</span>
+              </button>
             </div>
 
             {/* Toggle Hide/Show Values */}
@@ -1324,6 +1355,135 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      ) : viewTab === 'solicitacoes' ? (
+        /* ======================================================== */
+        /* ABA DE SOLICITAÇÃO DE PAGAMENTO DIÁRIA                  */
+        /* ======================================================== */
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
+              <div>
+                <h2 className="text-lg font-black font-sans uppercase tracking-wider text-white flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-[#FFD600]" />
+                  Solicitações de Pagamento do Dia (Finalizados)
+                </h2>
+                <p className="text-xs text-zinc-400 font-mono mt-0.5">
+                  Relação de motoristas com viagem concluída para controle e solicitação de pagamento.
+                </p>
+              </div>
+
+              {/* Calendário/Datepicker exclusivo da aba */}
+              <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 self-start sm:self-auto">
+                <Calendar className="w-4 h-4 text-[#FFD600] shrink-0" />
+                <span className="text-xs font-mono text-zinc-400">Filtrar Data:</span>
+                <input
+                  type="date"
+                  value={solicitacoesDate}
+                  onChange={(e) => setSolicitacoesDate(e.target.value)}
+                  className="bg-transparent text-xs font-mono text-zinc-200 focus:outline-none cursor-pointer"
+                />
+                <button
+                  onClick={() => setSolicitacoesDate(getTodayBr())}
+                  className="text-[10px] font-mono text-[#FFD600] hover:underline ml-1"
+                  title="Voltar para o dia atual"
+                >
+                  Hoje
+                </button>
+              </div>
+            </div>
+
+            {/* Listagem de Viagens Finalizadas */}
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                <RefreshCw className="w-8 h-8 animate-spin text-[#FFD600]" />
+                <p className="text-xs font-mono text-zinc-400">Carregando solicitações...</p>
+              </div>
+            ) : (() => {
+              // Filtrar somente entregas com status 'entregue' finalizadas na data selecionada
+              const solicitacoesFiltradas = entregas.filter(e => {
+                if (e.status !== 'entregue') return false;
+                const completionDate = e.data_entrega || 
+                                       (e.updated_at ? e.updated_at.slice(0, 10) : '') || 
+                                       e.data_coleta || 
+                                       '';
+                return completionDate === solicitacoesDate;
+              });
+
+              if (solicitacoesFiltradas.length === 0) {
+                return (
+                  <div className="py-12 text-center space-y-3 bg-zinc-900/40 rounded-xl border border-zinc-900/60">
+                    <UserCheck className="w-12 h-12 text-zinc-700 mx-auto" />
+                    <h3 className="text-base font-bold text-zinc-300">Nenhum motorista finalizou nesta data</h3>
+                    <p className="text-xs text-zinc-500 font-mono">
+                      Não há registro de entregas concluídas em {formatDateBR(solicitacoesDate)}.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-4">
+                  {/* Quota Limit indicator / explanation of view limit as requested */}
+                  <div className="flex items-center justify-between text-xs font-mono text-zinc-400 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-900">
+                    <span>📋 Exibindo {solicitacoesFiltradas.length} motorista(s) que concluíram viagens</span>
+                    <span className="text-[10px] text-cyan-400">⚡ Proteção de Cota Ativa: Filtro em cache local</span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-zinc-900 bg-zinc-950">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[11px] tracking-wider">
+                          <th className="p-3">Nome Completo (Motorista)</th>
+                          <th className="p-3">Cliente</th>
+                          <th className="p-3 text-right">Frete Motorista</th>
+                          <th className="p-3 text-right">Valor da Carga</th>
+                          <th className="p-3 text-center w-[200px]">Solicitado o Pagamento?</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900 font-sans text-xs">
+                        {solicitacoesFiltradas.map(e => {
+                          const isSolicitado = !!e.solicitadoPagamento;
+                          return (
+                            <tr key={e.id} className="hover:bg-zinc-900/30 transition-colors">
+                              <td className="p-3 text-white font-bold">
+                                <div>{e.motorista || 'NÃO INFORMADO'}</div>
+                                <div className="text-[10px] text-zinc-500 font-mono font-normal">
+                                  CPF: {e.cpf_motorista || 'S/N'}
+                                </div>
+                              </td>
+                              <td className="p-3 text-zinc-300 font-bold uppercase">
+                                {e.cliente || 'NÃO INFORMADO'}
+                              </td>
+                              <td className="p-3 text-right font-mono text-white font-bold">
+                                {formatCurrencyVal(e.frete_motorista)}
+                              </td>
+                              <td className="p-3 text-right font-mono text-amber-400 font-bold">
+                                {formatCurrencyVal(e.valor_carga)}
+                              </td>
+                              <td className="p-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSolicitadoPagamento(e.id, isSolicitado)}
+                                  className={`px-4 py-1.5 rounded-xl text-xs font-mono font-black tracking-wide uppercase transition-all duration-200 cursor-pointer border ${
+                                    isSolicitado
+                                      ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                                      : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30'
+                                  }`}
+                                >
+                                  {isSolicitado ? '✅ SIM' : '❌ NÃO'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       ) : (

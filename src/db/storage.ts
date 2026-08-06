@@ -747,6 +747,10 @@ export function saveEntrega(entrega: Partial<Entrega> & { id?: string }): Entreg
     updated_at: new Date().toISOString()
   };
 
+  if (payload.status === 'entregue' && !payload.data_entrega) {
+    payload.data_entrega = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/').reverse().join('-');
+  }
+
   // Normalize vendor name to consistent trimmed uppercase (extract first name if multi-name exists with separators)
   if (payload.vendedor) {
     const parts = payload.vendedor.split(/[\/\-\\]/);
@@ -1577,6 +1581,9 @@ export async function markMessageAsSeen(
 }
 
 export async function updateEntregaField(id: string, updates: Record<string, any>): Promise<void> {
+  if (updates.status === 'entregue' && !updates.data_entrega) {
+    updates.data_entrega = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/').reverse().join('-');
+  }
   const index = cachedEntregas.findIndex(e => e.id === id);
   let freshObjForWebhook: Entrega | null = null;
   if (index !== -1) {

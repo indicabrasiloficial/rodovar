@@ -99,6 +99,8 @@ export interface Entrega {
   // Timestamps de Controle de Pagamentos
   dataPagoAdiantamentoTimestamp?: number;
   dataPagoSaldoTimestamp?: number;
+  solicitadoPagamento?: boolean;
+  data_entrega?: string;
 }
 
 export interface AnexoPagamento {
