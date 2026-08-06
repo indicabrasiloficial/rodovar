@@ -173,7 +173,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   };
   const [solicitacoesDate, setSolicitacoesDate] = useState<string>(getTodayBr());
   const [showAllDatesSolicitacoes, setShowAllDatesSolicitacoes] = useState<boolean>(false);
-  const [subFilterSolicitacao, setSubFilterSolicitacao] = useState<'todos' | 'pendentes' | 'solicitados' | 'pagos'>('todos');
+  const [subFilterSolicitacao, setSubFilterSolicitacao] = useState<'todos' | 'adiantamento' | 'saldo' | 'pendentes' | 'pagos'>('todos');
   const [searchSolicitacao, setSearchSolicitacao] = useState<string>('');
 
   // Helper to retrieve valor da carga safely across multiple potential property names
@@ -183,7 +183,24 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
     return parseSafeNumber(raw);
   };
 
-  const handleToggleSolicitadoPagamento = async (entregaId: string, currentVal: boolean) => {
+  const handleToggleSolicitadoAdiantamento = async (entregaId: string, currentVal: boolean) => {
+    try {
+      const newVal = !currentVal;
+      await updatePagamentoEntrega(entregaId, {
+        solicitadoPagamentoAdiantamento: newVal,
+        solicitadoPagamentoAdiantamentoData: newVal ? new Date().toISOString() : undefined
+      });
+      setEntregas(prev => prev.map(e => e.id === entregaId ? {
+        ...e,
+        solicitadoPagamentoAdiantamento: newVal,
+        solicitadoPagamentoAdiantamentoData: newVal ? new Date().toISOString() : undefined
+      } : e));
+    } catch (err) {
+      console.error('Erro ao alternar solicitação de adiantamento:', err);
+    }
+  };
+
+  const handleToggleSolicitadoSaldo = async (entregaId: string, currentVal: boolean) => {
     try {
       const newVal = !currentVal;
       await updatePagamentoEntrega(entregaId, {
@@ -191,10 +208,18 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
         solicitadoPagamento: newVal,
         solicitadoPagamentoData: newVal ? new Date().toISOString() : undefined
       });
+      setEntregas(prev => prev.map(e => e.id === entregaId ? {
+        ...e,
+        solicitadoPagamentoSaldo: newVal,
+        solicitadoPagamento: newVal,
+        solicitadoPagamentoData: newVal ? new Date().toISOString() : undefined
+      } : e));
     } catch (err) {
-      console.error('Erro ao alternar solicitação de pagamento:', err);
+      console.error('Erro ao alternar solicitação de saldo:', err);
     }
   };
+
+  const handleToggleSolicitadoPagamento = handleToggleSolicitadoSaldo;
 
   // Timeframe filter for statistics ('semanal' | 'mensal' | 'anual' | 'todos')
   const [statsTimeframe, setStatsTimeframe] = useState<'semanal' | 'mensal' | 'anual' | 'todos'>('semanal');
@@ -1374,7 +1399,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
         </div>
       ) : viewTab === 'solicitacoes' ? (
         /* ======================================================== */
-        /* ABA DE SOLICITAÇÃO DE PAGAMENTO DE SALDO (ENCERRADOS)   */
+        /* ABA DE SOLICITAÇÃO DE PAGAMENTO (ADIANTAMENTO E SALDO)  */
         /* ======================================================== */
         <div className="space-y-6 animate-fade-in">
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 shadow-2xl space-y-5">
@@ -1383,10 +1408,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               <div>
                 <h2 className="text-lg font-black font-sans uppercase tracking-wider text-white flex items-center gap-2">
                   <UserCheck className="w-5 h-5 text-[#FFD600]" />
-                  Controle de Solicitação de Pagamento de Saldo
+                  Controle de Solicitação de Pagamento (Adiantamento & Saldo)
                 </h2>
                 <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                  Relação de viagens encerradas para acompanhamento, marcação e solicitação de pagamento de saldo aos motoristas.
+                  Acompanhe e confirme individualmente as solicitações de Adiantamento (70%) e Saldo (30%) dos motoristas.
                 </p>
               </div>
 
@@ -1402,7 +1427,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   }`}
                 >
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>{showAllDatesSolicitacoes ? 'Exibindo Todos Encerrados' : 'Filtrar Por Data'}</span>
+                  <span>{showAllDatesSolicitacoes ? 'Exibindo Todos Fretes' : 'Filtrar Por Data'}</span>
                 </button>
 
                 {!showAllDatesSolicitacoes && (
@@ -1435,64 +1460,78 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                 <p className="text-xs font-mono text-zinc-400">Carregando solicitações de pagamento...</p>
               </div>
             ) : (() => {
-              // 1. Filtrar entregas encerradas (status 'entregue')
+              // 1. Filtrar entregas válidas (não canceladas)
               const baseEncerradas = entregas.filter(e => {
-                if (e.status !== 'entregue') return false;
+                if (e.status === 'cancelado') return false;
                 if (showAllDatesSolicitacoes) return true;
 
                 const completionDate = e.data_entrega || 
-                                       (e.updated_at ? e.updated_at.slice(0, 10) : '') || 
                                        e.data_coleta || 
+                                       (e.updated_at ? e.updated_at.slice(0, 10) : '') || 
                                        '';
                 return completionDate === solicitacoesDate;
               });
 
-              // Métricas calculadas para os encerrados
+              // Métricas calculadas
               let totalEncerrados = baseEncerradas.length;
-              let totalSaldoEncerrados = 0;
+              let totalFreteMotoristas = 0;
 
-              let countSolicitados = 0;
-              let valorSolicitados = 0;
+              let countSolicitadosAdiant = 0;
+              let valorSolicitadosAdiant = 0;
 
-              let countPendentesSolicitacao = 0;
-              let valorPendentesSolicitacao = 0;
+              let countSolicitadosSaldo = 0;
+              let valorSolicitadosSaldo = 0;
 
-              let countPagosSaldo = 0;
-              let valorPagosSaldo = 0;
+              let countPendentesGeral = 0;
+
+              let countPagosCompleto = 0;
 
               baseEncerradas.forEach(e => {
                 const freteMot = parseSafeNumber(e.frete_motorista);
+                const valAd = e.valorAdiantamento !== undefined && e.valorAdiantamento !== null
+                  ? parseSafeNumber(e.valorAdiantamento)
+                  : Math.round(freteMot * 0.7);
                 const valSal = e.valorSaldo !== undefined && e.valorSaldo !== null
                   ? parseSafeNumber(e.valorSaldo)
                   : Math.round(freteMot * 0.3);
 
-                totalSaldoEncerrados += valSal;
+                totalFreteMotoristas += (valAd + valSal);
 
-                const isSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
-                const isPago = e.statusPagamentoSaldo === 'pago';
+                const isAdiantSolicitado = !!e.solicitadoPagamentoAdiantamento;
+                const isSaldoSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
+                const isAdiantPago = e.statusPagamentoAdiantamento === 'pago';
+                const isSaldoPago = e.statusPagamentoSaldo === 'pago';
 
-                if (isPago) {
-                  countPagosSaldo += 1;
-                  valorPagosSaldo += valSal;
+                if (isAdiantPago && isSaldoPago) {
+                  countPagosCompleto += 1;
                 }
 
-                if (isSolicitado) {
-                  countSolicitados += 1;
-                  valorSolicitados += valSal;
-                } else {
-                  countPendentesSolicitacao += 1;
-                  valorPendentesSolicitacao += valSal;
+                if (isAdiantSolicitado) {
+                  countSolicitadosAdiant += 1;
+                  valorSolicitadosAdiant += valAd;
+                }
+
+                if (isSaldoSolicitado) {
+                  countSolicitadosSaldo += 1;
+                  valorSolicitadosSaldo += valSal;
+                }
+
+                if (!isAdiantSolicitado && !isSaldoSolicitado) {
+                  countPendentesGeral += 1;
                 }
               });
 
               // 2. Aplicar filtro secundário e busca por texto
               const listFiltered = baseEncerradas.filter(e => {
-                const isSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
-                const isPago = e.statusPagamentoSaldo === 'pago';
+                const isAdiantSolicitado = !!e.solicitadoPagamentoAdiantamento;
+                const isSaldoSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
+                const isAdiantPago = e.statusPagamentoAdiantamento === 'pago';
+                const isSaldoPago = e.statusPagamentoSaldo === 'pago';
 
-                if (subFilterSolicitacao === 'pendentes' && isSolicitado) return false;
-                if (subFilterSolicitacao === 'solicitados' && !isSolicitado) return false;
-                if (subFilterSolicitacao === 'pagos' && !isPago) return false;
+                if (subFilterSolicitacao === 'adiantamento' && !isAdiantSolicitado) return false;
+                if (subFilterSolicitacao === 'saldo' && !isSaldoSolicitado) return false;
+                if (subFilterSolicitacao === 'pendentes' && (isAdiantSolicitado || isSaldoSolicitado)) return false;
+                if (subFilterSolicitacao === 'pagos' && !(isAdiantPago && isSaldoPago)) return false;
 
                 if (searchSolicitacao.trim()) {
                   const q = searchSolicitacao.toLowerCase().trim();
@@ -1515,45 +1554,45 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3.5 flex flex-col justify-between">
                       <div className="flex items-center justify-between text-zinc-400 text-[11px] font-mono">
-                        <span>FRETE ENCERRADOS</span>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>TOTAL DE FRETES</span>
+                        <Truck className="w-4 h-4 text-[#FFD600]" />
                       </div>
                       <div className="mt-2">
                         <span className="text-xl font-extrabold text-white font-mono">{totalEncerrados}</span>
-                        <span className="text-xs text-zinc-400 font-mono ml-2">({formatCurrencyVal(totalSaldoEncerrados)})</span>
+                        <span className="text-xs text-zinc-400 font-mono ml-2">({formatCurrencyVal(totalFreteMotoristas)})</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-900/80 border border-amber-900/40 rounded-xl p-3.5 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-amber-400 text-[11px] font-mono font-bold">
+                        <span>SOLICITADO ADIANT. (70%)</span>
+                        <UserCheck className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="mt-2">
+                        <span className="text-xl font-extrabold text-amber-400 font-mono">{countSolicitadosAdiant}</span>
+                        <span className="text-xs text-amber-500/80 font-mono ml-2">({formatCurrencyVal(valorSolicitadosAdiant)})</span>
                       </div>
                     </div>
 
                     <div className="bg-zinc-900/80 border border-emerald-900/40 rounded-xl p-3.5 flex flex-col justify-between">
-                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-mono">
-                        <span>SOLICITADO SALDO (SIM)</span>
-                        <UserCheck className="w-4 h-4 text-emerald-400" />
+                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-mono font-bold">
+                        <span>SOLICITADO SALDO (30%)</span>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                       </div>
                       <div className="mt-2">
-                        <span className="text-xl font-extrabold text-emerald-400 font-mono">{countSolicitados}</span>
-                        <span className="text-xs text-emerald-500/80 font-mono ml-2">({formatCurrencyVal(valorSolicitados)})</span>
-                      </div>
-                    </div>
-
-                    <div className="bg-zinc-900/80 border border-red-900/40 rounded-xl p-3.5 flex flex-col justify-between">
-                      <div className="flex items-center justify-between text-red-400 text-[11px] font-mono">
-                        <span>PENDENTE SOLICITAÇÃO (NÃO)</span>
-                        <AlertTriangle className="w-4 h-4 text-red-400" />
-                      </div>
-                      <div className="mt-2">
-                        <span className="text-xl font-extrabold text-red-400 font-mono">{countPendentesSolicitacao}</span>
-                        <span className="text-xs text-red-500/80 font-mono ml-2">({formatCurrencyVal(valorPendentesSolicitacao)})</span>
+                        <span className="text-xl font-extrabold text-emerald-400 font-mono">{countSolicitadosSaldo}</span>
+                        <span className="text-xs text-emerald-500/80 font-mono ml-2">({formatCurrencyVal(valorSolicitadosSaldo)})</span>
                       </div>
                     </div>
 
                     <div className="bg-zinc-900/80 border border-blue-900/40 rounded-xl p-3.5 flex flex-col justify-between">
                       <div className="flex items-center justify-between text-blue-400 text-[11px] font-mono">
-                        <span>SALDO PAGO (FINANCEIRO)</span>
+                        <span>PAGOS 100% (FINANCEIRO)</span>
                         <DollarSign className="w-4 h-4 text-blue-400" />
                       </div>
                       <div className="mt-2">
-                        <span className="text-xl font-extrabold text-blue-400 font-mono">{countPagosSaldo}</span>
-                        <span className="text-xs text-blue-500/80 font-mono ml-2">({formatCurrencyVal(valorPagosSaldo)})</span>
+                        <span className="text-xl font-extrabold text-blue-400 font-mono">{countPagosCompleto}</span>
+                        <span className="text-xs text-blue-500/80 font-mono ml-2">concluídos</span>
                       </div>
                     </div>
                   </div>
@@ -1574,6 +1613,28 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setSubFilterSolicitacao('adiantamento')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                          subFilterSolicitacao === 'adiantamento'
+                            ? 'bg-amber-500 text-black shadow-sm'
+                            : 'text-amber-400 hover:text-amber-300 bg-zinc-900'
+                        }`}
+                      >
+                        ⚡ Solicitado Adiantamento ({countSolicitadosAdiant})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSubFilterSolicitacao('saldo')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                          subFilterSolicitacao === 'saldo'
+                            ? 'bg-emerald-500 text-black shadow-sm'
+                            : 'text-emerald-400 hover:text-emerald-300 bg-zinc-900'
+                        }`}
+                      >
+                        ✅ Solicitado Saldo ({countSolicitadosSaldo})
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setSubFilterSolicitacao('pendentes')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
                           subFilterSolicitacao === 'pendentes'
@@ -1581,18 +1642,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             : 'text-red-400 hover:text-red-300 bg-zinc-900'
                         }`}
                       >
-                        ❌ Não Solicitados ({countPendentesSolicitacao})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSubFilterSolicitacao('solicitados')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
-                          subFilterSolicitacao === 'solicitados'
-                            ? 'bg-emerald-500 text-black shadow-sm'
-                            : 'text-emerald-400 hover:text-emerald-300 bg-zinc-900'
-                        }`}
-                      >
-                        ✅ Solicitados ({countSolicitados})
+                        ❌ Não Solicitados ({countPendentesGeral})
                       </button>
                       <button
                         type="button"
@@ -1603,7 +1653,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             : 'text-blue-400 hover:text-blue-300 bg-zinc-900'
                         }`}
                       >
-                        💰 Já Pagos ({countPagosSaldo})
+                        💰 Já Pagos ({countPagosCompleto})
                       </button>
                     </div>
 
@@ -1636,15 +1686,18 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             <th className="p-3">Motorista & Dados PIX</th>
                             <th className="p-3">Cliente / CTRC</th>
                             <th className="p-3 text-right text-amber-400">Adiantamento (70%)</th>
+                            <th className="p-3 text-center min-w-[190px]">Solicitou Adiantamento?</th>
                             <th className="p-3 text-right text-blue-400">Saldo A Pagar (30%)</th>
+                            <th className="p-3 text-center min-w-[190px]">Solicitou Saldo?</th>
                             <th className="p-3 text-center">Status Financeiro</th>
-                            <th className="p-3 text-center min-w-[220px]">Solicitado Pagamento?</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-900 font-sans text-xs">
                           {listFiltered.map(e => {
-                            const isSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
-                            const isSalPago = e.statusPagamentoSaldo === 'pago';
+                            const isAdiantSolicitado = !!e.solicitadoPagamentoAdiantamento;
+                            const isSaldoSolicitado = !!(e.solicitadoPagamentoSaldo ?? e.solicitadoPagamento);
+                            const isAdiantPago = e.statusPagamentoAdiantamento === 'pago';
+                            const isSaldoPago = e.statusPagamentoSaldo === 'pago';
 
                             const freteMot = parseSafeNumber(e.frete_motorista);
                             const valAd = e.valorAdiantamento !== undefined && e.valorAdiantamento !== null
@@ -1653,8 +1706,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             const valSal = e.valorSaldo !== undefined && e.valorSaldo !== null
                               ? parseSafeNumber(e.valorSaldo)
                               : Math.round(freteMot * 0.3);
-
-                            const valCargaCalculado = getValorCarga(e);
 
                             // Lookup PIX details safely from resolveDriverPixInfo helper
                             const pixInfo = resolveDriverPixInfo(e);
@@ -1697,45 +1748,79 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                                   {formatCurrencyVal(valAd)}
                                 </td>
 
+                                {/* Confirmação 1: Solicitou Adiantamento? */}
+                                <td className="p-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSolicitadoAdiantamento(e.id, isAdiantSolicitado)}
+                                    className={`w-full px-3 py-1.5 rounded-xl text-[11px] font-mono font-black uppercase tracking-wide transition-all duration-200 cursor-pointer border flex items-center justify-center gap-1.5 shadow-md ${
+                                      isAdiantSolicitado
+                                        ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
+                                        : 'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-500 border-zinc-800'
+                                    }`}
+                                  >
+                                    {isAdiantSolicitado ? (
+                                      <>
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                                        <span>ADIANT. SOLICITADO (SIM)</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <X className="w-3.5 h-3.5 text-zinc-500" />
+                                        <span>NÃO SOLICITADO</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </td>
+
                                 {/* Saldo a Pagar (30%) */}
                                 <td className="p-3 text-right font-mono text-blue-400 font-extrabold text-sm">
                                   {formatCurrencyVal(valSal)}
                                 </td>
 
-                                {/* Status Financeiro do Saldo */}
-                                <td className="p-3 text-center">
-                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
-                                    isSalPago
-                                      ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
-                                      : 'bg-amber-950/80 text-amber-400 border border-amber-800'
-                                  }`}>
-                                    {isSalPago ? '✅ PAGO' : '⏳ PENDENTE'}
-                                  </span>
-                                </td>
-
-                                {/* Controle de Solicitação de Pagamento de Saldo (Ação SIM / NÃO) */}
+                                {/* Confirmação 2: Solicitou Saldo? */}
                                 <td className="p-3 text-center">
                                   <button
                                     type="button"
-                                    onClick={() => handleToggleSolicitadoPagamento(e.id, isSolicitado)}
-                                    className={`w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-mono font-black tracking-wide uppercase transition-all duration-200 cursor-pointer border flex items-center justify-center gap-1.5 shadow-md ${
-                                      isSolicitado
-                                        ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                                        : 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border-red-500/40'
+                                    onClick={() => handleToggleSolicitadoSaldo(e.id, isSaldoSolicitado)}
+                                    className={`w-full px-3 py-1.5 rounded-xl text-[11px] font-mono font-black uppercase tracking-wide transition-all duration-200 cursor-pointer border flex items-center justify-center gap-1.5 shadow-md ${
+                                      isSaldoSolicitado
+                                        ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                                        : 'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-500 border-zinc-800'
                                     }`}
                                   >
-                                    {isSolicitado ? (
+                                    {isSaldoSolicitado ? (
                                       <>
-                                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                        <span>SOLICITADO (SIM)</span>
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                        <span>SALDO SOLICITADO (SIM)</span>
                                       </>
                                     ) : (
                                       <>
-                                        <X className="w-4 h-4 text-red-400" />
+                                        <X className="w-3.5 h-3.5 text-zinc-500" />
                                         <span>NÃO SOLICITADO</span>
                                       </>
                                     )}
                                   </button>
+                                </td>
+
+                                {/* Status Financeiro */}
+                                <td className="p-3 text-center">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase ${
+                                      isAdiantPago
+                                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                                        : 'bg-amber-950/80 text-amber-400 border border-amber-800'
+                                    }`}>
+                                      {isAdiantPago ? 'ADIANT: PAGO' : 'ADIANT: PENDENTE'}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase ${
+                                      isSaldoPago
+                                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                                        : 'bg-blue-950/80 text-blue-400 border border-blue-800'
+                                    }`}>
+                                      {isSaldoPago ? 'SALDO: PAGO' : 'SALDO: PENDENTE'}
+                                    </span>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -2025,7 +2110,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                       )}
                       
                       {/* Individual Status */}
-                      <div className="mt-1">
+                      <div className="mt-1 space-y-0.5">
                         {isAdiantamentoPago ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400">
                             <Check className="w-3 h-3" />
@@ -2041,6 +2126,15 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             <Clock className="w-3 h-3" />
                             <span>Prazo: {formatDateBR(prazoAdiantamentoIso)}</span>
                           </span>
+                        )}
+
+                        {entrega.solicitadoPagamentoAdiantamento && (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-amber-300 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-800/80">
+                              <UserCheck className="w-3 h-3 text-amber-400" />
+                              <span>Solicitado 70%</span>
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2090,7 +2184,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                       )}
 
                       {/* Individual Status */}
-                      <div className="mt-1">
+                      <div className="mt-1 space-y-0.5">
                         {isSaldoPago ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400">
                             <Check className="w-3 h-3" />
@@ -2106,6 +2200,15 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             <Clock className="w-3 h-3" />
                             <span>Prazo: {formatDateBR(prazoSaldoIso)}</span>
                           </span>
+                        )}
+
+                        {(entrega.solicitadoPagamentoSaldo ?? entrega.solicitadoPagamento) && (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-emerald-300 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/80">
+                              <UserCheck className="w-3 h-3 text-emerald-400" />
+                              <span>Solicitado Saldo</span>
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>
