@@ -20,6 +20,8 @@ import {
 import { useAnotacoes } from '../hooks/useAnotacoes';
 import { Anotacao, Entrega } from '../types';
 import { getEntregas, fetchEntregasFromServer } from '../db/storage';
+import { db } from '../db/firebase';
+import { collection, getDocs } from 'firebase/firestore';
 
 interface AnotacoesPageProps {
   currentUser?: {
@@ -74,6 +76,36 @@ export const AnotacoesPage: React.FC<AnotacoesPageProps> = ({ currentUser }) => 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Função utilitária para formatar a exibição limpa do frete (remove os códigos internos ent-xxx)
+  const getFreteDisplayLabel = (e: Entrega): string => {
+    if (!e) return '';
+    const cliente = e.cliente ? e.cliente.trim().toUpperCase() : '';
+    const motorista = e.motorista ? e.motorista.trim().toUpperCase() : '';
+    const origem = e.origem ? e.origem.trim() : '';
+    const destino = e.destino ? e.destino.trim() : '';
+    const rota = (origem || destino) ? `(${origem || '?'} ➔ ${destino || '?'})` : '';
+
+    // Se o ID for o código aleatório do banco de dados (ex: ent-pvqx3g69q), omite esse código técnico
+    const isAutoId = !e.id || e.id.toLowerCase().startsWith('ent-') || e.id.toLowerCase().startsWith('ent_');
+    const customCode = e.trackingCode || e.cte || (!isAutoId ? e.id : '');
+
+    let nome = '';
+    if (cliente && motorista) {
+      nome = `${cliente} — ${motorista}`;
+    } else if (cliente) {
+      nome = cliente;
+    } else if (motorista) {
+      nome = motorista;
+    } else {
+      nome = 'Frete Registrado';
+    }
+
+    if (customCode) {
+      return `${customCode} - ${nome} ${rota}`.trim();
+    }
+    return `${nome} ${rota}`.trim();
+  };
+
   // Lista de entregas para auxílio no vínculo de fretes (Reativa com tempo real)
   const [entregasDisponiveis, setEntregasDisponiveis] = useState<Entrega[]>(() => {
     try {
@@ -85,25 +117,41 @@ export const AnotacoesPage: React.FC<AnotacoesPageProps> = ({ currentUser }) => 
 
   // Atualização em tempo real das entregas para vincular no modal e badges
   useEffect(() => {
-    const updateEntregas = () => {
+    const loadEntregas = async () => {
       try {
-        const list = getEntregas();
-        setEntregasDisponiveis(list);
+        const localList = getEntregas();
+        if (localList && localList.length > 0) {
+          setEntregasDisponiveis(localList);
+        }
+
+        // Tenta sincronizar via storage
+        await fetchEntregasFromServer(true).catch(() => {});
+        const updatedList = getEntregas();
+        if (updatedList && updatedList.length > 0) {
+          setEntregasDisponiveis(updatedList);
+        } else {
+          // Fallback direto via Firestore para garantir carregamento em ambientes de produção/Vercel
+          const snap = await getDocs(collection(db, 'entregas'));
+          const directList: Entrega[] = [];
+          snap.forEach(docSnap => {
+            if (!['ent-1', 'ent-2', 'ent-3', 'ent-4', 'ent-5'].includes(docSnap.id)) {
+              directList.push({ id: docSnap.id, ...docSnap.data() } as Entrega);
+            }
+          });
+          if (directList.length > 0) {
+            setEntregasDisponiveis(directList);
+          }
+        }
       } catch (err) {
         console.error('Erro ao carregar entregas:', err);
       }
     };
 
-    updateEntregas();
+    loadEntregas();
 
-    // Sincroniza do servidor Firestore ao carregar a página
-    fetchEntregasFromServer(true).then(() => {
-      updateEntregas();
-    }).catch(() => {});
-
-    window.addEventListener('rodovar_realtime_event', updateEntregas);
+    window.addEventListener('rodovar_realtime_event', loadEntregas);
     return () => {
-      window.removeEventListener('rodovar_realtime_event', updateEntregas);
+      window.removeEventListener('rodovar_realtime_event', loadEntregas);
     };
   }, []);
 
@@ -511,36 +559,22 @@ export const AnotacoesPage: React.FC<AnotacoesPageProps> = ({ currentUser }) => 
                     {note.fretId && (() => {
                       const frete = entregasMap.get(note.fretId.toLowerCase().trim());
                       if (frete) {
-                        const motoristaNome = frete.motorista ? frete.motorista.trim() : '';
-                        const clienteNome = frete.cliente ? frete.cliente.trim() : '';
-                        const origem = frete.origem ? frete.origem.trim() : '';
-                        const destino = frete.destino ? frete.destino.trim() : '';
-                        const rotaStr = (origem || destino) ? `${origem || '?'} ➔ ${destino || '?'}` : '';
-
-                        let freteLabel = '';
-                        if (motoristaNome && clienteNome) {
-                          freteLabel = `${motoristaNome} (${clienteNome})`;
-                        } else if (motoristaNome) {
-                          freteLabel = motoristaNome;
-                        } else {
-                          freteLabel = clienteNome || 'Frete Sem Identificação';
-                        }
-
+                        const displayLabel = getFreteDisplayLabel(frete);
                         return (
-                          <span className="px-2.5 py-1 bg-blue-950/90 border border-blue-700 text-blue-200 rounded-lg text-[10px] font-mono font-bold uppercase flex items-center gap-1.5 shadow-sm">
+                          <span className="px-2.5 py-1 bg-blue-950/90 border border-blue-700 text-blue-200 rounded-lg text-[10px] font-mono font-bold uppercase flex items-center gap-1.5 shadow-sm max-w-full overflow-hidden">
                             <Truck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                            <span>
-                              FRETE: <strong className="text-white font-black">{freteLabel}</strong>
-                              {rotaStr && <span className="text-blue-300 font-bold ml-1.5">[{rotaStr}]</span>}
+                            <span className="truncate">
+                              FRETE: <strong className="text-white font-black">{displayLabel}</strong>
                             </span>
                           </span>
                         );
                       }
 
+                      const cleanId = note.fretId.startsWith('ent-') ? note.fretId.replace(/^ent-/, '') : note.fretId;
                       return (
                         <span className="px-2.5 py-1 bg-blue-950/80 border border-blue-800 text-blue-300 rounded-lg text-[10px] font-mono font-bold uppercase flex items-center gap-1.5">
                           <Truck className="w-3.5 h-3.5 text-blue-400" />
-                          <span>FRETE VINCULADO</span>
+                          <span>FRETE #{cleanId}</span>
                         </span>
                       );
                     })()}
@@ -747,55 +781,39 @@ export const AnotacoesPage: React.FC<AnotacoesPageProps> = ({ currentUser }) => 
                   )}
                 </div>
 
-                {entregasDisponiveis.length > 0 ? (
-                  <select
-                    value={formFretId}
-                    onChange={e => setFormFretId(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-[#FFD600] transition-colors"
-                  >
-                    <option value="">-- Nenhum frete vinculado --</option>
-                    {entregasDisponiveis.map(e => {
-                      const motoristaStr = e.motorista ? `${e.motorista.toUpperCase().trim()}` : '';
-                      const clienteStr = e.cliente ? ` [${e.cliente.toUpperCase().trim()}]` : '';
-                      const rotaStr = (e.origem || e.destino) ? ` (${e.origem} ➔ ${e.destino})` : '';
-                      
-                      const label = motoristaStr 
-                        ? `${motoristaStr}${clienteStr}${rotaStr}`
-                        : `${e.cliente ? e.cliente.toUpperCase().trim() : 'Frete'}${rotaStr}`;
+                {/* Select de fretes sempre visível */}
+                <select
+                  value={formFretId}
+                  onChange={e => setFormFretId(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-[#FFD600] transition-colors cursor-pointer"
+                >
+                  <option value="">-- {entregasDisponiveis.length === 0 ? 'Carregando fretes...' : 'Nenhum frete vinculado'} --</option>
+                  {entregasDisponiveis.map(e => (
+                    <option key={e.id} value={e.id}>
+                      {getFreteDisplayLabel(e)}
+                    </option>
+                  ))}
+                </select>
 
-                      return (
-                        <option key={e.id} value={e.id}>
-                          Frete: {label}
-                        </option>
-                      );
-                    })}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={formFretId}
-                    onChange={e => setFormFretId(e.target.value)}
-                    placeholder="Digite o ID do frete ou CTRC (opcional)"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-[#FFD600]"
-                  />
-                )}
+                {/* Input secundário para digitação manual se preferir */}
+                <input
+                  type="text"
+                  value={formFretId}
+                  onChange={e => setFormFretId(e.target.value)}
+                  placeholder="Ou digite o código/CTRC do frete..."
+                  className="w-full bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2 text-[11px] text-zinc-300 font-mono focus:outline-none focus:border-[#FFD600] placeholder:text-zinc-600"
+                />
 
                 {/* Preview do Frete Selecionado */}
                 {formFretId && (() => {
                   const sel = entregasMap.get(formFretId.toLowerCase().trim());
                   if (sel) {
-                    const mot = sel.motorista ? sel.motorista.trim() : '';
-                    const cli = sel.cliente ? sel.cliente.trim() : '';
-                    const ori = sel.origem ? sel.origem.trim() : '';
-                    const des = sel.destino ? sel.destino.trim() : '';
+                    const labelStr = getFreteDisplayLabel(sel);
                     return (
                       <div className="p-2.5 bg-blue-950/70 border border-blue-800/80 rounded-xl text-xs font-mono text-blue-200 flex items-center justify-between gap-2 shadow-sm">
                         <div className="space-y-0.5 min-w-0">
                           <p className="font-bold text-white truncate uppercase">
-                            🚛 {mot || cli || 'Frete Sem Nome'}
-                          </p>
-                          <p className="text-[10px] text-blue-300 truncate font-semibold">
-                            {(ori || des) ? `${ori} ➔ ${des}` : 'Rota não informada'} {cli ? `| Cliente: ${cli}` : ''}
+                            🚛 {labelStr}
                           </p>
                         </div>
                         <span className="text-[10px] bg-blue-900/90 text-blue-300 px-2 py-0.5 rounded-md shrink-0 font-bold border border-blue-700">
