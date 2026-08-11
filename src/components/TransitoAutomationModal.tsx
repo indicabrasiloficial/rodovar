@@ -35,25 +35,10 @@ export const TransitoAutomationModal: React.FC<TransitoAutomationModalProps> = (
 }) => {
   const { entregas: hookEntregas, loading, error, refresh } = useAutomacaoTransito();
   
-  // Combinar dados do hook + fallback fornecido pela lista (sem duplicar por ID)
+  // Usar dados do hook ou fallback fornecido
   const allEntregas = useMemo(() => {
-    const map = new Map<string, Entrega>();
-    
-    // Adicionar fallback primeiro (todas as cargas da lista do app)
-    if (Array.isArray(entregasFallback)) {
-      entregasFallback.forEach(e => {
-        if (e && e.id) map.set(e.id, e);
-      });
-    }
-
-    // Adicionar do hook
-    if (Array.isArray(hookEntregas)) {
-      hookEntregas.forEach(e => {
-        if (e && e.id) map.set(e.id, e);
-      });
-    }
-
-    return Array.from(map.values());
+    if (hookEntregas && hookEntregas.length > 0) return hookEntregas;
+    return entregasFallback;
   }, [hookEntregas, entregasFallback]);
 
   const [activeTab, setActiveTab] = useState<TabStatus>('em_transito');
@@ -84,22 +69,13 @@ export const TransitoAutomationModal: React.FC<TransitoAutomationModalProps> = (
     let matchesStatus = false;
 
     if (activeTab === 'em_transito') {
-      matchesStatus = 
-        currentStatus.includes('transito') || 
-        currentStatus.includes('trânsito') || 
-        currentStatus.includes('caminho') || 
-        currentStatus.includes('andamento') ||
-        currentStatus === 'em_transito' || 
-        currentStatus === 'transito' ||
-        currentStatus === 'coletando' ||
-        currentStatus === 'pendente' ||
-        !currentStatus; // Se status estiver em branco, padrão em trânsito
+      matchesStatus = currentStatus === 'em_transito' || currentStatus === 'transito' || currentStatus === 'em trânsito';
     } else if (activeTab === 'parado') {
-      matchesStatus = currentStatus.includes('parado') || currentStatus.includes('parada');
+      matchesStatus = currentStatus === 'parado';
     } else if (activeTab === 'descarregando') {
-      matchesStatus = currentStatus.includes('descarreg');
+      matchesStatus = currentStatus === 'descarregando';
     } else if (activeTab === 'entregue') {
-      matchesStatus = currentStatus.includes('entregue') || currentStatus.includes('conclui') || currentStatus.includes('finaliz');
+      matchesStatus = currentStatus === 'entregue';
     }
 
     if (!matchesStatus) return false;

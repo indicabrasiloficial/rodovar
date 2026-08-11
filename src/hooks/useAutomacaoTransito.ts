@@ -59,31 +59,21 @@ export function useAutomacaoTransito() {
         ...docSnap.data()
       } as Entrega));
 
-      // Se a busca no Firestore trouxer resultados, mescla com os fretes da memória local (de-duplicando)
-      const localData = getEntregas();
-      const combinedMap = new Map<string, Entrega>();
-      
-      localData.forEach(e => {
-        if (e && e.id) combinedMap.set(e.id, e);
-      });
-      fetched.forEach(e => {
-        if (e && e.id) combinedMap.set(e.id, e);
-      });
-
-      const combinedList = Array.from(combinedMap.values());
-
-      if (combinedList.length > 0) {
-        setEntregas(combinedList);
+      // Se a busca no Firestore trouxer resultados, grava no cache e atualiza o estado
+      if (fetched.length > 0) {
+        setEntregas(fetched);
         try {
           sessionStorage.setItem(CACHE_KEY, JSON.stringify({
             timestamp: Date.now(),
-            data: combinedList
+            data: fetched
           }));
         } catch (e) {
           console.warn('Erro ao salvar no sessionStorage:', e);
         }
       } else {
-        setEntregas(localData);
+        // Fallback para cache/armazenamento local interno do sistema
+        const localData = getEntregas();
+        setEntregas(localData.slice(0, 30));
       }
     } catch (err) {
       console.error('Erro ao buscar fretes para Automação Trânsito:', err);
