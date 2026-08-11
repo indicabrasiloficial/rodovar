@@ -390,7 +390,36 @@ export function getEntregas(): Entrega[] {
 }
 
 export function getEntregaById(id: string): Entrega | undefined {
-  return cachedEntregas.find(e => e.id === id);
+  if (!id) return undefined;
+  const cleanId = id.trim().toLowerCase();
+  
+  // 1. Try search in cachedEntregas
+  let match = cachedEntregas.find(e => 
+    e.id.toLowerCase() === cleanId || 
+    (e.trackingCode && e.trackingCode.toLowerCase() === cleanId) ||
+    (e.cte && e.cte.toLowerCase() === cleanId)
+  );
+
+  if (match) return match;
+
+  // 2. Fallback: try reading from localStorage directly
+  try {
+    const raw = localStorage.getItem('rodovar_entregas_v1');
+    if (raw) {
+      const parsed: Entrega[] = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        match = parsed.find(e => 
+          e.id.toLowerCase() === cleanId || 
+          (e.trackingCode && e.trackingCode.toLowerCase() === cleanId) ||
+          (e.cte && e.cte.toLowerCase() === cleanId)
+        );
+      }
+    }
+  } catch (e) {
+    // Ignore storage parse error
+  }
+
+  return match;
 }
 
 export function djb2Hash(str: string): number {

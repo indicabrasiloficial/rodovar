@@ -21,7 +21,6 @@ import { Rastrear } from './components/Rastrear';
 import { MotoristaTracking } from './components/MotoristaTracking';
 import OperatorPanel from './components/OperatorPanel';
 import Agenda from './components/Agenda';
-import TrackingModeSelector from './components/TrackingModeSelector';
 import ApiIntegration from './components/ApiIntegration';
 import ActivityLogs from './components/ActivityLogs';
 import FloatingChat from './components/FloatingChat';
@@ -1042,27 +1041,19 @@ export default function App() {
             </AnimatePresence>
           </div>
 
-          {/* Row 4: Tracking frequency (Sinc. Nuvem) & Cadastrar Carga Button */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full items-stretch border-t border-zinc-900 pt-3">
-            {/* Left Col: Tracking frequency selector */}
-            <div className="hidden sm:flex w-full justify-center">
-              <TrackingModeSelector />
+          {/* Row 4: Cadastrar Carga Button */}
+          {user?.role !== 'Visitante' && (
+            <div className="w-full border-t border-zinc-900 pt-3">
+              <button
+                onClick={handleAddNewDelivery}
+                className="w-full h-11 flex items-center justify-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-xl gap-2 transition-all text-xs font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.2)] active:scale-95"
+                id="global-cadastrar-btn"
+              >
+                <Truck className="w-4 h-4 text-black shrink-0 animate-bounce" />
+                <span>Cadastrar Carga</span>
+              </button>
             </div>
-
-            {/* Right Col: Cadastrar Carga Button */}
-            {user?.role !== 'Visitante' && (
-              <div className="flex items-center justify-center">
-                <button
-                  onClick={handleAddNewDelivery}
-                  className="w-full h-11 flex items-center justify-center bg-[#FFD600] hover:bg-[#ffe23b] text-[#0a0a0a] rounded-xl gap-2 transition-all text-xs font-mono uppercase font-black cursor-pointer shadow-[0_0_15px_rgba(255,214,0,0.2)] active:scale-95"
-                  id="global-cadastrar-btn"
-                >
-                  <Truck className="w-4 h-4 text-black shrink-0 animate-bounce" />
-                  <span>Cadastrar Carga</span>
-                </button>
-              </div>
-            )}
-          </div>
+          )}
 
         </div>
 
@@ -1101,9 +1092,6 @@ export default function App() {
                 <Database className="w-3.5 h-3.5 text-[#FFD600]" />
                 <span>{isLightMode ? "MODO LIGHT" : "MODO EXPRESS"}</span>
               </button>
-
-              {/* Tracking Frequency Mode Selector */}
-              <TrackingModeSelector />
 
               {/* Mute Speech Button */}
               <button

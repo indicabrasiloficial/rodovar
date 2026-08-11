@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Entrega, DeliveryStatus } from '../types';
-import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats, syncSingleEntregaCache, sendGroupChatMessage } from '../db/storage';
+import { saveEntrega, getEntregaById, getDriverRatingStats, getClientRatingStats, syncSingleEntregaCache, sendGroupChatMessage, fetchEntregasFromServer } from '../db/storage';
+import { db } from '../db/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { dbAdapter } from '../db/databaseAdapter';
 import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR } from '../utils/date';
@@ -142,9 +144,10 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     return 'Operador';
   };
 
-  const [entrega, setEntrega] = useState<Entrega | null>(null);
+  const [entrega, setEntrega] = useState<Entrega | null>(() => getEntregaById(entregaId) || null);
+  const [isLoading, setIsLoading] = useState<boolean>(!getEntregaById(entregaId));
   const { position, source, isLive, lastSeenSeconds, connectionStatus } = useCargoTracking(entrega);
-  const [locLinkInput, setLocLinkInput] = useState('');
+  const [locLinkInput, setLocLinkInput] = useState(() => getEntregaById(entregaId)?.link_localizacao || '');
   const [showDetailsLocModal, setShowDetailsLocModal] = useState(false);
   const [isSavingLink, setIsSavingLink] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
@@ -364,13 +367,58 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     }
   };
 
-  // Load latest values with live subscription
+  // Load latest values with live subscription and resilient multi-tier fallback
   useEffect(() => {
+    let isMounted = true;
+
+    const loadAsync = async () => {
+      // 1. Check synchronous cache first
+      let details = getEntregaById(entregaId);
+      if (details) {
+        if (isMounted) {
+          setEntrega(details);
+          setLocLinkInput(details.link_localizacao || '');
+          setIsLoading(false);
+        }
+      } else {
+        if (isMounted) setIsLoading(true);
+      }
+
+      // 2. Refresh cache from server
+      try {
+        await fetchEntregasFromServer(true).catch(() => {});
+        details = getEntregaById(entregaId);
+        if (details && isMounted) {
+          setEntrega(details);
+          setLocLinkInput(details.link_localizacao || '');
+          setIsLoading(false);
+          return;
+        }
+
+        // 3. Fallback direct document fetch from Firestore
+        const docRef = doc(db, 'entregas', entregaId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && isMounted) {
+          const directData = { id: docSnap.id, ...docSnap.data() } as Entrega;
+          saveEntrega(directData);
+          setEntrega(directData);
+          setLocLinkInput(directData.link_localizacao || '');
+        }
+      } catch (err) {
+        console.error('Erro ao buscar dados da carga:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadAsync();
+
     const handleSyncChange = () => {
       const details = getEntregaById(entregaId);
       if (details) {
         if (!details.trackingCode) {
-          // Enforce auto-generation and immediately save the newly stamped object
           const healed = saveEntrega(details);
           setEntrega(healed);
           setLocLinkInput(healed.link_localizacao || '');
@@ -381,13 +429,15 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
       }
     };
 
-    handleSyncChange();
     window.addEventListener('rodovar_realtime_event', handleSyncChange);
 
     // Register onSnapshot listener for the active delivery document for real-time geolocation and status syncing via Database Adapter
     const unsubscribeFs = dbAdapter.inscreverCarga(entregaId, (cargaResult) => {
-      if (cargaResult) {
+      if (cargaResult && isMounted) {
         syncSingleEntregaCache(entregaId, cargaResult);
+        setEntrega(cargaResult);
+        setLocLinkInput(cargaResult.link_localizacao || '');
+        setIsLoading(false);
       }
     });
 
@@ -404,6 +454,7 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     }
 
     return () => {
+      isMounted = false;
       window.removeEventListener('rodovar_realtime_event', handleSyncChange);
       unsubscribeFs();
     };
@@ -426,12 +477,32 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="bg-[#121212] border border-zinc-800 p-12 rounded-2xl text-center flex flex-col items-center justify-center gap-3 my-6 shadow-xl">
+        <div className="w-8 h-8 border-3 border-[#FFD600] border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-widest">Carregando Ficha da Carga #{entregaId}...</p>
+      </div>
+    );
+  }
+
   if (!entrega) {
     return (
-      <div className="bg-[#121212] border border-zinc-800 p-8 rounded-xl text-center text-gray-500">
-        <p className="text-sm font-semibold">Carga não encontrada ou apagada.</p>
-        <button onClick={onBack} className="mt-4 px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded text-xs transition">
-          Voltar para a Lista
+      <div className="bg-[#121212] border border-zinc-800 p-8 rounded-2xl text-center text-zinc-400 space-y-4 my-6 shadow-xl">
+        <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-yellow-500 font-bold text-xl">
+          📦
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-white uppercase font-mono tracking-wider">Ficha de Carga Não Encontrada</h3>
+          <p className="text-xs text-zinc-500 mt-1 max-w-md mx-auto">
+            Não foi possível localizar o cadastro de carga com o código <span className="font-mono text-zinc-300">#{entregaId}</span>. O registro pode ter sido removido ou não está acessível no momento.
+          </p>
+        </div>
+        <button 
+          onClick={onBack} 
+          className="mt-2 px-5 py-2.5 bg-[#FFD600] hover:bg-yellow-400 text-black font-bold font-mono rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md active:scale-95"
+        >
+          ⬅️ Voltar para a Lista de Cargas
         </button>
       </div>
     );

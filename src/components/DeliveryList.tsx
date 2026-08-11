@@ -1410,9 +1410,13 @@ export default function DeliveryList({
   };
 
   // WhatsApp helper
-  const openWhatsApp = (phone: string, text: string) => {
-    const cleanPhone = phone.replace(/\D/g, '');
-    const url = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(text)}`;
+  const openWhatsApp = (phone: string, text?: string) => {
+    const cleanPhone = (phone || '').replace(/\D/g, '');
+    if (!cleanPhone) {
+      alert('Número de telefone não informado no cadastro.');
+      return;
+    }
+    const url = text ? `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(text)}` : `https://wa.me/55${cleanPhone}`;
     window.open(url, 'whatsapp');
   };
 
@@ -2014,7 +2018,7 @@ Tenha uma ótima e segura viagem!`;
 
                         {/* WhatsApp Motorista */}
                         <button
-                          onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
+                          onClick={() => openWhatsApp(e.tel_motorista)}
                           className="p-1 px-2 rounded bg-emerald-950/40 hover:bg-emerald-600 hover:text-black border border-emerald-800 text-emerald-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
                           id={`list-action-wa-motorista-mobile-${e.id}`}
                           title="Falar com o Motorista no WhatsApp"
@@ -2307,7 +2311,7 @@ Tenha uma ótima e segura viagem!`;
 
                             {/* WhatsApp Motorista */}
                             <button
-                              onClick={() => openWhatsApp(e.tel_motorista, getWhatsappDriverMsg(e))}
+                              onClick={() => openWhatsApp(e.tel_motorista)}
                               className="p-1 px-1.5 rounded bg-emerald-950/40 hover:bg-emerald-600 hover:text-black border border-emerald-800 text-emerald-400 flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer"
                               title="Falar com o Motorista no WhatsApp"
                               id={`list-action-wa-motorista-${e.id}`}
