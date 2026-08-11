@@ -24,6 +24,7 @@ import Agenda from './components/Agenda';
 import ApiIntegration from './components/ApiIntegration';
 import ActivityLogs from './components/ActivityLogs';
 import FloatingChat from './components/FloatingChat';
+import { FiscalMascot } from './components/FiscalMascot';
 import TelegramIntegration from './components/TelegramIntegration';
 import SystemMigration from './components/SystemMigration';
 import PainelFretesVisitantes from './components/PainelFretesVisitantes';
@@ -119,6 +120,24 @@ export default function App() {
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('rodovar_light_mode') !== 'false'; // default to true to save quotas!
   });
+
+  const [themeMode, setThemeMode] = useState<'black' | 'white'>(() => {
+    return (localStorage.getItem('rodovar_theme_mode') as 'black' | 'white') || 'black';
+  });
+
+  const toggleThemeMode = () => {
+    const newTheme = themeMode === 'black' ? 'white' : 'black';
+    setThemeMode(newTheme);
+    localStorage.setItem('rodovar_theme_mode', newTheme);
+  };
+
+  useEffect(() => {
+    if (themeMode === 'white') {
+      document.body.classList.add('theme-white');
+    } else {
+      document.body.classList.remove('theme-white');
+    }
+  }, [themeMode]);
 
   const toggleLightMode = () => {
     const newValue = !isLightMode;
@@ -628,7 +647,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col font-sans selection:bg-[#FFD600] selection:text-black">
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#FFD600] selection:text-black ${
+      themeMode === 'white' ? 'theme-white bg-[#f1f5f9] text-slate-900' : 'bg-[#0a0a0a] text-white'
+    }`}>
       
       {/* Top Header Rail bar structure (High Density Theme) */}
       <header className="border-b border-zinc-800 bg-[#0a0a0a] sticky top-0 z-[1010] backdrop-blur-md">
@@ -640,7 +661,10 @@ export default function App() {
             {/* Logo and Branding exactly from design specifications */}
             <div className="flex items-center gap-2 cursor-pointer select-none shrink-0" onClick={() => setSelectedView('list')}>
               <img 
-                src="https://rodovar.com.br/wp-content/uploads/2026/02/logo.png" 
+                src={themeMode === 'white'
+                  ? "https://rodovar.com.br/wp-content/uploads/2026/08/RODOVAR-LOGO-removebg-preview.png"
+                  : "https://rodovar.com.br/wp-content/uploads/2026/02/logo.png"
+                } 
                 alt="Rodovar" 
                 className="h-8 w-auto object-contain shrink-0" 
                 referrerPolicy="no-referrer"
@@ -654,6 +678,20 @@ export default function App() {
 
             {/* Compact Right Side Actions */}
             <div className="flex items-center gap-2">
+              {/* Theme Toggle Button (White vs Black) */}
+              <button
+                onClick={toggleThemeMode}
+                className={`p-1.5 px-2 border rounded transition-all cursor-pointer h-8 flex items-center gap-1 text-[9px] uppercase font-mono font-bold ${
+                  themeMode === 'white' 
+                    ? 'bg-amber-100 text-slate-900 border-amber-300' 
+                    : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:text-white'
+                }`}
+                title="Alternar entre Tema Branco e Preto"
+                id="theme-toggle-mobile-btn"
+              >
+                <span>{themeMode === 'white' ? '☀️' : '🌙'}</span>
+                <span className="hidden sm:inline">{themeMode === 'white' ? 'COR: BRANCO' : 'COR: PRETO'}</span>
+              </button>
               {/* Mute Speech Button */}
               <button
                 onClick={toggleMuteSpeech}
@@ -1064,7 +1102,10 @@ export default function App() {
             {/* Logo and Branding exactly from design specifications */}
             <div className="flex items-center gap-3.5 cursor-pointer select-none" onClick={() => setSelectedView('list')}>
               <img 
-                src="https://rodovar.com.br/wp-content/uploads/2026/02/logo.png" 
+                src={themeMode === 'white' 
+                  ? "https://rodovar.com.br/wp-content/uploads/2026/08/RODOVAR-LOGO-removebg-preview.png"
+                  : "https://rodovar.com.br/wp-content/uploads/2026/02/logo.png"
+                } 
                 alt="Rodovar" 
                 className="h-10 w-auto transition-transform hover:scale-105 object-contain" 
                 referrerPolicy="no-referrer"
@@ -1078,6 +1119,20 @@ export default function App() {
 
             {/* High Density Right Side Info Items */}
             <div className="flex items-center gap-3.5">
+              {/* Theme Mode Toggle (White vs Black) */}
+              <button
+                onClick={toggleThemeMode}
+                className={`p-1.5 px-3 border rounded transition-all cursor-pointer h-8 flex items-center gap-1.5 text-[10px] uppercase font-mono font-bold ${
+                  themeMode === 'white' 
+                    ? 'bg-amber-100 text-slate-900 border-amber-300 shadow-sm' 
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
+                }`}
+                title="Alternar entre Tema Branco e Preto"
+                id="desktop-theme-mode-toggle-btn"
+              >
+                <span>{themeMode === 'white' ? '☀️' : '🌙'}</span>
+                <span>{themeMode === 'white' ? 'COR: BRANCO' : 'COR: PRETO'}</span>
+              </button>
               {/* Quota Saving Mode (Modo Light) Toggle Button */}
               <button
                 onClick={toggleLightMode}
@@ -1686,6 +1741,13 @@ export default function App() {
           onSuccess={() => setIsChangePasswordOpen(false)}
         />
       )}
+
+      {/* Mascote Flutuante - Fiscal Rodovinho */}
+      <FiscalMascot 
+        userName={user?.displayName} 
+        isSpeechMutedGlobal={isSpeechMuted} 
+        entregasProp={entregas}
+      />
 
       {/* Persistent Floating Chat (Removido para Comercial e Expedição) */}
       {user && !userIsComercialOrExpedicao && (

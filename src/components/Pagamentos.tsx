@@ -125,8 +125,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   const getSaldoTimerInfo = (entrega: Entrega, currentNow: number) => {
     const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
     const isSaldoPago = entrega.statusPagamentoSaldo === 'pago';
+    const isEntregue = (entrega.status || '').toLowerCase() === 'entregue';
 
-    if (!isAdiantamentoPago || isSaldoPago) {
+    // A contagem de 24h e o status de pendente de saldo só funcionam quando o motorista está com status de 'entregue'
+    if (!isAdiantamentoPago || isSaldoPago || !isEntregue) {
       return { isPendingSaldo: false, hours: 0, minutes: 0, totalMinutes: 0, isOver24h: false, formatted: '' };
     }
 
@@ -632,7 +634,8 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
         return !isAdiantamentoPago;
       }
       if (selectedFilterPill === 'PENDENTE_SALDO') {
-        return isAdiantamentoPago && !isSaldoPago;
+        const isEntregue = (entrega.status || '').toLowerCase() === 'entregue';
+        return isAdiantamentoPago && !isSaldoPago && isEntregue;
       }
       if (selectedFilterPill === 'PAGO_TOTAL') {
         return isAdiantamentoPago && isSaldoPago;
@@ -682,7 +685,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
       if (!isAdiantamentoPago) {
         pendenteAdiantamento++;
       } else if (!isSaldoPago) {
-        pendenteSaldo++;
+        const isEntregue = (entrega.status || '').toLowerCase() === 'entregue';
+        if (isEntregue) {
+          pendenteSaldo++;
+        }
       }
 
       if (isAdiantamentoPago && isSaldoPago) {

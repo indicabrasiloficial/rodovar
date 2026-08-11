@@ -6,6 +6,7 @@ import { getDeliveryKm } from '../utils/distance';
 import { formatDateBR, formatRegistrationTime, isBrasiliaAfter19h, getTodayBrasiliaIso } from '../utils/date';
 import { generateTrackerLink } from '../utils/generateTrackerLink';
 import { ColetaAutomationModal } from './ColetaAutomationModal';
+import { TransitoAutomationModal } from './TransitoAutomationModal';
 import AcompanharBadge from './AcompanharBadge';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -1026,6 +1027,7 @@ export default function DeliveryList({
   const currentOperadorNome = getActiveUserFullName();
   const currentOperadorId = getActiveUserId();
   const [isColetaModalOpen, setIsColetaModalOpen] = useState(false);
+  const [isTransitoModalOpen, setIsTransitoModalOpen] = useState(false);
   
   const [origemFilter, setOrigemFilter] = useState('');
   const [destinoFilter, setDestinoFilter] = useState('');
@@ -1488,14 +1490,25 @@ Tenha uma ótima e segura viagem!`;
         
         <div className="flex items-center gap-2.5 flex-wrap">
           {getActiveUserRole() !== 'Visitante' && (
-            <button
-              onClick={() => setIsColetaModalOpen(true)}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#FFD600] hover:bg-[#ffe23b] text-black uppercase text-xs font-mono font-black tracking-wider rounded-lg transition-all cursor-pointer shadow-md active:scale-95"
-              id="list-automa-coletas-btn"
-            >
-              <Sparkles className="w-3.5 h-3.5 fill-current" />
-              ⚡ Automação Coletas
-            </button>
+            <>
+              <button
+                onClick={() => setIsColetaModalOpen(true)}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#FFD600] hover:bg-[#ffe23b] text-black uppercase text-xs font-mono font-black tracking-wider rounded-lg transition-all cursor-pointer shadow-md active:scale-95"
+                id="list-automa-coletas-btn"
+              >
+                <Sparkles className="w-3.5 h-3.5 fill-current" />
+                ⚡ Automação Coletas
+              </button>
+
+              <button
+                onClick={() => setIsTransitoModalOpen(true)}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-[#FFD600] border border-[#FFD600]/40 hover:border-[#FFD600] uppercase text-xs font-mono font-black tracking-wider rounded-lg transition-all cursor-pointer shadow-md active:scale-95"
+                id="list-automa-transito-btn"
+              >
+                <Truck className="w-3.5 h-3.5 text-[#FFD600]" />
+                ⚡ Automação Trânsito
+              </button>
+            </>
           )}
 
           {onAddDelivery && getActiveUserRole() !== 'Visitante' && (
@@ -2174,8 +2187,8 @@ Tenha uma ótima e segura viagem!`;
                         {/* Dates */}
                         <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
                           <div className="flex flex-col gap-1.5">
-                            <div className="text-zinc-300 font-mono text-[11px] font-bold">Coleta: {formatDateBR(e.data_coleta)}</div>
-                            <div className="inline-flex items-center gap-1.5 bg-[#FFD600]/20 border-2 border-[#FFD600] text-[#FFD600] font-mono text-xs font-black px-2.5 py-1 rounded-lg w-fit shadow-[0_0_8px_rgba(255,214,0,0.15)]" title="Prazo Limite de Entrega">
+                            <div className="text-slate-900 dark:text-zinc-200 font-mono text-[11px] font-bold">Coleta: {formatDateBR(e.data_coleta)}</div>
+                            <div className="inline-flex items-center gap-1.5 bg-[#FFD600] text-slate-950 border-2 border-amber-500 font-mono text-xs font-black px-2.5 py-1 rounded-lg w-fit shadow-sm" title="Prazo Limite de Entrega">
                               <span className="text-[9px] uppercase font-black opacity-90">Prazo:</span>
                               <span className="text-[12px]">{formatDateBR(e.prazo)}</span>
                             </div>
@@ -2185,7 +2198,7 @@ Tenha uma ótima e segura viagem!`;
                         {/* Customer */}
                         <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
                           <div className="flex flex-col">
-                            <span className="font-semibold text-gray-200">{e.cliente}</span>
+                            <span className="font-extrabold text-slate-900 dark:text-gray-100 text-xs tracking-tight">{e.cliente}</span>
                             <div className="mt-1" onClick={(ev) => ev.stopPropagation()}>
                               <div 
                                 onClick={(ev) => handleCopyPhone(ev, e.tel_cliente || '', `${e.id}-dt-cli`)}
@@ -2215,7 +2228,7 @@ Tenha uma ótima e segura viagem!`;
                         {/* Driver */}
                         <td className="py-3.5 px-4" onClick={() => onSelectDelivery(e.id)}>
                           <div className="flex flex-col">
-                            <span className="font-semibold text-gray-200">{e.motorista}</span>
+                            <span className="font-extrabold text-slate-900 dark:text-gray-100 text-xs tracking-tight">{e.motorista}</span>
                             <div className="mt-1" onClick={(ev) => ev.stopPropagation()}>
                               <div 
                                 onClick={(ev) => handleCopyPhone(ev, e.tel_motorista || '', `${e.id}-dt-mot`)}
@@ -2907,6 +2920,13 @@ Tenha uma ótima e segura viagem!`;
         isOpen={isColetaModalOpen}
         onClose={() => setIsColetaModalOpen(false)}
         entregas={entregas}
+      />
+
+      {/* MODAL DE AUTOMAÇÃO TRÂNSITO */}
+      <TransitoAutomationModal
+        isOpen={isTransitoModalOpen}
+        onClose={() => setIsTransitoModalOpen(false)}
+        entregasFallback={entregas}
       />
     </div>
   );
