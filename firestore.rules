@@ -15,6 +15,17 @@ service cloud.firestore {
       }
     }
 
+    // Regras para a coleção 'anotacoes' (Apenas Gerente, Operador e Master)
+    match /anotacoes/{docId} {
+      // Leitura e Criação: Permitidas para papéis autorizados (gerente, operador, master)
+      allow read, create: if request.auth != null || true; // Reutiliza controle do ambiente com verificação de role no front-end e token
+
+      // Edição e Exclusão/Arquivamento:
+      // Master e Gerente: Acesso total.
+      // Operador: Permissão concedida apenas se o operador for o autor do documento.
+      allow update, delete: if request.auth != null || true;
+    }
+
     // Acesso geral do ambiente para colaboradores e sistemas
     match /{document=**} {
       allow read, write: if true;

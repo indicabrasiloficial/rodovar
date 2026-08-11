@@ -29,6 +29,7 @@ import TelegramIntegration from './components/TelegramIntegration';
 import SystemMigration from './components/SystemMigration';
 import PainelFretesVisitantes from './components/PainelFretesVisitantes';
 import Pagamentos from './components/Pagamentos';
+import AnotacoesPage from './components/AnotacoesPage';
 
 import { 
   Truck, 
@@ -65,7 +66,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs' | 'telegram_integration' | 'migration' | 'painel_fretes';
+type ViewMode = 'dashboard' | 'list' | 'details' | 'form' | 'statistics' | 'whatsapp' | 'manager' | 'manual' | 'registration' | 'blacklist' | 'backup' | 'rastrear' | 'motorista' | 'operador_painel' | 'agenda' | 'api_integration' | 'logs' | 'telegram_integration' | 'migration' | 'painel_fretes' | 'pagamentos' | 'anotacoes';
 
 
 export default function App() {
@@ -160,6 +161,8 @@ export default function App() {
       setSelectedView('painel_fretes');
     } else if (path === '/pagamentos') {
       setSelectedView('pagamentos');
+    } else if (path === '/anotacoes') {
+      setSelectedView('anotacoes');
     } else if (hasInvite) {
       setSelectedView('list');
     }
@@ -513,6 +516,10 @@ export default function App() {
         return (
           <Pagamentos currentUser={user} />
         );
+      case 'anotacoes':
+        return (
+          <AnotacoesPage currentUser={user} />
+        );
       case 'agenda':
         return (
           <Agenda />
@@ -767,14 +774,14 @@ export default function App() {
             <button
               onClick={() => setIsToolsExpanded(!isToolsExpanded)}
               className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-[10px] uppercase font-mono font-bold transition-all ${
-                isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration', 'pagamentos'].includes(selectedView)
+                isToolsExpanded || ['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration', 'pagamentos', 'anotacoes'].includes(selectedView)
                   ? 'bg-zinc-900 border-zinc-850 text-[#FFD600]'
                   : 'bg-zinc-950/50 border-zinc-900 text-zinc-400 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-[#FFD600]" />
-                {['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration', 'pagamentos'].includes(selectedView)
+                {['statistics', 'whatsapp', 'manager', 'blacklist', 'manual', 'backup', 'registration', 'migration', 'pagamentos', 'anotacoes'].includes(selectedView)
                   ? `Ferramenta: ${selectedView.toUpperCase()}`
                   : 'Mais Ferramentas & Suporte'}
               </span>
@@ -808,6 +815,26 @@ export default function App() {
                       >
                         <DollarSign className="w-3.5 h-3.5 shrink-0" />
                         <span>Pagamentos</span>
+                      </button>
+                    )}
+
+                    {/* Anotações */}
+                    {!userIsComercialOrExpedicao && (
+                      <button
+                        onClick={() => {
+                          setSelectedView('anotacoes');
+                          window.history.pushState({ path: '/anotacoes' }, '', '/anotacoes');
+                          setIsToolsExpanded(false);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          selectedView === 'anotacoes' 
+                          ? 'bg-[#FFD600]/10 text-[#FFD600] border-[#FFD600]/40 font-black' 
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60 border-transparent'
+                        }`}
+                        id="nav-anotacoes"
+                      >
+                        <FileText className="w-3.5 h-3.5 shrink-0" />
+                        <span>Anotações</span>
                       </button>
                     )}
 
@@ -1238,6 +1265,25 @@ export default function App() {
                   >
                     <DollarSign className="w-3.5 h-3.5 shrink-0 text-inherit" />
                     <span>Pagamentos</span>
+                  </button>
+                )}
+
+                {/* Nav Anotações (Bloqueado para Comercial e Expedição) */}
+                {!userIsComercialOrExpedicao && (
+                  <button
+                    onClick={() => {
+                      setSelectedView('anotacoes');
+                      window.history.pushState({ path: '/anotacoes' }, '', '/anotacoes');
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      selectedView === 'anotacoes'
+                      ? 'bg-[#FFD600] text-[#0a0a0a] border-[#FFD600] font-extrabold shadow-sm' 
+                      : 'bg-zinc-900/20 border-transparent text-zinc-350 hover:text-[#FFD600]'
+                    }`}
+                    id="desktop-nav-anotacoes"
+                  >
+                    <FileText className="w-3.5 h-3.5 shrink-0 text-inherit" />
+                    <span>Anotações</span>
                   </button>
                 )}
               </div>

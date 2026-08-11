@@ -234,6 +234,20 @@ export interface TelegramSettings {
   };
 }
 
+export interface Anotacao {
+  id: string;
+  texto: string;
+  tag: 'urgente' | 'lembrete' | 'observacao';
+  fixada: boolean;
+  fretId: string | null;
+  autorNome: string;
+  autorUsername?: string;
+  autorRole: string;
+  status: 'ativa' | 'arquivada';
+  criadoEm: any;
+  atualizadoEm: any;
+}
+
 declare global {
   interface Window {
     falarRodovar?: (texto: string, onEndCallback?: () => void) => void;
