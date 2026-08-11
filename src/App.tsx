@@ -360,6 +360,13 @@ export default function App() {
     return r === 'comercial' || r === 'expedição' || r === 'expedicao';
   }, [user]);
 
+  const userIsOperador = useMemo(() => {
+    if (!user) return false;
+    const r = (user.role || '').toLowerCase();
+    const u = (user.username || '').toLowerCase();
+    return r.includes('operador') || r.includes('operação') || r.includes('operacao') || r === 'master' || u === 'master' || r.includes('admin') || u === 'mateus' || u === 'priscila' || u === 'jairobahia';
+  }, [user]);
+
   useEffect(() => {
     if (userIsComercialOrExpedicao && selectedView !== 'painel_fretes') {
       setSelectedView('painel_fretes');
@@ -1742,12 +1749,14 @@ export default function App() {
         />
       )}
 
-      {/* Mascote Flutuante - Fiscal Rodovinho */}
-      <FiscalMascot 
-        userName={user?.displayName} 
-        isSpeechMutedGlobal={isSpeechMuted} 
-        entregasProp={entregas}
-      />
+      {/* Mascote Flutuante - Fiscal Rodovinho (Visível Apenas para Operador) */}
+      {user && userIsOperador && (
+        <FiscalMascot 
+          userName={user?.displayName} 
+          isSpeechMutedGlobal={isSpeechMuted} 
+          entregasProp={entregas}
+        />
+      )}
 
       {/* Persistent Floating Chat (Removido para Comercial e Expedição) */}
       {user && !userIsComercialOrExpedicao && (

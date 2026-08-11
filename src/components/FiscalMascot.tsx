@@ -196,12 +196,12 @@ export const FiscalMascot: React.FC<FiscalMascotProps> = ({
                 <h4 className="text-xs font-black uppercase font-mono text-[#FFD600] leading-none m-0">
                   FISCAL RODOVINHO
                 </h4>
-                <span className="px-1.5 py-0.2 bg-red-950/80 border border-red-800 text-red-400 text-[9px] font-mono font-bold rounded">
-                  AUDITORIA
+                <span className="px-1.5 py-0.2 bg-emerald-950/90 border border-emerald-600 text-emerald-300 text-[8px] font-mono font-black rounded uppercase tracking-wider">
+                  ⚡ MODO ECONÔMICO (0 COTA)
                 </span>
               </div>
               <p className="text-[10px] text-zinc-400 font-mono mt-0.5 mb-0">
-                Fiscalizando todas as entradas
+                Auditoria 100% otimizada em memória
               </p>
             </div>
           </div>
