@@ -19,6 +19,7 @@ import { Entrega } from '../types';
 import { useAutomacaoTransito } from '../hooks/useAutomacaoTransito';
 import { getLoggedOperatorName } from '../utils/coletaMessages';
 import { formatDateBR } from '../utils/date';
+import { getEntregas } from '../db/storage';
 
 interface TransitoAutomationModalProps {
   isOpen: boolean;
@@ -35,10 +36,37 @@ export const TransitoAutomationModal: React.FC<TransitoAutomationModalProps> = (
 }) => {
   const { entregas: hookEntregas, loading, error, refresh } = useAutomacaoTransito();
   
-  // Usar dados do hook ou fallback fornecido
+  // Combina entregas do hook, do fallback e do armazenamento local sem duplicar por ID
   const allEntregas = useMemo(() => {
-    if (hookEntregas && hookEntregas.length > 0) return hookEntregas;
-    return entregasFallback;
+    const map = new Map<string, Entrega>();
+    
+    // 1. Inserir entregas do storage local
+    try {
+      const local = getEntregas();
+      if (Array.isArray(local)) {
+        local.forEach(e => {
+          if (e && e.id) map.set(e.id, e);
+        });
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    // 2. Inserir/Sobrescrever com entregasFallback (prop do pai)
+    if (Array.isArray(entregasFallback)) {
+      entregasFallback.forEach(e => {
+        if (e && e.id) map.set(e.id, e);
+      });
+    }
+
+    // 3. Inserir/Sobrescrever com hookEntregas (Firestore)
+    if (Array.isArray(hookEntregas)) {
+      hookEntregas.forEach(e => {
+        if (e && e.id) map.set(e.id, e);
+      });
+    }
+
+    return Array.from(map.values());
   }, [hookEntregas, entregasFallback]);
 
   const [activeTab, setActiveTab] = useState<TabStatus>('em_transito');
@@ -62,23 +90,28 @@ export const TransitoAutomationModal: React.FC<TransitoAutomationModalProps> = (
 
   if (!isOpen) return null;
 
+  // Helper para verificar status equivalente
+  const matchesTabStatus = (statusRaw: string | undefined, tab: TabStatus): boolean => {
+    const st = (statusRaw || '').toLowerCase().trim();
+    if (tab === 'em_transito') {
+      return st === 'em_transito' || st === 'transito' || st === 'em trânsito' || st === 'em transito';
+    }
+    if (tab === 'parado') {
+      return st === 'parado';
+    }
+    if (tab === 'descarregando') {
+      return st === 'descarregando';
+    }
+    if (tab === 'entregue') {
+      return st === 'entregue' || st === 'entregue ✅' || st === 'concluido' || st === 'concluído';
+    }
+    return false;
+  };
+
   // Filtragem local por aba de status
   const filteredEntregas = allEntregas.filter(e => {
     if (!e) return false;
-    const currentStatus = (e.status || '').toLowerCase().trim();
-    let matchesStatus = false;
-
-    if (activeTab === 'em_transito') {
-      matchesStatus = currentStatus === 'em_transito' || currentStatus === 'transito' || currentStatus === 'em trânsito';
-    } else if (activeTab === 'parado') {
-      matchesStatus = currentStatus === 'parado';
-    } else if (activeTab === 'descarregando') {
-      matchesStatus = currentStatus === 'descarregando';
-    } else if (activeTab === 'entregue') {
-      matchesStatus = currentStatus === 'entregue';
-    }
-
-    if (!matchesStatus) return false;
+    if (!matchesTabStatus(e.status, activeTab)) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -237,11 +270,7 @@ export const TransitoAutomationModal: React.FC<TransitoAutomationModalProps> = (
             ] as const
           ).map(tab => {
             const isActive = activeTab === tab.id;
-            const count = allEntregas.filter(e => {
-              const st = (e.status || '').toLowerCase();
-              if (tab.id === 'em_transito') return st === 'em_transito' || st === 'transito' || st === 'em trânsito';
-              return st === tab.id;
-            }).length;
+            const count = allEntregas.filter(e => matchesTabStatus(e?.status, tab.id)).length;
 
             return (
               <button
