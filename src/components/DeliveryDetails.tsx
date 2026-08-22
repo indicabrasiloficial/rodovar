@@ -404,8 +404,19 @@ export default function DeliveryDetails({ entregaId, onBack, onEdit, onDeleted, 
           setEntrega(directData);
           setLocLinkInput(directData.link_localizacao || '');
         }
-      } catch (err) {
-        console.error('Erro ao buscar dados da carga:', err);
+      } catch (err: any) {
+        const isQuota = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit') || err?.message?.includes('Quota exceeded');
+        if (isQuota) {
+          console.warn('Rodovar Monitora: Cota do Firestore excedida em detalhes da carga. Utilizando dados locais.');
+          (window as any).rodovar_quota_exceeded = true;
+        } else {
+          console.warn('Aviso ao sincronizar detalhes da carga no Firestore:', err?.message || err);
+        }
+        const fallback = getEntregaById(entregaId);
+        if (fallback && isMounted) {
+          setEntrega(fallback);
+          setLocLinkInput(fallback.link_localizacao || '');
+        }
       } finally {
         if (isMounted) {
           setIsLoading(false);

@@ -3,6 +3,7 @@ import { dbAdapter } from '../db/databaseAdapter';
 import { Entrega } from '../types';
 import { TrackingCard } from './TrackingCard';
 import { Search, ArrowLeft, ShieldAlert, AlertCircle, Loader2 } from 'lucide-react';
+import { playEntregueAudio } from '../utils/audioNotification';
 
 interface RastrearProps {
   onClose?: () => void;
@@ -17,10 +18,10 @@ export const Rastrear: React.FC<RastrearProps> = ({ onClose, userLogged, onAcces
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync with URL query string on load (?code=RDV0123)
+  // Sync with URL query string on load (?code=RDV0123 ou ?rastreio=RDV0123 etc)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const codeParam = params.get('code');
+    const codeParam = params.get('code') || params.get('rastreio') || params.get('rastrear') || params.get('id') || params.get('c');
     if (codeParam && codeParam !== 'undefined' && codeParam !== 'null' && codeParam.trim() !== '') {
       const cleanCode = codeParam.toUpperCase().trim();
       setInputText(cleanCode);
@@ -46,6 +47,12 @@ export const Rastrear: React.FC<RastrearProps> = ({ onClose, userLogged, onAcces
         if (cargaResult) {
           setCarga(cargaResult);
           setError(null);
+          
+          // Se estiver com status entregue, toca o som 1 vez
+          const st = (cargaResult.status || '').toLowerCase().trim();
+          if (st === 'entregue' || st.includes('entregue') || st.includes('concluid')) {
+            playEntregueAudio(cargaResult.trackingCode || cargaResult.id);
+          }
         } else {
           setCarga(null);
           setError('Código de rastreio não encontrado. Verifique os dígitos e tente novamente.');

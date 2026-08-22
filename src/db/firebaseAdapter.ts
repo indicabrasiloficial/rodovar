@@ -27,6 +27,7 @@ import {
   remove as rtdbRemove 
 } from 'firebase/database';
 import { DatabaseAdapter } from './databaseAdapter';
+import { getEntregaById, getEntregas } from './storage';
 import { 
   Entrega, 
   Colaborador, 
@@ -98,6 +99,20 @@ export const firebaseAdapter: DatabaseAdapter = {
     const unsubscribe = onSnapshot(q, (snap) => {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Entrega));
       callback(items);
+    }, (err: any) => {
+      const isQuota = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit') || err?.message?.includes('Quota exceeded');
+      if (isQuota) {
+        console.warn('Rodovar Monitora: Cota diária do Firestore atingida em cargas realtime. Utilizando armazenamento local.');
+        (window as any).rodovar_quota_exceeded = true;
+      } else {
+        console.warn('Aviso no listener de cargas do Firestore:', err?.message || err);
+      }
+      try {
+        const local = getEntregas();
+        if (local && local.length > 0) {
+          callback(local);
+        }
+      } catch (e) {}
     });
     return unsubscribe;
   },
@@ -110,27 +125,62 @@ export const firebaseAdapter: DatabaseAdapter = {
       } else {
         callback(null);
       }
-    }, (err) => {
-      console.error('Error listening to single cargo:', err);
+    }, (err: any) => {
+      const isQuota = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit') || err?.message?.includes('Quota exceeded');
+      if (isQuota) {
+        console.warn(`Rodovar Monitora: Cota diária do Firestore atingida para carga [${id}]. Utilizando dados locais em cache.`);
+        (window as any).rodovar_quota_exceeded = true;
+      } else {
+        console.warn(`Aviso no listener da carga [${id}]:`, err?.message || err);
+      }
+      try {
+        const local = getEntregaById(id);
+        if (local) {
+          callback(local);
+          return;
+        }
+      } catch (e) {}
       callback(null);
     });
     return unsubscribe;
   },
 
   inscreverCargaPorCodigoRastreio(code: string, callback: (carga: Entrega | null) => void): () => void {
+    const cleanCode = (code || '').trim();
     const q = query(
       collection(db, ENTREGAS_COLLECTION),
-      where('trackingCode', '==', code)
+      where('trackingCode', '==', cleanCode.toUpperCase())
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const docSnap = snapshot.docs[0];
         callback({ id: docSnap.id, ...docSnap.data() } as Entrega);
       } else {
+        // Fallback para storage local / cache
+        try {
+          const localMatch = getEntregaById(cleanCode);
+          if (localMatch) {
+            callback(localMatch);
+            return;
+          }
+        } catch (e) {}
         callback(null);
       }
-    }, (err) => {
-      console.error('Error listening to public tracking code:', err);
+    }, (err: any) => {
+      const isQuota = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit') || err?.message?.includes('Quota exceeded');
+      if (isQuota) {
+        console.warn(`Rodovar Monitora: Cota do Firestore atingida para código [${cleanCode}]. Utilizando dados locais em cache.`);
+        (window as any).rodovar_quota_exceeded = true;
+      } else {
+        console.warn(`Aviso ao rastrear código [${cleanCode}]:`, err?.message || err);
+      }
+      try {
+        const localMatch = getEntregaById(cleanCode);
+        if (localMatch) {
+          callback(localMatch);
+          return;
+        }
+      } catch (e) {}
       callback(null);
     });
     return unsubscribe;
@@ -277,6 +327,12 @@ export const firebaseAdapter: DatabaseAdapter = {
     const q = collection(db, BLACKLIST_COLLECTION);
     const unsubscribe = onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as BlacklistMotorista)));
+    }, (err: any) => {
+      console.warn('Aviso no listener de Blacklist Motoristas (fallback local):', err?.message || err);
+      try {
+        const raw = localStorage.getItem('rodovar_blacklist_motoristas_cache');
+        if (raw) callback(JSON.parse(raw));
+      } catch {}
     });
     return unsubscribe;
   },
@@ -298,6 +354,12 @@ export const firebaseAdapter: DatabaseAdapter = {
     const q = collection(db, BLACKLIST_CLIENTS_COLLECTION);
     const unsubscribe = onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as BlacklistCliente)));
+    }, (err: any) => {
+      console.warn('Aviso no listener de Blacklist Clientes (fallback local):', err?.message || err);
+      try {
+        const raw = localStorage.getItem('rodovar_blacklist_clientes_cache');
+        if (raw) callback(JSON.parse(raw));
+      } catch {}
     });
     return unsubscribe;
   },
@@ -322,6 +384,8 @@ export const firebaseAdapter: DatabaseAdapter = {
     const q = query(collection(db, SYSTEM_LOGS_COLLECTION), firestoreOrderBy('timestamp', 'desc'), firestoreLimit(200));
     const unsubscribe = onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err: any) => {
+      console.warn('Aviso no listener de System Logs (fallback local):', err?.message || err);
     });
     return unsubscribe;
   },
@@ -371,6 +435,8 @@ export const firebaseAdapter: DatabaseAdapter = {
     const q = query(collection(db, CHAT_COLLECTION), firestoreOrderBy("timestamp", "asc"), firestoreLimit(500));
     const unsubscribe = onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as GroupChatMessage)));
+    }, (err: any) => {
+      console.warn('Aviso no listener de Chat Realtime (fallback local):', err?.message || err);
     });
     return unsubscribe;
   },
@@ -388,6 +454,8 @@ export const firebaseAdapter: DatabaseAdapter = {
     const q = collection(db, PRESENCE_COLLECTION);
     const unsubscribe = onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err: any) => {
+      console.warn('Aviso no listener de Presença:', err?.message || err);
     });
     return unsubscribe;
   },
@@ -405,6 +473,8 @@ export const firebaseAdapter: DatabaseAdapter = {
     const q = collection(db, KICKED_COLLECTION);
     const unsubscribe = onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => d.id));
+    }, (err: any) => {
+      console.warn('Aviso no listener de Kick List:', err?.message || err);
     });
     return unsubscribe;
   },

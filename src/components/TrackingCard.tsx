@@ -3,6 +3,7 @@ import { Entrega } from '../types';
 import { TrackingProgressBar } from './TrackingProgressBar';
 import { Calendar, MapPin, Milestone, Sparkles } from 'lucide-react';
 import { useCargoTracking } from '../hooks/useCargoTracking';
+import { playEntregueAudio } from '../utils/audioNotification';
 
 interface TrackingCardProps {
   carga: Entrega;
@@ -12,6 +13,15 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
   const { position, source, isLive, lastSeenSeconds, connectionStatus } = useCargoTracking(carga);
   const [resolvedAddress, setResolvedAddress] = useState<string>('');
   const [isResolvingAddress, setIsResolvingAddress] = useState<boolean>(false);
+
+  // Reproduz o som de entrega 1 vez ao carregar a página ou mudar para status Entregue
+  useEffect(() => {
+    if (!carga) return;
+    const currentStatus = (carga.status || '').toLowerCase().trim();
+    if (currentStatus === 'entregue' || currentStatus.includes('entregue') || currentStatus.includes('concluid')) {
+      playEntregueAudio(carga.trackingCode || carga.id);
+    }
+  }, [carga?.status, carga?.trackingCode, carga?.id]);
 
   useEffect(() => {
     if (!position || !position.lat || !position.lng) {
@@ -178,12 +188,25 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
 
       {/* Specific public fields (NO SENSITIVE info allowed) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4" id="tracking-card-fields-grid">
-        <div className="bg-zinc-950/20 border border-zinc-900 p-3.5 rounded-xl" id="field-status">
-          <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">Status Atual</span>
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${carga.status === 'entregue' ? 'bg-green-400' : 'bg-[#FFD700]'}`} />
-            <span className="text-sm font-black text-white">{formatStatus(carga.status)}</span>
+        <div className="bg-zinc-950/20 border border-zinc-900 p-3.5 rounded-xl flex flex-col justify-between" id="field-status">
+          <div>
+            <span className="text-[10px] uppercase text-zinc-500 font-bold block mb-1">Status Atual</span>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${carga.status === 'entregue' ? 'bg-green-400 animate-pulse' : 'bg-[#FFD700]'}`} />
+              <span className="text-sm font-black text-white">{formatStatus(carga.status)}</span>
+            </div>
           </div>
+          {carga.status === 'entregue' && (
+            <button
+              type="button"
+              onClick={() => playEntregueAudio(carga.trackingCode || carga.id, true)}
+              className="mt-2.5 inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-emerald-300 bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-500/40 rounded-lg transition-all active:scale-95 cursor-pointer"
+              title="Clique para reproduzir o som de confirmação de entrega"
+            >
+              <span>🔊</span>
+              <span>Ouvir Confirmação</span>
+            </button>
+          )}
         </div>
 
         <div className="bg-zinc-950/20 border border-zinc-900 p-3.5 rounded-xl" id="field-coleta">
