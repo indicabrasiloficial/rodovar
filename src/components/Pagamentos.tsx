@@ -99,62 +99,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
   const [selectedFilterPill, setSelectedFilterPill] = useState<FilterPill>('TODOS');
   const [searchTerm, setSearchTerm] = useState<string>('');
   
-  // Real-time tick for 24h cronômetro
-  const [nowMs, setNowMs] = useState<number>(Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNowMs(Date.now());
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Voice AI Alert Function (Sintetizador de Voz)
-  const speakPetronioVoiceAlert = () => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance("Petrônio, tem pagamento atrasado de motorista.");
-      utterance.lang = 'pt-BR';
-      utterance.rate = 0.95;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-  // Helper for 24h Chronometer in Pendente de Saldo
-  const getSaldoTimerInfo = (entrega: Entrega, currentNow: number) => {
-    const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
-    const isSaldoPago = entrega.statusPagamentoSaldo === 'pago';
-    const isEntregue = (entrega.status || '').toLowerCase() === 'entregue';
-
-    // A contagem de 24h e o status de pendente de saldo só funcionam quando o motorista está com status de 'entregue'
-    if (!isAdiantamentoPago || isSaldoPago || !isEntregue) {
-      return { isPendingSaldo: false, hours: 0, minutes: 0, totalMinutes: 0, isOver24h: false, formatted: '' };
-    }
-
-    let startMs: number;
-    if (entrega.dataPagoAdiantamentoTimestamp) {
-      startMs = entrega.dataPagoAdiantamentoTimestamp;
-    } else if (entrega.updated_at) {
-      startMs = new Date(entrega.updated_at).getTime();
-    } else if (entrega.created_at) {
-      startMs = new Date(entrega.created_at).getTime();
-    } else if (entrega.data_coleta) {
-      startMs = new Date(entrega.data_coleta).getTime();
-    } else {
-      startMs = currentNow - (4 * 60 * 60 * 1000); // Default fallback 4h
-    }
-
-    const diffMs = Math.max(0, currentNow - startMs);
-    const totalMinutes = Math.floor(diffMs / (1000 * 60));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    const isOver24h = hours >= 24;
-
-    const formatted = `${hours}h ${String(minutes).padStart(2, '0')}m`;
-    return { isPendingSaldo: true, hours, minutes, totalMinutes, isOver24h, formatted };
-  };
-  
   // Date selector defaulting to today in YYYY-MM-DD
   const todayIso = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
@@ -627,7 +571,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
 
       const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
       const isSaldoPago = entrega.statusPagamentoSaldo === 'pago';
-      const timerInfo = getSaldoTimerInfo(entrega, nowMs);
 
       // Pill Filter Match
       if (selectedFilterPill === 'PENDENTE_ADIANTAMENTO') {
@@ -641,12 +584,12 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
         return isAdiantamentoPago && isSaldoPago;
       }
       if (selectedFilterPill === 'ATRASADOS') {
-        return (timerInfo.isPendingSaldo && timerInfo.isOver24h) || getPaymentCalculatedStatus(entrega) === 'ATRASADO';
+        return getPaymentCalculatedStatus(entrega) === 'ATRASADO';
       }
 
       return true; // TODOS
     });
-  }, [entregas, selectedDate, searchTerm, selectedFilterPill, todayIso, nowMs]);
+  }, [entregas, selectedDate, searchTerm, selectedFilterPill, todayIso]);
 
   // Pagination calculations (20 motoristas por vez para otimizar cota)
   const totalPages = Math.max(1, Math.ceil(filteredEntregas.length / ITEMS_PER_PAGE));
@@ -680,7 +623,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
       todos++;
       const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
       const isSaldoPago = entrega.statusPagamentoSaldo === 'pago';
-      const timerInfo = getSaldoTimerInfo(entrega, nowMs);
 
       if (!isAdiantamentoPago) {
         pendenteAdiantamento++;
@@ -695,13 +637,13 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
         pagoTotal++;
       }
 
-      if ((timerInfo.isPendingSaldo && timerInfo.isOver24h) || getPaymentCalculatedStatus(entrega) === 'ATRASADO') {
+      if (getPaymentCalculatedStatus(entrega) === 'ATRASADO') {
         atrasados++;
       }
     });
 
     return { todos, pendenteAdiantamento, pendenteSaldo, pagoTotal, atrasados };
-  }, [entregas, selectedDate, searchTerm, todayIso, nowMs]);
+  }, [entregas, selectedDate, searchTerm, todayIso]);
 
   // Toggle card attachments accordion
   const toggleCardAccordion = (id: string) => {
@@ -1100,42 +1042,25 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               </span>
             </button>
 
-            {/* ATRASADOS (>24H) */}
+            {/* ATRASADOS */}
             <button
-              onClick={() => {
-                setSelectedFilterPill('ATRASADOS');
-                if (counters.atrasados > 0) {
-                  speakPetronioVoiceAlert();
-                }
-              }}
+              onClick={() => setSelectedFilterPill('ATRASADOS')}
               className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-2 border ${
                 selectedFilterPill === 'ATRASADOS'
-                  ? 'bg-red-600 text-white border-red-500 font-extrabold shadow-[0_0_15px_rgba(220,38,38,0.3)] animate-pulse'
+                  ? 'bg-red-600 text-white border-red-500 font-extrabold shadow-[0_0_15px_rgba(220,38,38,0.3)]'
                   : counters.atrasados > 0
                   ? 'bg-red-950/40 border-red-800/80 text-red-400 hover:bg-red-900/50'
                   : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-red-400 hover:border-red-900/50'
               }`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
-              <span>ATRASADOS (&gt;24H)</span>
+              <span>ATRASADOS</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                 selectedFilterPill === 'ATRASADOS' ? 'bg-zinc-950 text-red-400' : 'bg-zinc-800 text-red-400'
               }`}>
                 {counters.atrasados}
               </span>
             </button>
-
-            {/* BOTÃO ALERTA DE VOZ IA */}
-            {counters.atrasados > 0 && (
-              <button
-                type="button"
-                onClick={speakPetronioVoiceAlert}
-                className="px-3 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-mono font-black text-xs uppercase rounded-xl shadow-[0_0_12px_rgba(239,68,68,0.4)] flex items-center gap-1.5 cursor-pointer animate-pulse"
-                title="Ouvir Alerta de Voz IA: Petrônio, tem pagamento atrasado de motorista."
-              >
-                <span>🔊 ALERTA IA</span>
-              </button>
-            )}
 
           </div>
 
@@ -1865,7 +1790,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               const overallStatus = getPaymentCalculatedStatus(entrega);
               const isAccordionOpen = !!expandedCardIds[entrega.id];
               const pixInfo = resolveDriverPixInfo(entrega);
-              const timerInfo = getSaldoTimerInfo(entrega, nowMs);
 
               // Check if CTA / RPA has been loaded
               const hasRpa = !!entrega.cte || (Number(entrega.frete_motorista) > 0 && !!pixInfo.favorecidoPix);
@@ -1882,6 +1806,8 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
               // Individual Statuses
               const isAdiantamentoPago = entrega.statusPagamentoAdiantamento === 'pago';
               const isSaldoPago = entrega.statusPagamentoSaldo === 'pago';
+              const isEntregue = (entrega.status || '').toLowerCase() === 'entregue';
+              const isPendingSaldo = isAdiantamentoPago && !isSaldoPago && isEntregue;
 
               const prazoAdiantamentoIso = entrega.prazoAdiantamento || entrega.data_coleta;
               const prazoSaldoIso = entrega.prazoSaldo || entrega.prazo;
@@ -1899,8 +1825,8 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                 <div
                   key={entrega.id}
                   className={`bg-zinc-950 border rounded-2xl p-5 shadow-xl hover:border-zinc-800 transition-all space-y-4 flex flex-col justify-between relative ${
-                    timerInfo.isOver24h
-                      ? 'border-red-600/90 shadow-[0_0_25px_rgba(239,68,68,0.4)] ring-2 ring-red-600/60 bg-red-950/10'
+                    overallStatus === 'ATRASADO'
+                      ? 'border-red-600/80 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
                       : !hasRpa
                       ? 'border-amber-900/80 shadow-[0_0_15px_rgba(245,158,11,0.12)]'
                       : 'border-zinc-900'
@@ -1936,9 +1862,9 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>PAGO</span>
                           </span>
-                        ) : timerInfo.isOver24h || overallStatus === 'ATRASADO' ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-red-950/90 text-red-400 border border-red-700/80 shadow-[0_0_10px_rgba(239,68,68,0.4)] animate-pulse">
-                            <AlertTriangle className="w-3.5 h-3.5 animate-spin text-red-400" />
+                        ) : overallStatus === 'ATRASADO' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-red-950/90 text-red-400 border border-red-700/80 shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
                             <span>ATRASADO</span>
                           </span>
                         ) : (
@@ -1950,38 +1876,16 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ currentUser }) => {
                       </div>
                     </div>
 
-                    {/* BLOCO TEMPORIZADOR 24H E STATUS DE ADIANTAMENTO/SALDO */}
-                    {timerInfo.isPendingSaldo ? (
-                      <div className={`p-3 rounded-xl border font-mono text-xs flex items-center justify-between gap-2 shadow-lg transition-all ${
-                        timerInfo.isOver24h
-                          ? 'bg-red-950/90 border-red-500 text-red-200 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.4)] ring-2 ring-red-500/50'
-                          : 'bg-purple-950/40 border-purple-500/60 text-purple-200'
-                      }`}>
-                        <div className="flex items-center gap-2 font-black">
-                          {timerInfo.isOver24h ? (
-                            <AlertTriangle className="w-5 h-5 text-red-400 animate-spin shrink-0" />
-                          ) : (
-                            <Clock className="w-4 h-4 text-purple-400 shrink-0" />
-                          )}
-                          <div className="flex flex-col">
-                            <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold">
-                              {timerInfo.isOver24h ? '🚨 SALDO ATRASADO (>24H)' : '⏱️ PENDENTE DE SALDO'}
-                            </span>
-                            <span className={`text-sm font-black tracking-tight ${timerInfo.isOver24h ? 'text-red-400' : 'text-purple-300'}`}>
-                              {timerInfo.formatted} {timerInfo.isOver24h && '• ALERTA CRÍTICO'}
-                            </span>
-                          </div>
+                    {/* BLOCO DE STATUS DE ADIANTAMENTO/SALDO */}
+                    {isPendingSaldo ? (
+                      <div className="bg-purple-950/30 border border-purple-600/40 rounded-xl p-2.5 text-center flex items-center justify-between px-3">
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold text-purple-300">
+                          <Clock className="w-4 h-4 text-purple-400 shrink-0" />
+                          <span>PENDENTE DE SALDO</span>
                         </div>
-                        {timerInfo.isOver24h && (
-                          <button
-                            type="button"
-                            onClick={speakPetronioVoiceAlert}
-                            className="px-2.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer shrink-0 shadow-md"
-                            title="Ouvir Alerta de Voz IA: Petrônio, tem pagamento atrasado de motorista."
-                          >
-                            <span>🔊 VOZ IA</span>
-                          </button>
-                        )}
+                        <span className="text-[10px] font-mono bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded font-bold">
+                          AGUARDANDO SALDO
+                        </span>
                       </div>
                     ) : !isAdiantamentoPago ? (
                       <div className="bg-amber-950/30 border border-amber-600/40 rounded-xl p-2.5 text-center flex items-center justify-between px-3">

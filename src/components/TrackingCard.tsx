@@ -122,7 +122,7 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
 
   return (
     <div 
-      className="w-full bg-[#121212]/95 border border-[#FFD700]/25 rounded-2xl p-6 shadow-[0_0_25px_rgba(255,215,0,0.08)] relative overflow-hidden transition-all duration-300"
+      className="w-full bg-[#121212]/95 border border-[#FFD700]/25 rounded-2xl p-4 sm:p-6 shadow-[0_0_25px_rgba(255,215,0,0.08)] relative overflow-hidden transition-all duration-300"
       id="public-tracking-card-root"
     >
       {/* Visual background lighting */}
@@ -133,7 +133,7 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
       <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4 mb-4" id="tracking-card-header">
         <div>
           <span className="text-[10px] uppercase font-mono tracking-widest text-[#FFD700] block font-bold mb-0.5">RODOVAR RASTREIO CLIENTE</span>
-          <h2 className="text-2xl font-black font-sans text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-black font-sans text-white tracking-tight flex items-center gap-2">
             {carga.trackingCode}
           </h2>
         </div>
@@ -151,7 +151,7 @@ export const TrackingCard: React.FC<TrackingCardProps> = ({ carga }) => {
       </div>
 
       {/* Progress Bar Component integrated */}
-      <div className="my-6 bg-zinc-950/60 rounded-xl p-4 border border-zinc-900" id="progress-bar-wrapper">
+      <div className="my-4 sm:my-6 bg-zinc-950/60 rounded-xl p-2.5 sm:p-4 border border-zinc-900" id="progress-bar-wrapper">
         <TrackingProgressBar status={carga.status} />
       </div>
 
