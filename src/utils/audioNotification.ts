@@ -1,6 +1,6 @@
 /**
- * Utilitário de Notificação Sonora para Cargas Entregues
- * Toca o áudio de confirmação de entrega 1 vez ao entrar na página ou ao mudar para o status entregue.
+ * Utilitário de Notificação Sonora e Jingle Oficial Rodovar
+ * Executa a música oficial de entrega da Rodovar na abertura da página
  */
 
 export const ENTREGUE_AUDIO_URL = 'https://rodovar.com.br/wp-content/uploads/2026/08/WhatsApp-Audio-2026-08-20-at-14.08.07-online-audio-converter.com_.mp3';
@@ -8,17 +8,34 @@ export const ENTREGUE_AUDIO_URL = 'https://rodovar.com.br/wp-content/uploads/202
 // Armazena códigos/cargas que já tiveram o som reproduzido na sessão atual
 const playedDeliveryKeys = new Set<string>();
 
-let pendingAudioTrigger: (() => void) | null = null;
 let cachedAudioInstance: HTMLAudioElement | null = null;
+let unlockTriggerRegistered = false;
 
-// Pré-carrega o áudio
-if (typeof window !== 'undefined') {
-  try {
-    cachedAudioInstance = new Audio(ENTREGUE_AUDIO_URL);
-    cachedAudioInstance.preload = 'auto';
-  } catch (e) {}
+/**
+ * Pré-carregamento imediato do arquivo em memória
+ */
+export function preloadDeliveryAudio(): void {
+  if (typeof window === 'undefined') return;
+  if (!cachedAudioInstance) {
+    try {
+      cachedAudioInstance = new Audio(ENTREGUE_AUDIO_URL);
+      cachedAudioInstance.preload = 'auto';
+      cachedAudioInstance.volume = 1.0;
+      cachedAudioInstance.load();
+    } catch (e) {
+      console.warn('Falha no pré-carregamento de áudio:', e);
+    }
+  }
 }
 
+// Inicializa o buffer logo no carregamento do script
+if (typeof window !== 'undefined') {
+  preloadDeliveryAudio();
+}
+
+/**
+ * Executa a música oficial de entrega
+ */
 export function playEntregueAudio(identifier?: string, force = false): void {
   if (typeof window === 'undefined') return;
 
@@ -28,7 +45,8 @@ export function playEntregueAudio(identifier?: string, force = false): void {
     return;
   }
 
-  // Tenta reproduzir diretamente
+  preloadDeliveryAudio();
+
   const audio = cachedAudioInstance || new Audio(ENTREGUE_AUDIO_URL);
   audio.volume = 1.0;
   audio.currentTime = 0;
@@ -36,51 +54,65 @@ export function playEntregueAudio(identifier?: string, force = false): void {
   const playPromise = audio.play();
 
   if (playPromise !== undefined) {
-    playPromise.then(() => {
-      playedDeliveryKeys.add(key);
-      console.log('✅ Áudio de entrega reproduzido com sucesso!');
-    }).catch((err) => {
-      console.log('ℹ️ Autoplay suspenso pelo navegador. O áudio tocará no seu primeiro clique/toque na tela.', err);
+    playPromise
+      .then(() => {
+        playedDeliveryKeys.add(key);
+        console.log('🎵 Jingle oficial Rodovar reproduzido com sucesso!');
+      })
+      .catch(() => {
+        console.log('ℹ️ Navegador aguardando interação do usuário para áudio. Disparando no primeiro toque/clique/tecla.');
 
-      // Limpa listeners anteriores
-      if (pendingAudioTrigger) {
-        removeInteractionListeners(pendingAudioTrigger);
-      }
+        if (!unlockTriggerRegistered) {
+          unlockTriggerRegistered = true;
 
-      pendingAudioTrigger = () => {
-        const retryAudio = new Audio(ENTREGUE_AUDIO_URL);
-        retryAudio.volume = 1.0;
-        retryAudio.play().then(() => {
-          playedDeliveryKeys.add(key);
-          console.log('✅ Áudio de entrega reproduzido na interação do usuário!');
-        }).catch(() => {});
+          const triggerPlayOnInteraction = () => {
+            if (playedDeliveryKeys.has(key) && !force) return;
 
-        if (pendingAudioTrigger) {
-          removeInteractionListeners(pendingAudioTrigger);
-          pendingAudioTrigger = null;
+            const activeAudio = cachedAudioInstance || new Audio(ENTREGUE_AUDIO_URL);
+            activeAudio.volume = 1.0;
+            activeAudio.currentTime = 0;
+
+            activeAudio
+              .play()
+              .then(() => {
+                playedDeliveryKeys.add(key);
+                console.log('🎵 Jingle oficial Rodovar iniciado na primeira interação!');
+                removeUnlockListeners(triggerPlayOnInteraction);
+                unlockTriggerRegistered = false;
+              })
+              .catch(() => {});
+          };
+
+          addUnlockListeners(triggerPlayOnInteraction);
         }
-      };
-
-      addInteractionListeners(pendingAudioTrigger);
-    });
+      });
   }
 }
 
-function addInteractionListeners(handler: () => void) {
-  window.addEventListener('click', handler, { once: true, capture: true });
-  window.addEventListener('touchstart', handler, { once: true, capture: true });
-  window.addEventListener('pointerdown', handler, { once: true, capture: true });
-  window.addEventListener('keydown', handler, { once: true, capture: true });
+function addUnlockListeners(handler: () => void) {
+  if (typeof window === 'undefined') return;
+  const opts = { capture: true, passive: true };
+  window.addEventListener('click', handler, { capture: true });
+  window.addEventListener('touchstart', handler, opts);
+  window.addEventListener('touchend', handler, opts);
+  window.addEventListener('pointerdown', handler, { capture: true });
+  window.addEventListener('scroll', handler, opts);
+  window.addEventListener('wheel', handler, opts);
+  window.addEventListener('keydown', handler, { capture: true });
 }
 
-function removeInteractionListeners(handler: () => void) {
+function removeUnlockListeners(handler: () => void) {
+  if (typeof window === 'undefined') return;
   window.removeEventListener('click', handler, { capture: true });
-  window.removeEventListener('touchstart', handler, { capture: true });
+  window.removeEventListener('touchstart', handler);
+  window.removeEventListener('touchend', handler);
   window.removeEventListener('pointerdown', handler, { capture: true });
+  window.removeEventListener('scroll', handler);
+  window.removeEventListener('wheel', handler);
   window.removeEventListener('keydown', handler, { capture: true });
 }
 
-// Expõe globalmente para testes
+// Expõe globalmente para teste no console
 if (typeof window !== 'undefined') {
   (window as any).playEntregueAudio = (force = true) => playEntregueAudio('TEST', force);
 }

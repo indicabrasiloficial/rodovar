@@ -42,6 +42,10 @@ export interface Entrega {
   } | null;
   avaliacao_viagem?: 'boa' | 'ruim' | null;
   avaliacao_cliente?: 'boa' | 'ruim' | null;
+  avaliacao_estrelas?: number;
+  avaliacao_comentario?: string;
+  avaliacao_tags?: string[];
+  avaliacao_data?: string;
   cpf_motorista?: string;
   cpf_cnpj_cliente?: string;
   documentos?: DocumentoAnexo[];

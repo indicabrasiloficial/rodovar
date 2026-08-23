@@ -3,7 +3,7 @@ import { dbAdapter } from '../db/databaseAdapter';
 import { Entrega } from '../types';
 import { TrackingCard } from './TrackingCard';
 import { Search, ArrowLeft, ShieldAlert, AlertCircle, Loader2 } from 'lucide-react';
-import { playEntregueAudio } from '../utils/audioNotification';
+import { playEntregueAudio, preloadDeliveryAudio } from '../utils/audioNotification';
 
 interface RastrearProps {
   onClose?: () => void;
@@ -17,6 +17,11 @@ export const Rastrear: React.FC<RastrearProps> = ({ onClose, userLogged, onAcces
   const [carga, setCarga] = useState<Entrega | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Pré-carrega o áudio logo na montagem
+  useEffect(() => {
+    preloadDeliveryAudio();
+  }, []);
 
   // Sync with URL query string on load (?code=RDV0123 ou ?rastreio=RDV0123 etc)
   useEffect(() => {
