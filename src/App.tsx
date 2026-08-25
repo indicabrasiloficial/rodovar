@@ -19,6 +19,7 @@ import BlacklistManager from './components/BlacklistManager';
 import BackupRegistry from './components/BackupRegistry';
 import { Rastrear } from './components/Rastrear';
 import { MotoristaTracking } from './components/MotoristaTracking';
+import { playEntregueAudio, preloadDeliveryAudio } from './utils/audioNotification';
 import OperatorPanel from './components/OperatorPanel';
 import Agenda from './components/Agenda';
 import ApiIntegration from './components/ApiIntegration';
@@ -170,6 +171,9 @@ export default function App() {
     // Initial load
     setEntregas(getEntregas());
 
+    // Pré-carregamento imediato do jingle oficial
+    preloadDeliveryAudio();
+
     // Listen to real-time updates from cloud Firestore
     const handleRealtimeSync = () => {
       setEntregas(getEntregas());
@@ -186,6 +190,77 @@ export default function App() {
       window.removeEventListener('rodovar_quota_exceeded_event', handleQuotaExceeded);
     };
   }, []);
+
+  // Lógica assíncrona com IntersectionObserver e window.onload para disparar o jingle quando status for 'entregue'
+  // garantindo que a renderização da interface ocorra antes da execução do áudio
+  useEffect(() => {
+    // Verifica se a entrega selecionada ou visualizada possui status 'entregue'
+    const activeEntrega = selectedEntregaId ? entregas.find(e => e.id === selectedEntregaId) : null;
+    const isStatusEntregue = activeEntrega && (
+      (activeEntrega.status || '').toLowerCase().trim() === 'entregue' ||
+      (activeEntrega.status || '').toLowerCase().includes('entregue') ||
+      (activeEntrega.status || '').toLowerCase().includes('concluid')
+    );
+
+    if (!isStatusEntregue || !activeEntrega) return;
+
+    let observer: IntersectionObserver | null = null;
+    let timeoutId: any = null;
+
+    const triggerJingleAsync = () => {
+      // Disparo assíncrono garantindo término do ciclo de pintura da interface (rAF + setTimeout)
+      requestAnimationFrame(() => {
+        timeoutId = setTimeout(() => {
+          playEntregueAudio(activeEntrega.trackingCode || activeEntrega.id);
+        }, 120);
+      });
+    };
+
+    // 1. Usar IntersectionObserver para observar o elemento renderizado do container de detalhes/conclusão
+    if (typeof IntersectionObserver !== 'undefined') {
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            triggerJingleAsync();
+            if (observer) {
+              observer.disconnect();
+              observer = null;
+            }
+          }
+        });
+      }, { threshold: 0.1 });
+
+      const targetEl = document.getElementById('delivery-details-card') || 
+                       document.getElementById('delivery-completion-root') || 
+                       document.getElementById('tracking-card-root') ||
+                       document.getElementById('root');
+
+      if (targetEl) {
+        observer.observe(targetEl);
+      } else {
+        triggerJingleAsync();
+      }
+    } else {
+      // 2. Fallback de evento window.onload / estado de documento pronto
+      if (document.readyState === 'complete') {
+        triggerJingleAsync();
+      } else {
+        const handleWindowLoad = () => {
+          triggerJingleAsync();
+        };
+        window.addEventListener('load', handleWindowLoad, { once: true });
+      }
+    }
+
+    return () => {
+      if (observer) {
+        observer.disconnect();
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [selectedEntregaId, entregas]);
 
   const handleLogout = () => {
     localStorage.removeItem('rodovar_active_login_v2');
