@@ -52,12 +52,6 @@ export const Rastrear: React.FC<RastrearProps> = ({ onClose, userLogged, onAcces
         if (cargaResult) {
           setCarga(cargaResult);
           setError(null);
-          
-          // Se estiver com status entregue, toca o som 1 vez
-          const st = (cargaResult.status || '').toLowerCase().trim();
-          if (st === 'entregue' || st.includes('entregue') || st.includes('concluid')) {
-            playEntregueAudio(cargaResult.trackingCode || cargaResult.id);
-          }
         } else {
           setCarga(null);
           setError('Código de rastreio não encontrado. Verifique os dígitos e tente novamente.');
@@ -67,6 +61,71 @@ export const Rastrear: React.FC<RastrearProps> = ({ onClose, userLogged, onAcces
 
     return () => unsubscribe();
   }, [searchCode]);
+
+  // Lógica assíncrona com IntersectionObserver para disparar o jingle de forma assíncrona
+  // garantindo que a renderização da interface ocorra antes da execução do áudio (exclusivo na página de consulta de frete)
+  useEffect(() => {
+    if (!carga) return;
+
+    const st = (carga.status || '').toLowerCase().trim();
+    const isEntregue = st === 'entregue' || st.includes('entregue') || st.includes('concluid');
+
+    if (!isEntregue) return;
+
+    let observer: IntersectionObserver | null = null;
+    let timeoutId: any = null;
+
+    const triggerJingleAsync = () => {
+      requestAnimationFrame(() => {
+        timeoutId = setTimeout(() => {
+          playEntregueAudio(carga.trackingCode || carga.id);
+        }, 150);
+      });
+    };
+
+    if (typeof IntersectionObserver !== 'undefined') {
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            triggerJingleAsync();
+            if (observer) {
+              observer.disconnect();
+              observer = null;
+            }
+          }
+        });
+      }, { threshold: 0.1 });
+
+      const targetEl = document.getElementById('card-holder-anim') || 
+                       document.getElementById('tracking-card-root') || 
+                       document.getElementById('delivery-completion-root') ||
+                       document.getElementById('public-tracking-main');
+
+      if (targetEl) {
+        observer.observe(targetEl);
+      } else {
+        triggerJingleAsync();
+      }
+    } else {
+      if (document.readyState === 'complete') {
+        triggerJingleAsync();
+      } else {
+        const handleWindowLoad = () => {
+          triggerJingleAsync();
+        };
+        window.addEventListener('load', handleWindowLoad, { once: true });
+      }
+    }
+
+    return () => {
+      if (observer) {
+        observer.disconnect();
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [carga?.id, carga?.status, carga?.trackingCode]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
